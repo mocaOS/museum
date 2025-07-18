@@ -1,0 +1,203 @@
+---
+description: Guidelines for data fetching with TanStack Vue Query
+globs: 
+alwaysApply: false
+---
+# Data Fetching with TanStack Vue Query
+
+This document outlines the standard patterns for data fetching in our Vue application using TanStack Vue Query, Directus, and R2R.
+
+## Basic Query Pattern
+
+```vue
+const { data, suspense } = useQuery({
+  queryKey: ["unique-key", ...dependencyVariables],
+  queryFn: async () => {
+    const response = await readItems("collection-name", {
+      fields: ["field1", "field2"],
+      filter: { /* Directus filter object */ }
+    });
+    return response;
+  }
+});
+
+// Wait for data before rendering
+await suspense();
+```
+
+## R2R Integration Pattern
+
+For AI-powered search and retrieval-augmented generation:
+
+```vue
+import { useR2R } from "~/composables/useR2R";
+
+const { search, rag, createConversation } = useR2R();
+
+// Basic search
+const searchResults = await search("your search query");
+
+// RAG with conversation context
+const conversationId = await createConversation("Chat Title");
+const response = await rag({
+  query: "your question",
+  conversation_id: conversationId,
+  use_vector_search: true,
+  search_limit: 4
+});
+```
+
+## Example Usage
+
+### Fetching Items with Pagination
+
+```vue
+// Import necessary dependencies
+import { useQuery } from "@tanstack/vue-query";
+import { useDirectusItems } from "your-directus-composable";
+
+// Pagination constants
+const ITEMS_PER_PAGE = 25;
+const currentPage = ref(1);
+
+// Directus setup
+const { readItems } = useDirectusItems();
+
+// Build your filter
+const filter = computed(() => ({
+  _and: [
+    // Your filter conditions
+  ]
+}));
+
+// Fetch total count for pagination
+const { data: totalItems, suspense: suspenseTotal } = useQuery({
+  queryKey: ["items-count", filter],
+  queryFn: async () => {
+    const result = await directus.request(
+      aggregate("collection-name", {
+        aggregate: { count: "*" },
+        query: {
+          filter: filter.value,
+        },
+      })
+    );
+    return result[0].count;
+  }
+});
+
+await suspenseTotal();
+
+// Fetch paginated data
+const { data: items, suspense: suspenseItems } = useQuery({
+  queryKey: ["items", currentPage, filter],
+  enabled: !!totalItems.value,
+  queryFn: async () => {
+    const response = await readItems("collection-name", {
+      fields: ["id", "name", "other_fields"],
+      filter: filter.value,
+      limit: ITEMS_PER_PAGE,
+      offset: (currentPage.value - 1) * ITEMS_PER_PAGE,
+    });
+    return response;
+  }
+});
+
+await suspenseItems();
+```
+
+## Best Practices
+
+1. **QueryKeys**: Use descriptive and hierarchical query keys
+   - Include all dependencies that the query depends on
+   - Example: `["collection", collectionId, { filters }]`
+
+2. **Suspense**: Use the suspense pattern for SSR and loading states
+   - Call `await suspense()` to wait for data before rendering
+
+3. **Reactive Dependencies**: Use computed refs for dynamic filters
+   - Queries will automatically refetch when dependencies change
+   - Example: `queryKey: ["items", computed(() => searchQuery.value)]`
+
+4. **Filtering & Searching**:
+   - Use computed properties for dynamic filters
+   - Update query parameters when filter/search changes
+
+5. **Pagination**:
+   - Fetch count separately using `aggregate`
+   - Update URL params on page change
+   - Reset to page 1 when search/filters change
+
+6. **Caching and Revalidation**:
+   - Let TanStack Query handle caching by default
+   - Use `invalidateQueries` to refresh data after mutations
+
+7. **R2R Integration**:
+   - Use conversation IDs for context-aware queries
+   - Implement proper error handling for AI services
+   - Configure appropriate search limits based on use case
+
+## Directus Specific Patterns
+
+1. **Reading Items**:
+   ```js
+   const { readItems } = useDirectusItems();
+   const response = await readItems("collection-name", options);
+   ```
+
+2. **Aggregations**:
+   ```js
+   const directus = useRawDirectus();
+   const result = await directus.request(
+     aggregate("collection-name", {
+       aggregate: { count: "*" },
+       query: { filter }
+     })
+   );
+   ```
+
+3. **Complex Filtering**:
+   ```js
+   const filter = {
+     _and: [
+       { field: { _eq: value } },
+       { 
+         _or: [
+           { field2: { _contains: searchTerm } },
+           { field3: { _contains: searchTerm } }
+         ]
+       }
+     ]
+   };
+   ```
+
+## Advanced Patterns
+
+### Table Integration with @tanstack/vue-table
+
+```vue
+import { useVueTable } from "@tanstack/vue-table";
+
+const table = useVueTable({
+  data: items.value || [],
+  columns,
+  // ... other table options
+});
+```
+
+### Search Integration
+
+```vue
+const { searchQuery, debouncedSearch } = useSearch();
+
+const { data: searchResults } = useQuery({
+  queryKey: ["search", debouncedSearch],
+  queryFn: async () => {
+    if (!debouncedSearch.value) return [];
+    return await search(debouncedSearch.value);
+  },
+  enabled: !!debouncedSearch.value
+});
+```
+
+@apps/web/pages/index.vue and @apps/web/composables/useR2R.ts provide complete examples of these patterns in action.

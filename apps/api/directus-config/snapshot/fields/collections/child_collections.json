@@ -1,0 +1,32 @@
+{
+  "collection": "collections",
+  "field": "child_collections",
+  "type": "alias",
+  "meta": {
+    "collection": "collections",
+    "conditions": null,
+    "display": null,
+    "display_options": null,
+    "field": "child_collections",
+    "group": null,
+    "hidden": false,
+    "interface": "list-o2m",
+    "note": null,
+    "options": {
+      "enableCreate": false,
+      "enableLink": true,
+      "sort": "sort",
+      "template": "{{name}}"
+    },
+    "readonly": false,
+    "required": false,
+    "sort": 12,
+    "special": [
+      "o2m"
+    ],
+    "translations": null,
+    "validation": null,
+    "validation_message": null,
+    "width": "half"
+  }
+}

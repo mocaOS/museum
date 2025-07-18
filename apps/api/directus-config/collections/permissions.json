@@ -1,0 +1,86 @@
+[
+  {
+    "collection": "nfts",
+    "action": "read",
+    "permissions": null,
+    "validation": null,
+    "presets": null,
+    "fields": [
+      "*"
+    ],
+    "policy": "_sync_default_public_policy",
+    "_syncId": "cfccc3c1-af03-4924-ada5-b0b718cdb571"
+  },
+  {
+    "collection": "nfts",
+    "action": "update",
+    "permissions": null,
+    "validation": null,
+    "presets": null,
+    "fields": [
+      "vllm_data"
+    ],
+    "policy": "_sync_default_public_policy",
+    "_syncId": "9f7f81a8-852e-4487-9ec0-0c7a616e6832"
+  },
+  {
+    "collection": "collections",
+    "action": "read",
+    "permissions": null,
+    "validation": null,
+    "presets": null,
+    "fields": [
+      "*"
+    ],
+    "policy": "dbb083a5-0174-4f56-a3fa-60c64da11078",
+    "_syncId": "a88dc4e8-9cbc-468d-b268-cb007ad2f8ca"
+  },
+  {
+    "collection": "contracts",
+    "action": "read",
+    "permissions": null,
+    "validation": null,
+    "presets": null,
+    "fields": [
+      "*"
+    ],
+    "policy": "dbb083a5-0174-4f56-a3fa-60c64da11078",
+    "_syncId": "7e2e011d-6338-4c5a-8ed3-4fd9b4a9f102"
+  },
+  {
+    "collection": "directus_files",
+    "action": "read",
+    "permissions": null,
+    "validation": null,
+    "presets": null,
+    "fields": [
+      "*"
+    ],
+    "policy": "dbb083a5-0174-4f56-a3fa-60c64da11078",
+    "_syncId": "8a9d2d00-124b-4b8e-b8e2-6e572d8025f6"
+  },
+  {
+    "collection": "nfts",
+    "action": "read",
+    "permissions": null,
+    "validation": null,
+    "presets": null,
+    "fields": [
+      "*"
+    ],
+    "policy": "dbb083a5-0174-4f56-a3fa-60c64da11078",
+    "_syncId": "a39337c5-ed28-4c9c-9d33-0a3d85c55548"
+  },
+  {
+    "collection": "rooms",
+    "action": "read",
+    "permissions": null,
+    "validation": null,
+    "presets": null,
+    "fields": [
+      "*"
+    ],
+    "policy": "dbb083a5-0174-4f56-a3fa-60c64da11078",
+    "_syncId": "4da91129-ef7d-43f9-a09b-0f0fd24a103d"
+  }
+]

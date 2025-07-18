@@ -1,0 +1,146 @@
+---
+description: Quick reference guide for migrating from Tailwind CSS v3 to v4, including breaking changes, new features, and common patterns
+globs: 
+alwaysApply: false
+---
+# Tailwind CSS v4 Migration Cheatsheet
+
+Quick reference for common migration patterns from Tailwind v3 to v4.
+
+## 🚨 Critical Breaking Changes
+
+| Old (v3) | New (v4) | Reason |
+|----------|----------|--------|
+| `@tailwind base;`<br>`@tailwind components;`<br>`@tailwind utilities;` | `@import "tailwindcss";` | Simplified import syntax |
+| `<div class="border">` | `<div class="border border-gray-200">` | Default changed to `currentColor` |
+| `<button class="focus:ring">` | `<button class="focus:ring-3 focus:ring-blue-500">` | Width: 3px→1px, Color: blue-500→currentColor |
+| `<input class="focus:outline-none">` | `<input class="focus:outline-hidden">` | Better accessibility support |
+| `bg-[--brand-color]` | `bg-(--brand-color)` | CSS variable syntax change |
+
+## 🔧 Configuration Changes
+
+### CSS-First Configuration
+```css
+/* v4: Use @theme in CSS */
+@import "tailwindcss";
+
+@theme {
+  --color-brand-500: oklch(0.84 0.18 117.33);
+  --font-display: "Satoshi", "sans-serif";
+  --breakpoint-3xl: 1920px;
+}
+```
+
+### Custom Utilities
+```css
+/* v4 */
+@utility btn-custom {
+  padding: 0.5rem 1rem;
+  border-radius: 0.5rem;
+}
+
+/* v3 */
+@layer utilities {
+  .btn-custom {
+    padding: 0.5rem 1rem;
+    border-radius: 0.5rem;
+  }
+}
+```
+
+## ✨ New Features to Leverage
+
+### Container Queries (No Plugin Required)
+```html
+<div class="@container">
+  <div class="grid grid-cols-1 @sm:grid-cols-2 @lg:grid-cols-4">
+    <!-- Responsive based on container size -->
+  </div>
+</div>
+```
+
+### Dynamic Data Attributes
+```html
+<div data-active class="opacity-50 data-active:opacity-100">
+  <!-- Auto-detects boolean data attributes -->
+</div>
+```
+
+### Enhanced Variant Stacking
+```html
+<!-- v4: Left-to-right stacking -->
+<ul class="*:first:pt-0 *:last:pb-0">
+
+<!-- v3: Right-to-left stacking -->
+<ul class="first:*:pt-0 last:*:pb-0">
+```
+
+## 🏗️ Build Configuration
+
+### Vite (Recommended)
+```ts
+// vite.config.ts
+import tailwindcss from "@tailwindcss/vite";
+
+export default defineConfig({
+  plugins: [tailwindcss()]
+});
+```
+
+### PostCSS
+```js
+// postcss.config.js
+export default {
+  plugins: {
+    "@tailwindcss/postcss": {}
+  }
+};
+```
+
+## 🎯 Common Patterns
+
+### Always Specify Border/Ring Colors
+```html
+<!-- ✅ Good -->
+<div class="border border-gray-200 rounded-lg">
+<button class="focus:ring-2 focus:ring-blue-500">
+
+<!-- ❌ Avoid - Uses currentColor -->
+<div class="border rounded-lg">
+<button class="focus:ring-2">
+```
+
+### Prefer CSS Variables
+```css
+/* ✅ Preferred */
+background-color: var(--color-red-500);
+
+/* ✅ Works but not preferred */
+background-color: theme(--color-red-500);
+
+/* ❌ Old syntax */
+background-color: theme(colors.red.500);
+```
+
+## 🚀 Performance Tips
+
+- Use `@tailwindcss/vite` plugin for Vite projects (faster than PostCSS)
+- Leverage native cascade layers for better CSS performance
+- Take advantage of improved tree-shaking in v4
+- Use container queries instead of media queries where appropriate
+
+## 🧪 Testing Checklist
+
+- [ ] All borders appear correctly (check for missing colors)
+- [ ] Focus rings work as expected (check width and color)
+- [ ] Outline behavior is accessible
+- [ ] Responsive design works with new variant stacking
+- [ ] Container queries function properly
+- [ ] Custom utilities compile correctly
+
+## 📦 Package Updates
+
+Ensure these packages are updated:
+- `tailwindcss: ^4.1.10`
+- `@tailwindcss/vite: ^4.1.10` (for Vite)
+- `@tailwindcss/postcss: ^4.1.10` (for PostCSS)

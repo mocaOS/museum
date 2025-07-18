@@ -1,0 +1,98 @@
+---
+description: Guidelines for consistent code style, naming conventions, TypeScript usage, and best practices across the Vue.js and TypeScript codebase
+globs: 
+alwaysApply: false
+---
+# Code Conventions
+
+This document outlines the coding conventions used in this project.
+
+## Naming Conventions
+
+- **Files & Directories**: kebab-case (e.g., `user-profile.vue`, `api-service.ts`)
+- **Components**: PascalCase (e.g., `UserProfile.vue`, `ButtonPrimary.vue`)
+- **Variables & Functions**: camelCase (e.g., `userData`, `fetchUserProfile()`)
+- **Constants**: UPPER_SNAKE_CASE (e.g., `API_URL`, `MAX_RETRY_COUNT`)
+- **Interfaces/Types**: PascalCase with prefix I for interfaces (e.g., `IUserData`, `ProfileType`)
+- **Composables**: camelCase starting with `use` (e.g., `useAuth`, `useR2R`)
+
+## Component Structure
+
+- Use Vue 3 Composition API with `<script setup>` syntax
+- Define props, emits, and refs at the top of the script
+- Group related functionality with composables
+- Use proper TypeScript typing for all variables and functions
+- Follow the established Vue file structure pattern (see vue-file-structure.mdc)
+
+## Styling
+
+- Use TailwindCSS v4 utility classes directly in templates
+- Always specify border and ring colors explicitly (v4 defaults changed)
+- Use class-variance-authority for component variants
+- Prefer `class` over `:class` when possible for readability
+- Use component-scoped styles when needed with `<style scoped>`
+- Leverage new v4 features: container queries (@container), enhanced variants
+- Use parentheses syntax for CSS variables in arbitrary values: `bg-(--brand-color)`
+- Use `@theme` directive in CSS files for theme customization
+
+## TypeScript
+
+- Always define proper types for variables, functions, and components
+- Use interfaces for objects with methods, types for simple shapes
+- Avoid `any` type, use proper typing or `unknown` if necessary
+- Use type inference when it's clear and doesn't reduce readability
+- Define shared types in packages/types for reusability
+
+## Imports & Exports
+
+- Group imports by type (Vue core, external libs, internal, auto-imports)
+- Use named exports for utilities and components
+- Use default exports for page components
+- Prefer destructured imports
+- Use Nuxt auto-imports when available (#imports, #components)
+
+## Data Fetching
+
+- Use TanStack Vue Query for all API calls
+- Follow the established query patterns (see api-data-fetching.mdc)
+- Use proper queryKey hierarchies
+- Implement suspense pattern for SSR compatibility
+- Use composables for reusable data fetching logic
+
+## Error Handling
+
+- Use try/catch blocks for async operations
+- Provide meaningful error messages
+- Log errors appropriately based on environment
+- Handle loading, error, and success states for async operations
+- Implement proper error boundaries for components
+
+## Performance
+
+- Use proper lazy loading for images (@nuxt/image)
+- Implement virtual scrolling for large lists
+- Use proper pagination patterns
+- Optimize bundle size with proper imports
+- Use Nuxt's built-in optimizations (auto-imports, code splitting)
+
+## Accessibility
+
+- Use semantic HTML elements
+- Implement proper ARIA attributes
+- Ensure keyboard navigation works
+- Maintain proper color contrast ratios
+- Use Radix Vue primitives for complex components
+
+## Comments
+
+- Use JSDoc for public APIs and complex functions
+- Keep comments up-to-date with code changes
+- Explain "why" not "what" in comments
+- Use TODO/FIXME comments with descriptive context and assignee
+
+## File Organization
+
+- Keep related files grouped together
+- Use index.ts files for cleaner imports
+- Follow the established project structure
+- Use proper barrel exports for component libraries

@@ -1,0 +1,10 @@
+diff --git a/lib/svg/index.mjs b/lib/svg/index.mjs
+index 80b5ca67d393d2ba2af7eb36750a92009b47335b..b76aa19d9e0663b6e5f20c4be30eec32e5f0206f 100644
+--- a/lib/svg/index.mjs
++++ b/lib/svg/index.mjs
+@@ -1,4 +1,4 @@
+-import cheerio from 'cheerio';
++import * as cheerio from 'cheerio';
+ import { iconToSVG, trimSVG } from '@iconify/utils';
+ 
+ class SVG {

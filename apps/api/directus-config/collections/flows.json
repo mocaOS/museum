@@ -1,0 +1,24 @@
+[
+  {
+    "name": "Slugify Collection Name",
+    "icon": "bolt",
+    "color": null,
+    "description": null,
+    "status": "active",
+    "trigger": "event",
+    "accountability": null,
+    "options": {
+      "type": "filter",
+      "scope": [
+        "items.create",
+        "items.update"
+      ],
+      "collections": [
+        "collections"
+      ],
+      "return": "$last"
+    },
+    "operation": "45906c6b-d070-4a87-916f-65eacf973d49",
+    "_syncId": "8c8b3d5e-5035-42b6-bd39-219530b96b60"
+  }
+]

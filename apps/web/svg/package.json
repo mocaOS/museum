@@ -1,0 +1,17 @@
+{
+  "name": "svg",
+  "type": "module",
+  "module": "index.ts",
+  "peerDependencies": {
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "@iconify/tools": "^3.0.5"
+  },
+  "devDependencies": {
+    "bun-types": "latest"
+  },
+  "patchedDependencies": {
+    "@iconify/tools@3.0.7": "patches/@iconify%2Ftools@3.0.7.patch"
+  }
+}

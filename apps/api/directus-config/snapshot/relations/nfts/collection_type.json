@@ -1,0 +1,25 @@
+{
+  "collection": "nfts",
+  "field": "collection_type",
+  "related_collection": "collections",
+  "meta": {
+    "junction_field": null,
+    "many_collection": "nfts",
+    "many_field": "collection_type",
+    "one_allowed_collections": null,
+    "one_collection": "collections",
+    "one_collection_field": null,
+    "one_deselect_action": "nullify",
+    "one_field": "nfts",
+    "sort_field": null
+  },
+  "schema": {
+    "table": "nfts",
+    "column": "collection_type",
+    "foreign_key_table": "collections",
+    "foreign_key_column": "id",
+    "constraint_name": "nfts_collection_type_foreign",
+    "on_update": "NO ACTION",
+    "on_delete": "SET NULL"
+  }
+}

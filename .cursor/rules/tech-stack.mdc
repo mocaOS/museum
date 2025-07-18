@@ -1,0 +1,88 @@
+---
+description: Used Tech Stack
+globs: 
+alwaysApply: false
+---
+# Tech Stack
+
+This document defines the technology stack used in this project.
+
+## Project Architecture
+- Turborepo 2.5+ Monorepo 
+- Workspaces:
+  - apps/* - Application packages
+  - packages/* - Shared packages
+
+## Languages
+- TypeScript 5.7+
+- Vue 3.5+
+
+## Frameworks & Platforms
+- Nuxt 3.15+
+- TailwindCSS v4.1+ (with @tailwindcss/vite plugin)
+- Directus 19+ (Headless CMS)
+
+## API & Backend
+- Directus API
+- PostgreSQL Database
+- Strapi Integration (v3)
+- R2R (Retrieval-Augmented Generation) - RAG/AI search functionality
+
+## Frontend Libraries
+- Vue 3.5+
+- Vue Router 4.5+
+- VueUse 13+ - Collection of Vue Composition Utilities
+- Radix Vue 1.9+ - UI Primitives
+- Reka UI 2.3+ - Additional UI Components
+- shadcn-nuxt 2.2+ - UI Component Collection
+- @tanstack/vue-query 5.66+ - Data fetching library
+- @tanstack/vue-table 8.21+ - Table components
+- tailwind-merge 3.3+ - For handling dynamic class merging
+- clsx/class-variance-authority 0.7+ - For conditional styling
+- Iconify/Lucide Icons - Icon libraries
+- @nuxt/icon 1.10+ - Icon management
+- Motion-V 1.2+ - Animation library
+- Vue Masonry Wall 5+ - Masonry layout
+
+## Web3 & Blockchain Support
+- ethers.js 6.13+
+- viem 2.22+
+- wagmi 2.16+ (Core) / 0.0.68+ (Vue)
+- @reown/appkit 1.6+ - Web3 integration (formerly WalletConnect)
+- Solana Web3.js 1.98+ & Wallet Adapter 0.9+
+- @openzeppelin/merkle-tree 1.0+ - Merkle tree utilities
+
+## Image Processing & Assets
+- @nuxt/image 1.10+
+- Sharp 0.33+ - Image processing
+
+## SEO & Meta
+- @nuxtjs/seo 3.0+ - SEO utilities
+- @nuxt/fonts 0.10+ - Font optimization
+- nuxt-og-image 5.0+ - Social media image generation
+
+## Authentication & External Services
+- Google Auth Library 9.15+ - Google OAuth
+- Google Spreadsheet 4.1+ - Google Sheets integration
+- Transform-In SDK 1.0+ - Media transformation
+
+## Build Tools & Development
+- Turbo 2.5+
+- TypeScript 5.7+
+- Node.js 24+
+- Yarn 1.22.22 (Package Manager)
+- Patch-package 7.0+ - For dependency patching
+
+## Development Tools
+- Nuxt MCP 0.1+ - Model Context Protocol integration
+- Sass 1.84+ - CSS preprocessing
+- Autoprefixer 10.4+ - CSS vendor prefixing
+
+## Development Conventions
+- Vue Single File Components (.vue)
+- Nuxt Auto-imports
+- State Management: Vue Composition API
+- CSS Framework: TailwindCSS v4 with custom theme
+- Fonts: Custom font provider with Geist and Poppins
+- Components: shadcn/ui pattern with Radix Vue primitives
+- Icons: @nuxt/icon with custom SVG collections

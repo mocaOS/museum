@@ -1,0 +1,16 @@
+[
+  {
+    "name": "Slugify",
+    "key": "slugify",
+    "type": "exec",
+    "position_x": 19,
+    "position_y": 1,
+    "options": {
+      "code": "module.exports = async function (data) {\n\t// Index data to get the string you want to slugify\n\t// Assign it to the \"text\" var below.\n    if (!data.$trigger.payload?.name) return data.$trigger.payload;\n    \n\tconst text = data.$trigger.payload.name;\n\n\tconst slug = text\n\t\t.toLowerCase()\n\t\t.trim()\n\t\t.replace(/[^\\w\\s-]/g, '')\n\t\t.replace(/[\\s_-]+/g, '-')\n\t\t.replace(/^-+|-+$/g, '');\n\n\treturn { \n        ...data.$trigger.payload, slug\n    }\n};"
+    },
+    "resolve": null,
+    "reject": null,
+    "flow": "8c8b3d5e-5035-42b6-bd39-219530b96b60",
+    "_syncId": "45906c6b-d070-4a87-916f-65eacf973d49"
+  }
+]
