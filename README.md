@@ -106,24 +106,6 @@ Headless CMS and API built on Directus with custom extensions.
 - `r2r-document-sync`: Document indexing for AI search
 - `r2r-graph-pull`: The Graph protocol integration
 
-### 🔄 **Migration Tools** (`apps/migration`)
-
-Comprehensive data migration and synchronization utilities.
-
-**Available Scripts:**
-- `sync-thegraph-rooms.ts`: Sync room data from The Graph protocol
-- `contract-nft-sync.ts`: Synchronize NFT contracts and metadata
-- `sync-sheet-nfts.ts`: Import NFT data from Google Sheets
-- `merge-duplicate-*.ts`: Data deduplication tools
-- `update-artist-names-*.ts`: Batch artist name updates
-- `fetch-media-info.ts`: Media metadata processing
-- Collection management utilities
-
-**Tech Stack:**
-- **Runtime**: Bun
-- **APIs**: Directus SDK, Google Sheets API, The Graph
-- **Data Processing**: CSV parsing, batch operations, error handling
-
 ### 📜 **Utility Scripts** (`apps/scripts`)
 
 Administrative and automation tools for platform management.
@@ -186,10 +168,6 @@ npx directus-sync push
 ### Data Operations
 ```bash
 # Run migration scripts
-cd apps/migration
-bun run sync-thegraph-rooms.ts
-
-# Import NFT data
 cd apps/scripts  
 bun run index.ts
 
