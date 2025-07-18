@@ -1,0 +1,89 @@
+[
+  {
+    "project_name": "Directus",
+    "project_color": "#00FF00",
+    "public_note": null,
+    "auth_login_attempts": 25,
+    "auth_password_policy": null,
+    "storage_asset_transform": "all",
+    "storage_asset_presets": null,
+    "custom_css": null,
+    "storage_default_folder": null,
+    "basemaps": null,
+    "mapbox_key": null,
+    "module_bar": [
+      {
+        "type": "module",
+        "id": "content",
+        "enabled": true
+      },
+      {
+        "type": "module",
+        "id": "users",
+        "enabled": true
+      },
+      {
+        "type": "module",
+        "id": "files",
+        "enabled": true
+      },
+      {
+        "type": "module",
+        "id": "insights",
+        "enabled": true
+      },
+      {
+        "type": "link",
+        "id": "docs",
+        "name": "Documentation",
+        "url": "https://docs.directus.io",
+        "icon": "help",
+        "enabled": true
+      },
+      {
+        "type": "module",
+        "id": "settings",
+        "enabled": true,
+        "locked": true
+      },
+      {
+        "type": "module",
+        "id": "generate-types",
+        "enabled": true
+      }
+    ],
+    "project_descriptor": null,
+    "default_language": "en-US",
+    "custom_aspect_ratios": null,
+    "default_appearance": "auto",
+    "default_theme_light": null,
+    "theme_light_overrides": null,
+    "default_theme_dark": null,
+    "theme_dark_overrides": null,
+    "report_error_url": null,
+    "report_bug_url": null,
+    "report_feature_url": null,
+    "public_registration": true,
+    "public_registration_verify_email": false,
+    "public_registration_role": "8bd69e6d-920a-4b79-a5b2-77f38a2e03ba",
+    "public_registration_email_filter": {
+      "_and": [
+        {
+          "_and": [
+            {
+              "email": {
+                "_contains": "no-email@0x"
+              }
+            },
+            {
+              "email": {
+                "_contains": ".com"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "_syncId": "e61f4df3-34ed-400c-ba5d-569808382055"
+  }
+]

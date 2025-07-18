@@ -1,0 +1,68 @@
+---
+description: Best practices for blockchain integrations, wallet connections, and Web3 functionality including Ethereum and Solana support
+globs: 
+alwaysApply: false
+---
+# Web3 Integration Guidelines
+
+This document outlines best practices for integrating blockchain functionality in the application.
+
+## Supported Networks
+
+- Ethereum (mainnet and testnets)
+- Solana (mainnet and devnet)
+
+## Libraries
+
+### Ethereum Ecosystem
+- **ethers.js 6.13+** - For Ethereum interactions
+- **viem 2.22+** - For type-safe Ethereum interactions
+- **wagmi 2.16+** - Core wagmi functionality
+- **@wagmi/vue 0.0.68+** - Vue hooks for Ethereum
+- **@reown/appkit 1.6+** - For Web3 integration (formerly WalletConnect)
+- **@reown/appkit-adapter-ethers** - Ethers adapter for AppKit
+- **@reown/appkit-adapter-wagmi** - Wagmi adapter for AppKit
+
+### Solana Ecosystem
+- **@solana/web3.js 1.98+** - Core Solana blockchain interactions
+- **@solana/wallet-adapter-base 0.9+** - Solana wallet adapter foundation
+
+### Utilities
+- **@openzeppelin/merkle-tree 1.0+** - Merkle tree utilities for airdrops and claims
+
+## Connection Patterns
+
+Always use the provider composables for wallet connections:
+
+- Use `useWallet` for wallet connection state
+- Handle connection status with `isConnecting`, `isConnected`, and `isDisconnected` states
+- Always implement proper error handling for wallet interactions
+- Use async/await pattern with try/catch for transaction submissions
+- Implement proper wallet disconnect handling
+
+## Security Guidelines
+
+- Never expose private keys in the frontend
+- Always validate signatures on the backend
+- Implement proper error handling for failed transactions
+- Use appropriate confirmation counts before considering transactions final
+- Implement proper loading states for blockchain interactions
+- Validate all user inputs before sending transactions
+- Use proper gas estimation for Ethereum transactions
+
+## Transaction Flow
+
+1. Prepare transaction data on the frontend
+2. Estimate gas costs (Ethereum) or transaction fees (Solana)
+3. Sign transaction with connected wallet
+4. Submit transaction to blockchain
+5. Monitor transaction status
+6. Update UI based on transaction result
+7. Handle transaction failures gracefully
+
+## AppKit Integration
+
+- Use @reown/appkit for unified wallet connection experience
+- Configure both Ethereum and Solana adapters
+- Implement proper wallet switching for multi-chain support
+- Handle wallet connection persistence across sessions

@@ -1,0 +1,25 @@
+{
+  "collection": "collections",
+  "field": "parent_collection",
+  "related_collection": "collections",
+  "meta": {
+    "junction_field": null,
+    "many_collection": "collections",
+    "many_field": "parent_collection",
+    "one_allowed_collections": null,
+    "one_collection": "collections",
+    "one_collection_field": null,
+    "one_deselect_action": "nullify",
+    "one_field": "child_collections",
+    "sort_field": null
+  },
+  "schema": {
+    "table": "collections",
+    "column": "parent_collection",
+    "foreign_key_table": "collections",
+    "foreign_key_column": "id",
+    "constraint_name": "collections_parent_collection_foreign",
+    "on_update": "NO ACTION",
+    "on_delete": "NO ACTION"
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "collection": "contracts",
+  "field": "nfts",
+  "type": "alias",
+  "meta": {
+    "collection": "contracts",
+    "conditions": null,
+    "display": null,
+    "display_options": null,
+    "field": "nfts",
+    "group": null,
+    "hidden": false,
+    "interface": "list-o2m",
+    "note": null,
+    "options": {
+      "enableLink": true
+    },
+    "readonly": false,
+    "required": false,
+    "sort": 8,
+    "special": [
+      "o2m"
+    ],
+    "translations": null,
+    "validation": null,
+    "validation_message": null,
+    "width": "full"
+  }
+}

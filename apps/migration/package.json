@@ -1,0 +1,22 @@
+{
+  "name": "migration",
+  "version": "1.0.0",
+  "license": "ISC",
+  "keywords": [],
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "@directus/sdk": "^19.0.1",
+    "axios": "^1.7.9",
+    "google-auth-library": "^9.15.1",
+    "google-spreadsheet": "^4.1.4",
+    "js-base64": "^3.7.7",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.7.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.1",
+    "tsx": "^4.19.2"
+  }
+}

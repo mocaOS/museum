@@ -1,0 +1,243 @@
+---
+description: Comprehensive guidelines for using Tailwind CSS v4 features, configuration, and best practices in the project
+globs: 
+alwaysApply: false
+---
+# Tailwind CSS v4 Guidelines
+
+This document outlines the specific guidelines and migration patterns for Tailwind CSS v4 in this project.
+
+## CSS Import Changes
+
+### v4 Import Syntax
+- Use `@import "tailwindcss";` instead of `@tailwind` directives
+- Single import replaces all previous `@tailwind base;`, `@tailwind components;`, `@tailwind utilities;`
+
+```css
+/* ✅ Correct v4 syntax */
+@import "tailwindcss";
+
+/* ❌ Old v3 syntax - Don't use */
+@tailwind base;
+@tailwind components; 
+@tailwind utilities;
+```
+
+## Configuration Changes
+
+### Theme Configuration with @theme
+- Use `@theme` directive in CSS instead of `tailwind.config.js` for theme customization
+- CSS variables are automatically generated
+
+```css
+@import "tailwindcss";
+
+@theme {
+  --font-display: "Satoshi", "sans-serif";
+  --breakpoint-3xl: 1920px;
+  --color-brand-500: oklch(0.84 0.18 117.33);
+  --ease-fluid: cubic-bezier(0.3, 0, 0, 1);
+}
+```
+
+### JavaScript Config Loading
+- JS config files are no longer auto-detected
+- Use `@config` directive to explicitly load them:
+
+```css
+@config "../../tailwind.config.js";
+@import "tailwindcss";
+```
+
+## Breaking Changes & Updates
+
+### Border Colors
+- Default border color changed from `gray-200` to `currentColor`
+- Always specify border color explicitly: `border border-gray-200`
+
+```html
+<!-- ✅ Correct - Always specify color -->
+<div class="border border-gray-200 px-2 py-3">...</div>
+
+<!-- ❌ Wrong - Will use currentColor instead of gray-200 -->
+<div class="border px-2 py-3">...</div>
+```
+
+### Ring Utilities
+- Default ring width changed from `3px` to `1px`
+- Default ring color changed from `blue-500` to `currentColor`
+
+```html
+<!-- ✅ Update to maintain v3 behavior -->
+<button class="focus:ring-3 focus:ring-blue-500">...</button>
+
+<!-- ❌ Old v3 syntax -->
+<button class="focus:ring">...</button>
+```
+
+### Outline Utilities
+- `outline-none` changed behavior - use `outline-hidden` for accessibility-aware invisible outlines
+
+```html
+<!-- ✅ Correct for accessibility-aware invisible outline -->
+<input class="focus:outline-hidden" />
+
+<!-- ❌ Changed behavior in v4 -->
+<input class="focus:outline-none" />
+```
+
+### CSS Variable Syntax in Arbitrary Values
+- Use parentheses instead of square brackets for CSS variables
+
+```html
+<!-- ✅ Correct v4 syntax -->
+<div class="bg-(--brand-color)"></div>
+
+<!-- ❌ Old v3 syntax -->
+<div class="bg-[--brand-color]"></div>
+```
+
+### Variant Stacking Order
+- Variant order changed from right-to-left to left-to-right
+- Update order-sensitive stacked variants:
+
+```html
+<!-- ✅ Correct v4 order -->
+<ul class="py-4 *:first:pt-0 *:last:pb-0">
+
+<!-- ❌ Old v3 order -->
+<ul class="py-4 first:*:pt-0 last:*:pb-0">
+```
+
+## New Features in v4
+
+### Container Queries (Native Support)
+- No plugin required for container queries
+- Use `@container` and `@size` variants:
+
+```html
+<div class="@container">
+  <div class="grid grid-cols-1 @sm:grid-cols-3 @lg:grid-cols-4">
+    <!-- Responsive based on container size -->
+  </div>
+</div>
+```
+
+### Dynamic Data Attribute Variants
+- Automatic support for boolean data attributes:
+
+```html
+<div data-current class="opacity-75 data-current:opacity-100">
+  <!-- Styles apply when data-current attribute is present -->
+</div>
+```
+
+### Enhanced Variant Composability
+- More flexible variant combinations:
+
+```html
+<div class="group">
+  <div class="group-has-focus:opacity-100">
+    <!-- Complex variant combinations -->
+  </div>
+</div>
+```
+
+## Custom Utilities
+
+### Use @utility Instead of @layer
+- Replace `@layer utilities` with `@utility` directive:
+
+```css
+/* ✅ Correct v4 syntax */
+@utility tab-4 {
+  tab-size: 4;
+}
+
+/* ❌ Old v3 syntax */
+@layer utilities {
+  .tab-4 {
+    tab-size: 4;
+  }
+}
+```
+
+### Container Customization
+- Customize container utility with `@utility`:
+
+```css
+@utility container {
+  margin-inline: auto;
+  padding-inline: 2rem;
+}
+```
+
+## CSS Variables and theme() Function
+- Direct CSS variable usage is preferred over `theme()` function:
+
+```css
+.my-class {
+  /* ✅ Preferred v4 syntax */
+  background-color: var(--color-red-500);
+  
+  /* ✅ Still works but not preferred */
+  background-color: theme(--color-red-500);
+  
+  /* ❌ Old v3 syntax */
+  background-color: theme(colors.red.500);
+}
+```
+
+## PostCSS Configuration
+- Simplified PostCSS config for v4:
+
+```js
+// postcss.config.js
+export default {
+  plugins: {
+    "@tailwindcss/postcss": {}
+  }
+};
+```
+
+## Vite Configuration
+- Use dedicated Vite plugin for better performance:
+
+```ts
+// vite.config.ts
+import { defineConfig } from "vite";
+import tailwindcss from "@tailwindcss/vite";
+
+export default defineConfig({
+  plugins: [
+    tailwindcss()
+  ]
+});
+```
+
+## Migration Best Practices
+
+### Gradual Migration
+1. Run the upgrade tool: `npx @tailwindcss/upgrade`
+2. Update import statements in CSS files
+3. Fix breaking changes (borders, rings, outlines)
+4. Test variant stacking order
+5. Leverage new features (container queries, enhanced variants)
+
+### Testing Strategy
+- Test all interactive elements (focus states, hover effects)
+- Verify border and ring appearances
+- Check responsive behavior with new container queries
+- Validate accessibility with new outline behavior
+
+## Component Development
+- Always specify border and ring colors explicitly
+- Use new container query features for responsive components
+- Leverage enhanced variant composability for complex interactions
+- Prefer CSS variable syntax in custom CSS
+
+## Performance Benefits
+- Faster builds with new engine
+- Better tree-shaking
+- Native cascade layers support
+- Improved development experience with Vite plugin

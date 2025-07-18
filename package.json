@@ -1,0 +1,35 @@
+{
+  "name": "moca-migration",
+  "private": true,
+  "packageManager": "yarn@1.22.22",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "FORCE_COLOR=1 turbo build",
+    "dev": "FORCE_COLOR=1 turbo dev",
+    "dev:web": "FORCE_COLOR=1 turbo dev --filter=@local/config --filter=directus-extension-moca --filter=api --filter=web",
+    "postinstall": "patch-package",
+    "deploy": "node deploy.js"
+  },
+  "dependencies": {
+    "dotenv": "^17.2.0",
+    "eslint": "^8.57.1"
+  },
+  "devDependencies": {
+    "patch-package": "^7.0.0",
+    "postinstall-postinstall": "^2.1.0",
+    "turbo": "^2.5.3",
+    "typescript": "5.7.2"
+  },
+  "workspaces": [
+    "apps/api",
+    "apps/api/extensions/*",
+    "apps/web",
+    "packages/*"
+  ],
+  "resolutions": {
+    "borsh": "0.7.0",
+    "onnxruntime-node": "1.20.0"
+  }
+}

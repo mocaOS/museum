@@ -1,0 +1,16 @@
+{
+  "name": "eslint-config-custom",
+  "version": "0.0.0",
+  "license": "MIT",
+  "main": "index.js",
+  "dependencies": {
+    "@creazy231/eslint-config": "^2.1.0",
+    "eslint": "^8.57.1",
+    "eslint-config-turbo": "^2.4.0",
+    "eslint-plugin-better-tailwindcss": "^3.2.1",
+    "vue-eslint-parser": "^9.4.3"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

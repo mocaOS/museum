@@ -1,0 +1,33 @@
+{
+  "collection": "collections",
+  "field": "nfts",
+  "type": "alias",
+  "meta": {
+    "collection": "collections",
+    "conditions": null,
+    "display": null,
+    "display_options": null,
+    "field": "nfts",
+    "group": null,
+    "hidden": false,
+    "interface": "list-o2m",
+    "note": null,
+    "options": {
+      "enableCreate": false,
+      "enableLink": true,
+      "sort": "date_created",
+      "sortDirection": "-",
+      "template": "{{name}} - {{contract.name}} {{contract.address}}"
+    },
+    "readonly": false,
+    "required": false,
+    "sort": 11,
+    "special": [
+      "o2m"
+    ],
+    "translations": null,
+    "validation": null,
+    "validation_message": null,
+    "width": "full"
+  }
+}

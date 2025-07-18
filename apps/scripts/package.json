@@ -1,0 +1,18 @@
+{
+  "name": "scripts",
+  "type": "module",
+  "private": true,
+  "module": "index.ts",
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "@directus/sdk": "^13.0.2",
+    "axios": "^1.6.7",
+    "csv-parser": "^3.2.0",
+    "dotenv": "^16.4.7"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  }
+}

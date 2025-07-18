@@ -1,0 +1,23 @@
+services:
+  moca-postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: moca
+      POSTGRES_USER: moca
+      POSTGRES_PASSWORD: moca
+    ports:
+      - "5432:5432"
+    volumes:
+      - moca_postgres_data:/var/lib/postgresql/data
+
+  moca-redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - moca_redis_data:/data
+    command: redis-server --save 60 1 --loglevel warning
+
+volumes:
+  moca_postgres_data:
+  moca_redis_data:

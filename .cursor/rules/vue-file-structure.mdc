@@ -1,0 +1,134 @@
+---
+description: How to structure vue files
+globs: 
+alwaysApply: false
+---
+# Vue File Structure Guidelines
+
+This document outlines the recommended structure for Vue component files to maintain consistency across the project.
+
+## Component Structure Order
+
+Components should follow this specific ordering for better readability and maintenance (if possible):
+
+1. **Imports** - External libraries and project components
+   - do not import from `#imports` or `vue` since these are global available because of Nuxt auto-import feature
+   - do not import components like `@/components` or `~/components` from the components folder
+   - respect Nuxt directory based auto-import like dir `App/Example/Button` will lead to `<AppExampleButton />`
+2. **Page Metadata** - `definePageMeta()` configurations for Nuxt pages, including routing options, layouts, middleware, and other page-specific settings
+3. **Global Constants** - Constants defined at file level (e.g., `const FADE_DURATION = 300`)
+4. **Refs** - Reactive references (`ref()`, `shallowRef()`, etc.)
+5. **Data Fetching** - API calls and loading states (suspense after each query, if suspense is used)
+6. **Computed Variables** - Derived reactive state
+7. **Lifecycle Hooks** - In chronological order:
+   - `onBeforeMount()`
+   - `onMounted()`
+   - `watch, vueUse-Functions, etc.`
+   - `onBeforeUnmount()`
+   - `onUnmounted()`
+8. **Methods & Event Handlers** - Component functions and event handlers, clearly named to indicate their purpose (e.g., action functions like `handleSubmit()`, `validateForm()`, data transformation functions, utility methods)
+9. **SEO & Document Head** - Meta tags, title configurations, and other SEO optimizations using Nuxt's `useHead()`, `useSeoMeta()`, or other head management utilities to control document metadata
+
+## Example
+
+```vue
+<script setup>
+import { ref, computed, onMounted } from 'vue'
+import SomeComponent from '@/components/SomeComponent.vue'
+
+definePageMeta({
+  layout: 'default',
+  middleware: ['auth'],
+  title: 'Product Details',
+  keepalive: true
+})
+
+const FADE_DURATION = 300
+
+const count = ref(0)
+const items = ref([])
+const product = ref(null)
+
+const { data: productData, pending, error } = await useFetch(`${API_ENDPOINT}/${route.params.id}`)
+const loading = ref(false)
+
+const fetchItems = async () => {
+  loading.value = true
+  try {
+    const response = await fetch(API_ENDPOINT)
+    items.value = await response.json()
+  } finally {
+    loading.value = false
+  }
+}
+
+if (productData.value) {
+  product.value = productData.value
+}
+
+const doubleCount = computed(() => count.value * 2)
+const isProductAvailable = computed(() => product.value?.stock > 0)
+const formattedPrice = computed(() => {
+  return product.value ? `$${product.value.price.toFixed(2)}` : '-'
+})
+
+onBeforeMount(() => {
+  console.log('Component is about to mount')
+})
+
+onMounted(() => {
+  fetchItems()
+})
+
+watch(count, (newValue) => {
+  console.log(`Count changed to: ${newValue}`)
+})
+
+const { x, y } = useMouse()
+
+onBeforeUnmount(() => {
+  console.log('Component is about to unmount')
+})
+
+onUnmounted(() => {
+  console.log('Component has been unmounted')
+})
+
+function increment() {
+  count.value++
+}
+
+function handleProductSelect(id) {
+  navigateTo(`/products/${id}`)
+}
+
+function validateForm() {
+  // Form validation logic
+  return true
+}
+
+function handleSubmit() {
+  if (validateForm()) {
+    // Submission logic
+  }
+}
+
+useHead({
+  title: computed(() => product.value?.name || 'Product Details'),
+  meta: [
+    { name: 'description', content: computed(() => product.value?.description || 'View our product details') }
+  ],
+  link: [
+    { rel: 'canonical', href: computed(() => `https://example.com/products/${route.params.id}`) }
+  ]
+})
+
+useSeoMeta({
+  title: computed(() => `${product.value?.name} | My Store`),
+  ogTitle: computed(() => product.value?.name),
+  ogImage: computed(() => product.value?.imageUrl),
+  ogDescription: computed(() => product.value?.description),
+  twitterCard: 'summary_large_image'
+})
+</script>
+```

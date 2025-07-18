@@ -1,0 +1,57 @@
+{
+  "name": "directus-extension-moca",
+  "type": "module",
+  "version": "1.0.0",
+  "description": "Please enter a description for your extension",
+  "keywords": [
+    "directus",
+    "directus-extension",
+    "directus-extension-bundle"
+  ],
+  "icon": "extension",
+  "files": [
+    "dist"
+  ],
+  "directus:extension": {
+    "type": "bundle",
+    "path": {
+      "app": "dist/app.js",
+      "api": "dist/api.js"
+    },
+    "entries": [
+      {
+        "type": "hook",
+        "name": "insert-opensea-data",
+        "source": "src/insert-opensea-data/index.ts"
+      },
+      {
+        "type": "hook",
+        "name": "r2r-document-sync",
+        "source": "src/r2r-document-sync/index.ts"
+      },
+      {
+        "type": "hook",
+        "name": "r2r-graph-pull",
+        "source": "src/r2r-graph-pull/index.ts"
+      }
+    ],
+    "host": "^10.10.0"
+  },
+  "scripts": {
+    "build": "directus-extension build",
+    "dev": "directus-extension build -w --no-minify",
+    "link": "directus-extension link",
+    "add": "directus-extension add"
+  },
+  "dependencies": {
+    "@local/config": "*",
+    "axios": "^1.7.9",
+    "js-base64": "^3.7.7",
+    "r2r-js": "^0.4.43"
+  },
+  "devDependencies": {
+    "@directus/extensions-sdk": "13.0.0",
+    "@types/node": "^22.13.1",
+    "typescript": "^5.7.3"
+  }
+}

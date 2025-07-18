@@ -1,0 +1,24 @@
+{
+  "name": "api",
+  "version": "1.0.0",
+  "description": "",
+  "author": "",
+  "license": "ISC",
+  "keywords": [],
+  "main": "index.js",
+  "scripts": {
+    "dev": "npx directus start",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "@sindresorhus/slugify": "^2.2.1",
+    "directus": "^11.4.1",
+    "directus-extension-sync": "^3.0.3",
+    "dotenv": "^16.4.7",
+    "pg": "^8.13.1",
+    "sharp": "^0.33.5"
+  },
+  "devDependencies": {
+    "directus-extension-moca": "*"
+  }
+}

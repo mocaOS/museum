@@ -1,0 +1,62 @@
+---
+description: Monorepo structure, directory organization, and file placement conventions for the MOCA migration Turborepo project
+globs: 
+alwaysApply: false
+---
+# Project Structure
+
+This document outlines the project structure of the MOCA migration monorepo.
+
+## Monorepo Structure
+
+The project is organized as a Turborepo monorepo with the following structure:
+
+- **apps/** - Contains application packages
+  - **web/** - Nuxt 3 web application (frontend)
+  - **api/** - Directus API instance with extensions
+  - **migration/** - Migration tools and scripts
+  - **scripts/** - Utility scripts and automation tools
+
+- **packages/** - Contains shared packages
+  - **config/** - Shared configuration (production, staging, development)
+  - **types/** - Shared TypeScript types (Directus, OpenSea, Google Sheets)
+  - **eslint-config-custom/** - Custom ESLint configuration
+
+## Web Application Structure (apps/web)
+
+The web app follows Nuxt 3 conventions:
+
+- **app.vue** - Main application entry point
+- **components/** - UI components
+  - **ui/** - Reusable UI components (shadcn/ui pattern)
+  - **App/** - Application-specific components
+- **composables/** - Vue composables and custom hooks
+- **layouts/** - Page layouts
+- **pages/** - Route pages (file-based routing)
+- **plugins/** - Nuxt plugins
+- **providers/** - Service providers (image transformations, media proxy)
+- **public/** - Static assets (images, fonts, favicons)
+- **middleware/** - Route middleware
+- **lib/** - Utility functions and helpers
+- **assets/** - Unprocessed assets (CSS, etc.)
+- **server/** - Server-side code (API routes, middleware)
+- **svg/** - Custom SVG icon collections
+
+## API Structure (apps/api)
+
+- **extensions/** - Directus extensions
+  - **directus-extension-moca/** - Custom MOCA extension
+- **directus-config/** - Directus configuration files
+- **migrations/** - Database migration scripts
+- **uploads/** - File uploads directory
+
+## Migration Structure (apps/migration)
+
+- **types/** - Migration-specific TypeScript types
+- **\*.ts** - Individual migration scripts for different data sources
+
+## Shared Packages
+
+- **config/** - Environment-specific configurations with TypeScript types
+- **types/** - Shared interfaces for external APIs and internal data structures
+- **eslint-config-custom/** - Consistent linting rules across the monorepo

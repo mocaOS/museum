@@ -1,0 +1,68 @@
+---
+description: Used to get info about available components
+globs: 
+alwaysApply: false
+---
+# UI Components
+
+This document outlines the UI component architecture and available component libraries.
+
+## Component Libraries
+
+### Primary UI Components
+- **shadcn-nuxt 2.2+** - Main UI component collection using Radix Vue primitives
+- **Radix Vue 1.9+** - Unstyled, accessible UI primitives
+- **Reka UI 2.3+** - Additional UI components and utilities
+
+### Component Structure
+- Components are stored inside the `components/` folder
+- shadcn components are in `components/ui/` following the shadcn-vue pattern
+- Custom app-specific components like `Icon.vue` are in `components/App/` folder (used as `<AppIcon />`)
+- Global custom components are stored in the root `components/` directory (e.g., `ColorMode.vue`)
+
+## Available UI Components
+
+### Core Components (shadcn/ui)
+- **Button** - Various button styles and sizes
+- **Card** - Card container with header, content, footer variants
+- **Dialog** - Modal dialogs with overlay and content areas
+- **Input** - Form input components
+- **Select** - Dropdown selection components
+- **Sheet** - Slide-out panels and drawers
+- **Skeleton** - Loading placeholders
+- **Pagination** - Page navigation components
+- **Navigation Menu** - Complex navigation structures
+- **Popover** - Floating content containers
+- **Glowing Effect** - Custom animation component
+
+### Specialized Components
+- **VanishingInput** - Animated input component
+- **NftCard** - NFT display component
+- **NftModal** - NFT detail modal
+- **RoomModal** - Room detail modal
+- **MOCAMedia** - Media display component
+- **MOCAModel** - 3D model display component
+- **ChatInterface** - AI chat interface
+
+## Animation & Effects
+- **Motion-V 1.2+** - Vue animation library for component transitions
+- **TailwindCSS Animate** - CSS animation utilities
+- **tw-animate-css** - Additional animation classes
+
+## Icons
+- **@nuxt/icon 1.10+** - Icon management system
+- **@iconify/vue** - Iconify integration
+- **Lucide Vue Next** - Lucide icon set
+- **Custom MOCA Icons** - Located in `svg/moca/` directory
+
+## Layout Components
+- **Vue Masonry Wall 5+** - Masonry grid layouts
+- **@tanstack/vue-table 8.21+** - Advanced table components
+
+## Usage Patterns
+
+- Use shadcn/ui components as the foundation
+- Extend with Radix Vue primitives when needed
+- Create custom components in appropriate directories
+- Follow the established naming conventions
+- Use TypeScript for all component props and emits

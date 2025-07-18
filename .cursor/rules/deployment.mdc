@@ -1,0 +1,49 @@
+---
+description: Deployment processes, CI/CD pipeline configuration, and production deployment checklist for the MOCA migration project
+globs: 
+alwaysApply: false
+---
+# Deployment Guidelines
+
+This document outlines the deployment process for the MOCA migration project.
+
+## Deployment Process
+
+The project uses a custom deployment script that can be found at [deploy.js](mdc:deploy.js) and [deploy.sh](mdc:deploy.sh).
+
+## Commands
+
+```bash
+# Deploy the entire project
+yarn deploy
+
+# Build for production
+yarn build
+```
+
+## CI/CD Pipeline
+
+The project uses GitLab CI/CD as defined in [.gitlab-ci.yml](mdc:.gitlab-ci.yml).
+
+## Environment Configuration
+
+Environment variables should be configured in the following places:
+- `.env` files (not committed to git)
+- GitLab CI/CD variables
+- Server environment variables
+
+## Docker Deployment
+
+The project can be deployed using Docker with the following files:
+- [Dockerfile.deploy](mdc:Dockerfile.deploy)
+- [docker-compose.yml](mdc:docker-compose.yml)
+
+## Deployment Checklist
+
+1. Ensure all tests pass
+2. Build the project locally first
+3. Tag the release with a semantic version
+4. Deploy to staging environment
+5. Verify functionality on staging
+6. Deploy to production
+7. Monitor logs after deployment
