@@ -287,7 +287,6 @@ This project follows strict code quality standards:
 - **Museum**: [museumofcryptoart.com](https://museumofcryptoart.com)
 - **Platform**: [v2.museumofcryptoart.com](https://v2.museumofcryptoart.com)
 - **Manifesto**: [MOCA Manifesto](https://museumofcryptoart.com/m%E2%97%8Bc%E2%96%B3-manifesto/)
-- **Token**: Learn about [$MOCA Token](https://v2.museumofcryptoart.com/token)
 
 ---
 
