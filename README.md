@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="https://raw.githubusercontent.com/mocaOS/museum/refs/heads/main/misc/social.jpg" />
+  <img src="https://github.com/mocaOS/museum/blob/main/misc/social.jpg" />
 </div>
 
 ---
