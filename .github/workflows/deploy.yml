@@ -1,0 +1,80 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main, staging]
+    paths:
+      - 'apps/web/**'
+      - 'apps/api/**'
+      - 'packages/config/**'
+  pull_request:
+    branches: [main, staging]
+    paths:
+      - 'apps/web/**'
+      - 'apps/api/**'
+      - 'packages/config/**'
+
+jobs:
+  check_changes:
+    name: Check Changes
+    runs-on: ubuntu-latest
+    outputs:
+      web: ${{ steps.changes.outputs.web }}
+      api: ${{ steps.changes.outputs.api }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check for changes
+        uses: dorny/paths-filter@v3
+        id: changes
+        with:
+          filters: |
+            web:
+              - 'apps/web/**'
+              - 'packages/config/**'
+            api:
+              - 'apps/api/**'
+              - 'packages/config/**'
+
+  deploy_web:
+    name: Deploy Web
+    runs-on: ubuntu-latest
+    needs: check_changes
+    if: needs.check_changes.outputs.web == 'true'
+    steps:
+      - name: Deploy Web Application (Production)
+        if: github.ref == 'refs/heads/main'
+        run: |
+          curl -X POST \
+            -H "Authorization: Bearer ${{ secrets.DEPLOY_TOKEN }}" \
+            "https://deploy.qwellco.de/api/v1/deploy?uuid=lkg8kgs440koogcosogs44ww&force=false"
+      
+      - name: Deploy Web Application (Staging)
+        if: github.ref == 'refs/heads/staging'
+        run: |
+          curl -X POST \
+            -H "Authorization: Bearer ${{ secrets.DEPLOY_TOKEN }}" \
+            "https://deploy.qwellco.de/api/v1/deploy?uuid=poc0skkkc0sgoo80c04s8gwk&force=false"
+
+  deploy_api:
+    name: Deploy API
+    runs-on: ubuntu-latest
+    needs: check_changes
+    if: needs.check_changes.outputs.api == 'true'
+    steps:
+      - name: Deploy API Application (Production)
+        if: github.ref == 'refs/heads/main'
+        run: |
+          curl -X POST \
+            -H "Authorization: Bearer ${{ secrets.DEPLOY_TOKEN }}" \
+            "https://deploy.qwellco.de/api/v1/deploy?uuid=pocogc8w48gkskgos4gw004g&force=false"
+      
+      - name: Deploy API Application (Staging)
+        if: github.ref == 'refs/heads/staging'
+        run: |
+          curl -X POST \
+            -H "Authorization: Bearer ${{ secrets.DEPLOY_TOKEN }}" \
+            "https://deploy.qwellco.de/api/v1/deploy?uuid=uosg0kg8goo008gkgsssc0oc&force=false" 
