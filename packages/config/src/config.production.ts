@@ -11,6 +11,6 @@ export default {
 
   r2r: {
     url: "https://r2r.moca.qwellco.de",
-    apiKey: process.env.R2R_API_KEY || "",
+    apiKey: "key_1z-STFdVa7z9FHuYTd5kUA==.6gmgNGrhYP2TLl7PYTDtUw6NWYhQ_A3TlWd7UELNwhA=",
   },
 };
