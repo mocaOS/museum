@@ -4,9 +4,40 @@
 
 ---
 
-# MOCA. Museum of Crypto Art
+# The MOCA Tech Stack
 
-A comprehensive platform for the Museum of Crypto Art (M○C△) - the community-driven digital cryptoart museum. Our mission is to preserve the truth and present a broad representation of perspectives that challenge and provoke discourse around digital art and culture.
+Imagine a future where any institution can deploy its own AI-powered museum—where visitors interact with curated immersive art exhibitions while being guided by AI agents that can be personalized to fit the vibe of your museum. Welcome to our open-source tech stack that’s changing the game for art museums everywhere.
+
+Our mission is simple—provide a fully deployable museum codebase where any enthusiast can become their own curator, architect, or artist. We’re not just sharing software; we’re democratizing access to immersive art experiences.
+
+Find a demo at [https://v2.museumofcryptoart.com](https://v2.museumofcryptoart.com)
+
+## The Code Base
+
+We've started working on this particular code base in early 2025 and already shipped an MVP that ties up Art Collections and Library into a unified stack. As we continue to build new stuff, we're still in the process of migrating legacy code into this new codebase.
+
+This codebase is designed in a way that it enables any museum to deploy the tech for themselves while MOCA as an organization is able to facilitate functionalities that are closely tied to $MOCA tokenomics into their own deployment of this tech stack.   
+
+1. **Art Collections**: Import and organize your artworks into the backend and categorize them into collections. Your configured art is displayed in the frontend, and the APIs serve metadata + media like images, videos, 3D models.
+
+2. **The Library**: The AI retrieval system for all documents—or an agentic search engine for your content. Built around [R2R](https://github.com/SciPhi-AI/R2R), it enables entity-based knowledge graphs for high-end data extraction. The Library plugs into the backend via SDK so that uploaded documents are automatically aggregated to the Library UX.
+
+3. **MOCA ROOMs**: Originally launched in 2022, this [modular architecture](https://hackmd.io/@reneil1337/moca) enables you to transport entire art exhibitions across immersive worlds. On deployment, all the CC0 ROOMs are automatically populated into your museum instance, setting the baseline for your interoperable museum architecture.
+   
+   - WIP: Building out the [Hyperfy](https://github.com/hyperfy-xyz/hyperfy) Integration aiming to enable a user-friendly way to manage your rooms—e.g. positioning and scaling slots in a way that exhibits can be manipulated without much hassle as well as a novel storage-mix that combines museum backends and .hyp files to enable retrieval of all ROOM configurations into any given world.
+
+4. **Art DeCC0s**: Art Decc0s are 10k uniquely generated [CC0 pfps](https://opensea.io/collection/art-decc0s) that come with agentic capabilities and are utilized in the software stack. Fueled by [ElizaOS](https://github.com/elizaOS/eliza), these unique personas bridge your museum into social media, chat applications, and virtual worlds. They are enabled with all knowledge from your library.
+   
+   - WIP: Building the MOCA Plugin for elizaOS and allowing Art Decc0 holders to launch agents which are pre-configured according to their personas.    
+   - TBD: Integrating into MOCA ROOMs via [eliza3D](https://github.com/elizaOS/eliza-3d-hyperfy-starter), enabling spawning your decc0s to Hyperfy in form of NPCs that you can interact with.
+
+Regarding Intelligence: We highly recommend fueling Library and agents via [comput3](https://comput3.ai/). Our own deployment uses Hermes3:70b by [Nous Research](https://nousresearch.com/), and we love it. Holders of DeCC0 NFTs don’t need to worry about this, as the official MOCA deployment enables them with free Hermes3 intelligence out-of-the-box.
+
+### Deploy Your Own Museum
+
+Our technical documentation is still under construction—like a gallery being prepped for its grand opening, it’s a work in progress. As we implement and refine the features outlined in this repo (from AI-driven ROOMs to DeCC0 agents and The Library), we’ll be continuously improving the docs to make them clearer, more comprehensive, and easier to deploy for institutions and individuals alike.
+
+This is a collaborative experiment, and we’re building the scaffolding in public. If you’re itching to dive deeper, contribute, or deploy your own museum stack, [hop into our Discord](https://discord.gg/Rs7wxUTrWV)—we’ll guide you through the maze while we write the map.
 
 ## 🏗️ Architecture
 
@@ -24,6 +55,7 @@ This project is built as a **Turborepo monorepo** containing multiple interconne
 ## ⚡ Quick Setup
 
 ### 1. Docker Services
+
 Start the required database and cache services:
 
 ```bash
@@ -32,12 +64,14 @@ docker-compose up -d
 ```
 
 ### 2. Install Dependencies
+
 ```bash
 # Install all workspace dependencies
 yarn install
 ```
 
 ### 3. API Configuration
+
 ```bash
 # Navigate to API directory and configure environment
 cd apps/api
@@ -50,6 +84,7 @@ npx directus-sync push
 ```
 
 ### 4. Development
+
 ```bash
 # Start all applications
 yarn dev
@@ -65,6 +100,7 @@ yarn dev:web
 The main user-facing application built with modern web technologies.
 
 **Key Features:**
+
 - **NFT Collection Browser**: Explore curated crypto art collections with advanced filtering and search
 - **AI Librarian Chat**: Interactive chat interface powered by R2R (Retrieval-Augmented Generation) for questions about crypto art and Web3 culture
 - **3D Exhibitions**: Virtual rooms and spaces for immersive art experiences
@@ -73,6 +109,7 @@ The main user-facing application built with modern web technologies.
 - **Media Viewer**: Support for images, videos, 3D models, and interactive content
 
 **Tech Stack:**
+
 - **Framework**: Nuxt 3.15+ with Vue 3.5+
 - **Styling**: TailwindCSS v4 with custom design system
 - **UI Components**: Shadcn/ui with Radix Vue primitives
@@ -87,6 +124,7 @@ The main user-facing application built with modern web technologies.
 Headless CMS and API built on Directus with custom extensions.
 
 **Features:**
+
 - **Content Management**: Collections, NFTs, rooms, user management
 - **Custom Extensions**: MOCA-specific hooks and functionality
 - **Web3 Authentication**: Ethereum wallet-based login system
@@ -95,6 +133,7 @@ Headless CMS and API built on Directus with custom extensions.
 - **Media Processing**: Image optimization and transformation
 
 **Tech Stack:**
+
 - **CMS**: Directus 11.4+
 - **Database**: PostgreSQL 17
 - **Cache**: Redis 7
@@ -102,6 +141,7 @@ Headless CMS and API built on Directus with custom extensions.
 - **Auth**: Web3 signature-based authentication
 
 **Custom Extensions:**
+
 - `insert-opensea-data`: Automated NFT metadata synchronization
 - `r2r-document-sync`: Document indexing for AI search
 - `r2r-graph-pull`: The Graph protocol integration
@@ -111,11 +151,13 @@ Headless CMS and API built on Directus with custom extensions.
 Administrative and automation tools for platform management.
 
 **Key Scripts:**
+
 - **R2R API Management**: Create, manage, and delete API keys for AI integration
 - **CSV Imports**: Flexible NFT data import from various sources
 - **Data Processing**: Automated data validation and transformation
 
 **Tech Stack:**
+
 - **Runtime**: Bun
 - **APIs**: R2R, Directus, various external services
 - **Data Formats**: CSV, JSON processing with validation
@@ -123,20 +165,25 @@ Administrative and automation tools for platform management.
 ## 📦 Shared Packages
 
 ### `packages/config`
+
 Environment-specific configuration management for development, staging, and production.
 
 ### `packages/types`
+
 Shared TypeScript definitions:
+
 - **Directus**: Auto-generated CMS types
 - **OpenSea**: NFT marketplace API types
 - **Google Sheets**: Spreadsheet integration types
 
 ### `packages/eslint-config-custom`
+
 Standardized ESLint configuration for consistent code quality across the monorepo.
 
 ## 🚀 Development Workflows
 
 ### Building for Production
+
 ```bash
 # Build all applications
 yarn build
@@ -146,6 +193,7 @@ yarn deploy
 ```
 
 ### Environment Management
+
 The project supports multiple environments with specific configurations:
 
 - **Development**: Local development with hot reload
@@ -153,6 +201,7 @@ The project supports multiple environments with specific configurations:
 - **Production**: Live platform deployment
 
 ### Database Management
+
 ```bash
 # Start Directus API
 cd apps/api
@@ -166,6 +215,7 @@ npx directus-sync push
 ```
 
 ### Data Operations
+
 ```bash
 # Run migration scripts
 cd apps/scripts  
@@ -180,6 +230,7 @@ bun run create-r2r-api-key.ts
 ### Environment Variables
 
 **API Configuration** (`apps/api/.env`):
+
 ```env
 # Database
 DB_HOST=localhost
@@ -204,6 +255,7 @@ THEGRAPH_API_KEY=your_graph_key
 ```
 
 **Web Application** (`apps/web/.env`):
+
 ```env
 # API Endpoints
 NUXT_PUBLIC_DIRECTUS_URL=http://localhost:8055
@@ -220,23 +272,28 @@ REOWN_PROJECT_ID=your_project_id
 ## 🌐 Platform Features
 
 ### Digital Art Collections
+
 - **Genesis Collection**: Original MOCA artworks and historical pieces
 - **Permanent Collection**: Curated long-term exhibitions
 - **Themed Collections**: Special exhibitions and artist showcases
 - **Community Collections**: User-contributed and DAO-curated content
 
 ### Web3 Integration
+
 - **Multi-Chain Support**: Ethereum, Polygon, Solana networks
 - **Wallet Authentication**: Signature-based login without passwords
 - **$MOCA Token**: Native token with cross-chain bridging capabilities
 - **NFT Display**: Rich metadata and media rendering
 
 ### AI-Powered Features
+
 - **Semantic Search**: R2R-powered document and artwork discovery
 - **Chat Interface**: Ask questions about crypto art history and culture
 - **Content Recommendations**: Intelligent artwork and exhibition suggestions
+  ￼
 
 ### Virtual Exhibitions
+
 - **3D Rooms**: Immersive virtual gallery spaces
 - **Interactive Media**: Support for various digital art formats
 - **Virtual Reality**: WebXR-compatible exhibition viewing
@@ -244,18 +301,21 @@ REOWN_PROJECT_ID=your_project_id
 ## 🛠️ Technical Highlights
 
 ### Performance Optimizations
+
 - **Turborepo**: Optimized build and caching system
 - **Image Processing**: Automatic optimization and responsive delivery
 - **Code Splitting**: Lazy loading and route-based chunks
 - **Database Indexing**: Custom indexes for improved query performance
 
 ### Security Features
+
 - **Web3 Authentication**: Cryptographic signature verification
 - **API Security**: Rate limiting and access control
 - **Data Validation**: Comprehensive input sanitization
 - **Environment Isolation**: Secure configuration management
 
 ### Scalability Considerations
+
 - **Microservice Architecture**: Loosely coupled application components
 - **Database Optimization**: Efficient queries and connection pooling
 - **CDN Integration**: Global content delivery and caching
@@ -264,6 +324,7 @@ REOWN_PROJECT_ID=your_project_id
 ## 📚 Documentation
 
 For detailed technical documentation, see:
+
 - **API Documentation**: Available in Directus admin panel
 - **Component Library**: Storybook documentation (when available)
 - **Deployment Guide**: See deployment configuration files
