@@ -6,38 +6,47 @@
 
 # The MOCA Tech Stack
 
-Imagine a future where any institution can deploy its own AI-powered museum—where visitors interact with curated immersive art exhibitions while being guided by AI agents that can be personalized to fit the vibe of your museum. Welcome to our open-source tech stack that’s changing the game for art museums everywhere.
+At the Museum of Crypto Art (MOCA), we’ve reimagined what it means to be a Museum, bringing immersive art exhibitions, free tooling and software, high-level scholarship, and an engaging community atmosphere to a purely-online museum. MOCA is an industry leader in adapting new technologies —metaverse, blockchain, and AI— for practical application in a cultural institution.
 
-Our mission is simple—provide a fully deployable museum codebase where any enthusiast can become their own curator, architect, or artist. We’re not just sharing software; we’re democratizing access to immersive art experiences.
+We, however, envision a broader future, in which *any* cultural institution can deploy its own AI-powered museum. Therein, visitors can interact with curated and immersive exhibits alongside one another and alongside personalized AI agents, acting as curators and tour guides, each personalized to fit a given institution’s vibe.
 
-Find a demo at [https://v2.museumofcryptoart.com](https://v2.museumofcryptoart.com)
+Welcome to our open-source museum tech stack, and the unprecedented possibilities it presents for cultural institutions forever.
+
+Our mission, put simply: Provide a fully-deployable museum codebase where any enthusiast, collector, or cultural body can summon a top-tier curatorial, exhibitive, architectural, and artistic museum experience with ease. We’re not just sharing software; we’re democratizing access to a new paradigm in art experience.
+
+Find a demo at 
+
+[https://v2.museumofcryptoart.com](https://v2.museumofcryptoart.com)
 
 ## The Code Base
 
-We've started working on this particular code base in early 2025 and already shipped an MVP that ties up Art Collections and Library into a unified stack. As we continue to build new stuff, we're still in the process of migrating legacy code into this new codebase.
+We began working on this particular code base in early 2025 and already shipped an MVP that ties our Art Collections and Library into a unified stack. As we continue to build new features, we continue the process of migrating legacy code into our new codebase.
 
-This codebase is designed in a way that it enables any museum to deploy the tech for themselves while MOCA as an organization is able to facilitate functionalities that are closely tied to $MOCA tokenomics into their own deployment of this tech stack.   
+This codebase is designed to enable any museum to deploy our tech for themselves. Meanwhile, MOCA as an organization is able to facilitate functionalities (which) are closely tied to $MOCA tokenomics) into their own deployment of this tech stack.
 
-1. **Art Collections**: Import and organize your artworks into the backend and categorize them into collections. Your configured art is displayed in the frontend, and the APIs serve metadata + media like images, videos, 3D models.
+Here is a sample of what we’re offering thus far:
 
-2. **The Library**: The AI retrieval system for all documents—or an agentic search engine for your content. Built around [R2R](https://github.com/SciPhi-AI/R2R), it enables entity-based knowledge graphs for high-end data extraction. The Library plugs into the backend via SDK so that uploaded documents are automatically aggregated to the Library UX.
+1. **Art Collections**: Import and organize your artworks or NFTs into the backend and categorize them into collections. Your configured art is displayed in the frontend, as the APIs serve metadata + media, i.e. images, videos, 3D models.
 
-3. **MOCA ROOMs**: Originally launched in 2022, this [modular architecture](https://hackmd.io/@reneil1337/moca) enables you to transport entire art exhibitions across immersive worlds. On deployment, all the CC0 ROOMs are automatically populated into your museum instance, setting the baseline for your interoperable museum architecture.
+2. **The Library**: An AI retrieval system for all documents—or an agentic search-engine for your content. Built around [R2R](https://github.com/SciPhi-AI/R2R), it enables entity-based knowledge graphs for high-end data extraction. The Library plugs into a backend via SDK so that uploaded documents are automatically aggregated to the Library UX.
+
+3. **MOCA ROOMs**: Originally launched in 2022, this [modular architecture](https://hackmd.io/@reneil1337/moca) enables the exhibition and transportation of entire art exhibitions across immersive worlds. Upon deployment, all CC0 MOCA ROOMs are automatically populated into your museum instance, setting the baseline for your interoperable museum architecture.
    
-   - WIP: Building out the [Hyperfy](https://github.com/hyperfy-xyz/hyperfy) Integration aiming to enable a user-friendly way to manage your rooms—e.g. positioning and scaling slots in a way that exhibits can be manipulated without much hassle as well as a novel storage-mix that combines museum backends and .hyp files to enable retrieval of all ROOM configurations into any given world.
+   - WIP: Building out [Hyperfy](https://github.com/hyperfy-xyz/hyperfy) Integration with aims to enable a user-friendly way to manage ROOMs—e.g. positioning and scaling NFT-display slots in a way that exhibitions can be manipulated hassle-free, as well as a novel storage-mix that combines museum backends and .hyp files to enable retrieval of all ROOM configurations into any given world.
 
-4. **Art DeCC0s**: Art Decc0s are 10k uniquely generated [CC0 pfps](https://opensea.io/collection/art-decc0s) that come with agentic capabilities and are utilized in the software stack. Fueled by [ElizaOS](https://github.com/elizaOS/eliza), these unique personas bridge your museum into social media, chat applications, and virtual worlds. They are enabled with all knowledge from your library.
+4. **Art DeCC0s**: Art Decc0s are 10,000 uniquely generated [CC0 PFPs](https://opensea.io/collection/art-decc0s), and the future face of agentic capabilities which will be woven throughout the software stack. Fueled by [ElizaOS](https://github.com/elizaOS/eliza), these unique personas bridge a given museum into social media, chat applications, and virtual worlds. They are enabled with all knowledge from your Library.
    
-   - WIP: Building the MOCA Plugin for elizaOS and allowing Art Decc0 holders to launch agents which are pre-configured according to their personas.    
-   - TBD: Integrating into MOCA ROOMs via [eliza3D](https://github.com/elizaOS/eliza-3d-hyperfy-starter), enabling spawning your decc0s to Hyperfy in form of NPCs that you can interact with.
+   - WIP: Building the MOCA Plugin for ElizaOS and allowing Art Decc0 holders to launch agents which are pre-configured according to unique, generated personas.
+   
+   - TBD: Integrating into MOCA ROOMs via [Eliza3D](https://github.com/elizaOS/eliza-3d-hyperfy-starter), enabling DeCC0s to spawn in Hyperfy as interactive NPCs.
 
-Regarding Intelligence: We highly recommend fueling Library and agents via [comput3](https://comput3.ai/). Our own deployment uses Hermes3:70b by [Nous Research](https://nousresearch.com/), and we love it. Holders of DeCC0 NFTs don’t need to worry about this, as the official MOCA deployment enables them with free Hermes3 intelligence out-of-the-box.
+Regarding Intelligence: We highly recommend fueling Library and agents via [comput3](https://comput3.ai/). Our own deployment uses Hermes3:70b by [Nous Research](https://nousresearch.com/), and we love it. Holders of DeCC0 NFTs don’t need to worry about this, as the official MOCA deployment enables them with free Hermes3 intelligence out-of-the-box.
 
 ### Deploy Your Own Museum
 
-Our technical documentation is still under construction—like a gallery being prepped for its grand opening, it’s a work in progress. As we implement and refine the features outlined in this repo (from AI-driven ROOMs to DeCC0 agents and The Library), we’ll be continuously improving the docs to make them clearer, more comprehensive, and easier to deploy for institutions and individuals alike.
+Our technical documentation is still under construction. Like a grand gallery being prepped for its opening night, we’re a work in progress. As we implement and refine the features outlined in this repo (from AI-driven ROOMs to DeCC0 agents and The Library), we’ll be continuously improving the docs to make every subsection clearer, more comprehensive, and easier to deploy for institutions and individuals alike.
 
-This is a collaborative experiment, and we’re building the scaffolding in public. If you’re itching to dive deeper, contribute, or deploy your own museum stack, [hop into our Discord](https://discord.gg/Rs7wxUTrWV)—we’ll guide you through the maze while we write the map.
+This is a collaborative experiment, and we’re building the scaffolding in public. If you’re eager to dive deeper, contribute, or deploy your own museum stack, [hop into our Discord](https://discord.gg/Rs7wxUTrWV)—we’ll guide you through the maze while we write the map.
 
 ## 🏗️ Architecture
 
