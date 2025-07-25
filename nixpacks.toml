@@ -1,0 +1,25 @@
+[variables]
+NPM_CONFIG_PRODUCTION = "false"
+NODE_ENV = "production"
+
+[phases.setup]
+nixPkgs = ["nodejs_22", "corepack"]
+cmds = [
+  "corepack enable",
+  "corepack install -g bun@1.2.0"
+]
+
+[phases.install]
+dependsOn = ["setup"]
+cmds = [
+  "bun install --frozen-lockfile --production=false"
+]
+
+[phases.build]
+dependsOn = ["install"]
+cmds = [
+  "bun run build"
+]
+
+[start]
+cmd = "bun run start" 
