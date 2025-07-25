@@ -44,7 +44,7 @@
     "add": "directus-extension add"
   },
   "dependencies": {
-    "@local/config": "*",
+    "@local/config": "workspace:*",
     "axios": "^1.7.9",
     "js-base64": "^3.7.7",
     "r2r-js": "^0.4.43"

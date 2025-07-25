@@ -1,1 +1,3 @@
 apps/agents-bak
+!.env
+!.env.*

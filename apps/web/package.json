@@ -16,7 +16,7 @@
   "dependencies": {
     "@directus/sdk": "^19.0.1",
     "@iconify/vue": "^4.3.0",
-    "@local/config": "*",
+    "@local/config": "workspace:*",
     "@nuxt/fonts": "0.10.3",
     "@nuxt/image": "^1.10.0",
     "@nuxtjs/color-mode": "^3.5.2",
@@ -75,7 +75,7 @@
     "@iconify-json/iconamoon": "^1.2.2",
     "@iconify-json/mi": "^1.2.2",
     "@iconify-json/svg-spinners": "^1.2.2",
-    "@local/types": "*",
+    "@local/types": "workspace:*",
     "@nuxt/icon": "1.10.3",
     "@nuxtjs/apollo": "5.0.0-alpha.14",
     "@types/markdown-it": "^14.1.2",
@@ -89,7 +89,7 @@
     "postcss": "^8.5.3",
     "typescript": "^5.7.3"
   },
-  "resolutions": {
+  "overrides": {
     "nuxt-vite": "0.3.5",
     "vite": "6.3.5"
   }
