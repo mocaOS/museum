@@ -12,14 +12,14 @@ cmds = [
 [phases.install]
 dependsOn = ["setup"]
 cmds = [
-  "bun install --frozen-lockfile --production=false"
+  "/usr/local/bin/bun install --frozen-lockfile --production=false"
 ]
 
 [phases.build]
 dependsOn = ["install"]
 cmds = [
-  "bun run build"
+  "/usr/local/bin/bun run build"
 ]
 
 [start]
-cmd = "bun run start" 
+cmd = "/usr/local/bin/bun run start" 
