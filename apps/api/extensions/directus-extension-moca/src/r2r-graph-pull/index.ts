@@ -8,6 +8,7 @@ export default defineHook(({ schedule }, { env, logger }) => {
       await pullLatestEntitiesToGraph(env as any, logger as any);
     } catch (error) {
       logger.error("Error in scheduled R2R graph pull task:", error);
+      console.log(error);
     }
   });
 
@@ -68,6 +69,8 @@ export default defineHook(({ schedule }, { env, logger }) => {
       }
     } catch (error) {
       logger.error("Error pulling latest entities to R2R graph:", error);
+      console.log(error);
+
       throw error;
     }
   }

@@ -2,8 +2,10 @@ import { type IAgentRuntime, type Project, type ProjectAgent, logger } from "@el
 import { character } from "./character.ts";
 import starterPlugin from "./plugin.ts";
 import coingeckoPlugin from "./plugins/coingecko.ts";
+import nftDirectusPlugin from "./plugins/nft-directus.ts";
+import r2rRAGPlugin from "./plugins/r2r-rag.ts";
 
-function initCharacter({ runtime }: { runtime: IAgentRuntime }) {
+function initCharacter({ runtime: _runtime }: { runtime: IAgentRuntime }) {
   logger.info("Initializing character");
   logger.info("Name: ", character.name);
   logger.warn("OPENAI_API_KEY: ", process.env.OPENAI_API_KEY);
@@ -12,7 +14,7 @@ function initCharacter({ runtime }: { runtime: IAgentRuntime }) {
 export const projectAgent: ProjectAgent = {
   character,
   init: async (runtime: IAgentRuntime) => await initCharacter({ runtime }),
-  plugins: [starterPlugin, coingeckoPlugin], // <-- Import custom plugins here
+  plugins: [ starterPlugin, coingeckoPlugin, nftDirectusPlugin, r2rRAGPlugin ], // <-- Import custom plugins here
 };
 const project: Project = {
   agents: [ projectAgent ],

@@ -3,7 +3,7 @@
   "private": true,
   "packageManager": "bun@1.2.0",
   "engines": {
-    "node": ">=23"
+    "node": ">=22"
   },
   "scripts": {
     "build": "FORCE_COLOR=1 turbo build",
