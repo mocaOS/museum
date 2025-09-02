@@ -445,7 +445,7 @@ function sendMessage() {
             temperature: 0.1,
             topP: 1,
             maxTokensToSample: 1024,
-            model: "openai/llama-3.3-70b",
+            model: "openai/hermes4:70b",
           },
         });
 

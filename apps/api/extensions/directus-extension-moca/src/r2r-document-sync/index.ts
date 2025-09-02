@@ -1,7 +1,7 @@
+import { Buffer } from "node:buffer";
 import { unlinkSync, writeFileSync } from "node:fs";
 import { defineHook } from "@directus/extensions-sdk";
 import { r2rClient } from "r2r-js";
-import config from "@local/config";
 
 export default defineHook(({ schedule, action, filter }, { env, logger, services, getSchema }) => {
   logger.debug("R2R Document Sync hook is being initialized");
@@ -52,12 +52,12 @@ export default defineHook(({ schedule, action, filter }, { env, logger, services
     }
   });
 
-  action("files.delete", async (meta, context) => {
+  action("files.delete", async (meta, _context) => {
     await handleFileDeletion(meta, "files.delete");
   });
 
   // Use filter hook to capture file info BEFORE deletion
-  filter("files.delete", async (payload, meta, context) => {
+  filter("files.delete", async (payload, _meta, _context) => {
     try {
       // Get file IDs that are about to be deleted
       const fileIds = Array.isArray(payload) ? payload : [ payload ];
@@ -223,6 +223,7 @@ export default defineHook(({ schedule, action, filter }, { env, logger, services
           _or: [
             { filename_download: { _ends_with: ".md" } },
             { filename_download: { _ends_with: ".markdown" } },
+            { filename_download: { _ends_with: ".pdf" } },
           ],
         },
         limit: -1, // Process all retry files
@@ -305,6 +306,7 @@ export default defineHook(({ schedule, action, filter }, { env, logger, services
           _or: [
             { filename_download: { _ends_with: ".md" } },
             { filename_download: { _ends_with: ".markdown" } },
+            { filename_download: { _ends_with: ".pdf" } },
           ],
         },
         limit: 10, // Process up to 10 files at a time to reduce concurrency issues
@@ -388,6 +390,7 @@ export default defineHook(({ schedule, action, filter }, { env, logger, services
               _or: [
                 { filename_download: { _ends_with: ".md" } },
                 { filename_download: { _ends_with: ".markdown" } },
+                { filename_download: { _ends_with: ".pdf" } },
               ],
             },
             {
@@ -526,12 +529,23 @@ export default defineHook(({ schedule, action, filter }, { env, logger, services
         logger.info(`Selected collection with largest document count: ${(largestCollection as any).name} (ID: ${targetCollectionId}, document_count: ${documentCount})`);
       }
 
-      // Get file content by making a request to the assets endpoint
-      const response = await fetch(`${config.api.baseUrl}/assets/${file.id}`);
-      if (!response.ok) {
-        throw new Error(`Failed to fetch file content: ${response.statusText}`);
+      // Get file content using AssetsService instead of HTTP fetch to support binary formats like PDF
+      const schema = await getSchema();
+      const { AssetsService } = services;
+
+      const assetsService = new AssetsService({
+        schema,
+        accountability: { admin: true },
+      });
+
+      const assetResult = await assetsService.getAsset(file.id);
+
+      // Convert stream to buffer (handles both text and binary content)
+      const chunks: Buffer[] = [];
+      for await (const chunk of assetResult.stream) {
+        chunks.push(chunk as Buffer);
       }
-      const fileContent = await response.text();
+      const fileContent = Buffer.concat(chunks);
 
       // Create a temporary file path for R2R
       const tempFilePath = `/tmp/${file.filename_download}`;
@@ -546,7 +560,7 @@ export default defineHook(({ schedule, action, filter }, { env, logger, services
           file: { path: tempFilePath, name: file.filename_download },
           metadata: {
             title: file.title || file.filename_download,
-            description: file.description || `Markdown file: ${file.filename_download}`,
+            description: file.description || `Document file: ${file.filename_download}`,
             directus_file_id: file.id,
             filename: file.filename_download,
           },

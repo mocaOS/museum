@@ -1,3 +1,4 @@
+import { appendFile } from "node:fs/promises";
 import { Action, IAgentRuntime, Memory, ModelType, Plugin, Provider, Service, State } from "@elizaos/core";
 import { r2rClient as R2RClient } from "r2r-js";
 
@@ -59,6 +60,7 @@ export class R2RService extends Service {
   private apiKey: string;
   private isAuthenticated: boolean = false;
   private currentConversationId: string | null = null;
+  private static readonly LOG_FILE_PATH = "/Volumes/WD_BLACK/PROJECTS/MOCA/moca-migration/apps/moca-agent/src/plugins/log.txt";
 
   constructor(runtime?: IAgentRuntime) {
     super(runtime);
@@ -206,9 +208,27 @@ export class R2RService extends Service {
         query: options.query,
       });
 
+      await this.logR2REvent("search", {
+        request: {
+          query: options.query,
+          filters: searchConfig.filters,
+          limit: searchConfig.limit,
+          useHybridSearch: searchConfig.useHybridSearch,
+          useSemanticSearch: searchConfig.useSemanticSearch,
+        },
+        response: {
+          resultCount: results.length,
+          topSources: results.slice(0, 3).map(r => r.payload.content?.name || r.payload.content?.source || "Unknown source"),
+        },
+      });
+
       return results;
     } catch (error) {
       this.runtime?.logger?.error("R2R search failed", { error, options });
+      await this.logR2REvent("search", {
+        request: { query: options.query, filters: options.filters, limit: options.limit },
+        error: error instanceof Error ? error.message : String(error),
+      });
       throw error;
     }
   }
@@ -253,8 +273,6 @@ export class R2RService extends Service {
 
       const response = await this.client.retrieval.rag(ragConfig);
 
-      console.log(response);
-
       // Extract the completion and search results from response
       const completion = response?.results?.completion?.choices?.[0]?.message?.content || response?.results?.completion || "";
       const rawSearchResults = response?.results?.searchResults?.chunkSearchResults || [];
@@ -281,6 +299,21 @@ export class R2RService extends Service {
         query: options.query,
       });
 
+      await this.logR2REvent("rag", {
+        request: {
+          query: options.query,
+          conversationId,
+          searchSettings: ragConfig.searchSettings,
+          ragGenerationConfig: ragConfig.ragGenerationConfig,
+        },
+        response: {
+          hasCompletion: !!completion,
+          completionPreview: typeof completion === "string" ? completion.slice(0, 300) : "",
+          searchResultCount: searchResults.length,
+          topSources: searchResults.slice(0, 3).map(r => r.payload.content?.name || r.payload.content?.source || "Unknown source"),
+        },
+      });
+
       return {
         completion,
         search_results: searchResults,
@@ -288,6 +321,10 @@ export class R2RService extends Service {
       };
     } catch (error) {
       this.runtime?.logger?.error("R2R RAG failed", { error, options });
+      await this.logR2REvent("rag", {
+        request: { query: options.query, conversationId: options.conversationId },
+        error: error instanceof Error ? error.message : String(error),
+      });
       throw error;
     }
   }
@@ -532,6 +569,19 @@ export class R2RService extends Service {
   resetConversation(): void {
     this.currentConversationId = null;
     this.runtime?.logger?.info("R2R conversation reset");
+  }
+
+  private async logR2REvent(type: "search" | "rag", data: Record<string, any>): Promise<void> {
+    try {
+      const entry = {
+        timestamp: new Date().toISOString(),
+        type,
+        ...data,
+      };
+      await appendFile(R2RService.LOG_FILE_PATH, `${JSON.stringify(entry)}\n`);
+    } catch (err) {
+      this.runtime?.logger?.error("Failed to append to R2R log file", { err });
+    }
   }
 }
 
