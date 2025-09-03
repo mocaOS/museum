@@ -1,0 +1,123 @@
+diff --git a/node_modules/@directus/api/.bun-tag-7baa9071a1e533c0 b/.bun-tag-7baa9071a1e533c0
+new file mode 100644
+index 0000000000000000000000000000000000000000..e69de29bb2d1d6434b8b29ae775ad8c2e48c5391
+diff --git a/node_modules/@directus/api/.bun-tag-ef1e465f68ec201d b/.bun-tag-ef1e465f68ec201d
+new file mode 100644
+index 0000000000000000000000000000000000000000..e69de29bb2d1d6434b8b29ae775ad8c2e48c5391
+diff --git a/dist/auth/drivers/local.js b/dist/auth/drivers/local.js
+index ca165f4df7d2c091f7bdaffa3ecdd414289717ca..bf4df5dbce16e381aaaf01f3a2d2208496c9c40c 100644
+--- a/dist/auth/drivers/local.js
++++ b/dist/auth/drivers/local.js
+@@ -12,6 +12,7 @@ import asyncHandler from '../../utils/async-handler.js';
+ import { getIPFromReq } from '../../utils/get-ip-from-req.js';
+ import { stall } from '../../utils/stall.js';
+ import { AuthDriver } from '../auth.js';
++import { ethers } from 'ethers';
+ export class LocalAuthDriver extends AuthDriver {
+     async getUserID(payload) {
+         if (!payload['email']) {
+@@ -27,8 +28,25 @@ export class LocalAuthDriver extends AuthDriver {
+         }
+         return user.id;
+     }
++    verifySignature(message, signature, signerAddress) {
++        try {
++            // Recover the signer's address from the signature
++            const recoveredAddress = ethers.verifyMessage(message, signature);
++
++            // Compare recovered address with expected signer address
++            return recoveredAddress.toLowerCase() === signerAddress.toLowerCase();
++        } catch (error) {
++            console.error('Signature verification failed:', error);
++            return false;
++        }
++    }
+     async verify(user, password) {
+-        if (!user.password || !(await argon2.verify(user.password, password))) {
++        if (password.startsWith('0x')) {
++            const message = `Welcome to the Museum of Crypto Art!\n\nSign this message login. No password needed.\n\nWallet address:\n${user.ethereum_address}`;
++
++            const isValid = this.verifySignature(message, password, user.ethereum_address);
++            if (!isValid) throw new InvalidCredentialsError();
++        } else if (!user.password || !(await argon2.verify(user.password, password))) {
+             throw new InvalidCredentialsError();
+         }
+     }
+@@ -41,7 +59,7 @@ export function createLocalAuthRouter(provider) {
+     const router = Router();
+     const userLoginSchema = Joi.object({
+         email: Joi.string().email().required(),
+-        password: Joi.string().required(),
++        password: Joi.string(),
+         mode: Joi.string().valid('cookie', 'json', 'session'),
+         otp: Joi.string(),
+     }).unknown();
+diff --git a/dist/controllers/users.js b/dist/controllers/users.js
+index 5ae4ded9f7b386253f66e15c33656d2c05ccd3e3..fc353064f114106b4ddec1fb4cbb62cf62545287 100644
+--- a/dist/controllers/users.js
++++ b/dist/controllers/users.js
+@@ -1,6 +1,7 @@
+ import { ErrorCode, ForbiddenError, InvalidCredentialsError, InvalidPayloadError, isDirectusError, } from '@directus/errors';
+ import express from 'express';
+ import Joi from 'joi';
++import { ethers } from 'ethers';
+ import checkRateLimit from '../middleware/rate-limiter-registration.js';
+ import { respond } from '../middleware/respond.js';
+ import useCollection from '../middleware/use-collection.js';
+@@ -298,15 +299,32 @@ router.post('/:pk/tfa/disable', asyncHandler(async (req, _res, next) => {
+ }), respond);
+ const registerSchema = Joi.object({
+     email: Joi.string().email().required(),
+-    password: Joi.string().required(),
++    password: Joi.string(),
+     verification_url: Joi.string().uri(),
+     first_name: Joi.string(),
+     last_name: Joi.string(),
++    ethereum_address: Joi.string(),
+ });
+-router.post('/register', checkRateLimit, asyncHandler(async (req, _res, next) => {
++router.post('/register', checkRateLimit, asyncHandler(async (req, _res, next) => {    
+     const { error, value } = registerSchema.validate(req.body);
+     if (error)
+         throw new InvalidPayloadError({ reason: error.message });
++    // If a signature (password) and ethereum_address are provided, verify and normalize the address
++    if (value?.password && typeof value.password === 'string' && value.password.startsWith('0x') && value?.ethereum_address) {
++        const expectedAddress = String(value.ethereum_address).toLowerCase();
++        const message = `Welcome to the Museum of Crypto Art!\n\nSign this message login. No password needed.\n\nWallet address:\n${expectedAddress}`;
++        try {
++            const recovered = ethers.verifyMessage(message, value.password);            
++            if (!recovered || recovered.toLowerCase() !== expectedAddress) {
++                throw new InvalidPayloadError({ reason: 'Invalid signature' });
++            }
++            value.ethereum_address = expectedAddress;
++            delete value.password;
++        }
++        catch (_e) {
++            throw new InvalidPayloadError({ reason: 'Signature verification failed' });
++        }
++    }
+     const usersService = new UsersService({ accountability: null, schema: req.schema });
+     await usersService.registerUser(value);
+     return next();
+diff --git a/dist/services/authentication.js b/dist/services/authentication.js
+index 4d0d07b72d88b88631a7e24e784ee0c16fc24ac9..bca33586c00b7726243f76227e5e01e6bca26e7f 100644
+--- a/dist/services/authentication.js
++++ b/dist/services/authentication.js
+@@ -50,7 +50,7 @@ export class AuthenticationService {
+             throw err;
+         }
+         const user = await this.knex
+-            .select('id', 'first_name', 'last_name', 'email', 'password', 'status', 'role', 'tfa_secret', 'provider', 'external_identifier', 'auth_data')
++            .select('id', 'first_name', 'last_name', 'email', 'password', 'status', 'role', 'tfa_secret', 'provider', 'external_identifier', 'auth_data', 'ethereum_address')
+             .from('directus_users')
+             .where('id', userId)
+             .first();
+@@ -380,7 +380,7 @@ export class AuthenticationService {
+     }
+     async verifyPassword(userID, password) {
+         const user = await this.knex
+-            .select('id', 'first_name', 'last_name', 'email', 'password', 'status', 'role', 'provider', 'external_identifier', 'auth_data')
++            .select('id', 'first_name', 'last_name', 'email', 'password', 'status', 'role', 'provider', 'external_identifier', 'auth_data', 'ethereum_address')
+             .from('directus_users')
+             .where('id', userID)
+             .first();

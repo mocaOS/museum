@@ -312,7 +312,7 @@ const { data: initialQuestions } = await useFetch("/api/getInitialQuestions", {
 
 // Function to fetch file data from Directus
 async function fetchFileData(r2rId) {
-  const directus = useRawDirectus();
+  const { directus } = useDirectus();
   try {
     const response = await directus.request(
       readFiles({

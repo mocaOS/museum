@@ -218,8 +218,7 @@ const ITEMS_PER_PAGE = 25;
 const route = useRoute();
 const router = useRouter();
 
-const { readItems } = useDirectusItems<CustomDirectusTypes>();
-const directus = useRawDirectus();
+const { directus } = useDirectus();
 
 const {
   inputSearchQuery,
@@ -257,10 +256,15 @@ md.renderer.rules.link_open = function (tokens, idx, options, env, self) {
   return defaultRender(tokens, idx, options, env, self);
 };
 
-const { data: collection, suspense: suspenseCollection } = useQuery<Collections>({
+type CollectionSummary = Pick<Collections, "name" | "title" | "description" | "essay" | "slug"> & {
+  child_collections: Array<Pick<Collections, "name" | "slug">>;
+};
+
+const { data: collection, suspense: suspenseCollection } = useQuery<CollectionSummary>({
   queryKey: [ "collection", route.params.collection || "the-genesis-collection" ],
   queryFn: async () => {
-    const response = await readItems("collections", {
+    const { readItems } = await import("@directus/sdk");
+    const response = await directus.request(readItems("collections", {
       fields: [
         "name",
         "title",
@@ -285,7 +289,7 @@ const { data: collection, suspense: suspenseCollection } = useQuery<Collections>
           },
         ],
       },
-    });
+    }));
 
     return response?.[0];
   },
@@ -386,7 +390,8 @@ const { data: nfts, suspense: suspenseNfts, isPending: isLoading } = useQuery<Nf
   queryKey: [ `${route.params.collection || "the-genesis-collection"}`, currentPage, searchQuery, selectedCollectionSlug ],
   enabled: !!totalNfts,
   queryFn: async () => {
-    const response = await readItems("nfts", {
+    const { readItems } = await import("@directus/sdk");
+    const response = await directus.request(readItems("nfts", {
       fields: [
         "id",
         "name",
@@ -400,7 +405,7 @@ const { data: nfts, suspense: suspenseNfts, isPending: isLoading } = useQuery<Nf
       filter: searchFilter.value as any,
       limit: ITEMS_PER_PAGE,
       offset: (currentPage.value - 1) * ITEMS_PER_PAGE,
-    });
+    }));
 
     return response;
   },

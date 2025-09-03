@@ -151,9 +151,10 @@
 
 <script setup lang="ts">
 import { useQuery } from "@tanstack/vue-query";
-import type { CustomDirectusTypes, Rooms } from "@local/types/directus";
+import { readItems } from "@directus/sdk";
+import type { Rooms } from "@local/types/directus";
 
-const { readItems } = useDirectusItems<CustomDirectusTypes>();
+const { directus } = useDirectus();
 const route = useRoute();
 const router = useRouter();
 
@@ -166,7 +167,7 @@ const selectedRoomIndex = ref<number>(-1);
 const { data: rooms, suspense: suspenseRooms, isPending: isLoading } = useQuery<Rooms[]>({
   queryKey: [ "rooms" ],
   queryFn: async () => {
-    const response = await readItems("rooms", {
+    const response = await directus.request(readItems("rooms", {
       fields: [
         "id",
         "title",
@@ -179,7 +180,7 @@ const { data: rooms, suspense: suspenseRooms, isPending: isLoading } = useQuery<
         "model",
       ],
       sort: [ "-date_created" ],
-    });
+    }));
     return response;
   },
 });

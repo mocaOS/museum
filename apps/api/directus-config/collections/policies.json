@@ -42,7 +42,7 @@
     "roles": [
       {
         "role": "8bd69e6d-920a-4b79-a5b2-77f38a2e03ba",
-        "sort": null
+        "sort": 2
       }
     ],
     "_syncId": "b5d43d0f-0d4f-4de9-8214-cca0d7c9971d"
@@ -58,6 +58,10 @@
     "roles": [
       {
         "role": null,
+        "sort": 1
+      },
+      {
+        "role": "8bd69e6d-920a-4b79-a5b2-77f38a2e03ba",
         "sort": 1
       }
     ],

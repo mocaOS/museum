@@ -1,5 +1,5 @@
 <template>
-  <div class="container mt-10 space-y-14">
+  <div class="container mt-10">
     <div
       class="
         mx-auto max-w-[580px] space-y-12 rounded-xl border border-border
@@ -7,23 +7,12 @@
         sm:rounded-3xl sm:p-14
       "
     >
-      <NuxtImg
-        preload
-        width="112"
-        src="/images/globe.png"
-        alt="Globe"
-        class="mx-auto"
-      />
-      <h1 class="text-center text-3xl font-semibold">
-        The Museum
+      <h1 class="text-3xl font-semibold">
+        Decc0s
       </h1>
-
-      <Button
-        @click="handleLogin"
-        class="w-full"
-      >
-        Login
-      </Button>
+      <p class="text-white/60">
+        This is a placeholder page for Decc0s.
+      </p>
     </div>
   </div>
   <footer class="container mt-12 pb-10 text-center text-sm text-white/50">
@@ -38,7 +27,7 @@
 </template>
 
 <script setup lang="ts">
-async function handleLogin() {
-  navigateTo("/login");
-}
+useHead({ title: "Decc0s" });
 </script>
+
+

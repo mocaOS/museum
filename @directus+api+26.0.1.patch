@@ -68,3 +68,60 @@ index 0dedf39..a9436f2 100644
              .from('directus_users')
              .where('id', userID)
              .first();
+
+diff --git a/node_modules/@directus/api/dist/controllers/users.js b/node_modules/@directus/api/dist/controllers/users.js
+index 0000000..1111111 100644
+--- a/node_modules/@directus/api/dist/controllers/users.js
++++ b/node_modules/@directus/api/dist/controllers/users.js
+@@ -1,6 +1,7 @@
+ import { ErrorCode, ForbiddenError, InvalidCredentialsError, InvalidPayloadError, isDirectusError, } from '@directus/errors';
+ import express from 'express';
+ import Joi from 'joi';
++import { ethers } from 'ethers';
+ import checkRateLimit from '../middleware/rate-limiter-registration.js';
+ import { respond } from '../middleware/respond.js';
+ import useCollection from '../middleware/use-collection.js';
+@@ -297,13 +298,36 @@
+ router.post('/:pk/tfa/disable', asyncHandler(async (req, _res, next) => {
+     if (!req.accountability?.user) {
+         throw new InvalidCredentialsError();
+     }
+@@ -299,11 +323,38 @@
+ const registerSchema = Joi.object({
+     email: Joi.string().email().required(),
+-    password: Joi.string().required(),
++    password: Joi.string(),
+     verification_url: Joi.string().uri(),
+     first_name: Joi.string(),
+     last_name: Joi.string(),
++    ethereum_address: Joi.string(),
+ });
+ router.post('/register', checkRateLimit, asyncHandler(async (req, _res, next) => {
+     const { error, value } = registerSchema.validate(req.body);
+     if (error)
+         throw new InvalidPayloadError({ reason: error.message });
+-    const usersService = new UsersService({ accountability: null, schema: req.schema });
++    // If a signature is provided as the password and an ethereum_address is present,
++    // verify the signature and set the ethereum_address on the user payload
++    if (value?.password && typeof value.password === 'string' && value.password.startsWith('0x') && value?.ethereum_address) {
++        try {
++            const expectedAddress = String(value.ethereum_address).toLowerCase();
++            const message = `Welcome to the Museum of Crypto Art!\n\nSign this message login. No password needed.\n\nWallet address:\n${expectedAddress}`;
++            const recovered = ethers.verifyMessage(message, value.password);
++            if (!recovered || recovered.toLowerCase() !== expectedAddress) {
++                throw new InvalidPayloadError({ reason: 'Invalid signature' });
++            }
++            // Normalize and set ethereum_address on the user object
++            value.ethereum_address = expectedAddress;
++            // Password is not required when using signature-based auth
++            // Leave password undefined to create a password-less user
++            delete value.password;
++        } catch (e) {
++            throw new InvalidPayloadError({ reason: 'Signature verification failed' });
++        }
++    }
++    const usersService = new UsersService({ accountability: null, schema: req.schema });
+     await usersService.registerUser(value);
+     return next();
+ }), respond);
+ const verifyRegistrationSchema = Joi.string();

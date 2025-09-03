@@ -12,6 +12,7 @@ export default defineNuxtConfig({
 
   runtimeConfig: {
     // Server-side only config - not exposed to client
+    authSecret: process.env.NUXT_AUTH_SECRET || (process.env.NODE_ENV !== "production" ? "dev-moca-auth-secret" : undefined),
     r2r: {
       // Get R2R credentials from environment variables
       url: process.env.R2R_URL || config.r2r?.url,
@@ -42,7 +43,7 @@ export default defineNuxtConfig({
     "@vueuse/nuxt",
     "@nuxtjs/strapi",
     "@nuxt/icon",
-    "nuxt-directus-next",
+    "@sidebase/nuxt-auth",
     "nuxt-mcp",
   ],
 
@@ -85,15 +86,15 @@ export default defineNuxtConfig({
   //   },
   // },
 
-  directus: {
-    url: config.api.baseUrl,
-    moduleConfig: {
-      // readMeQuery: {
-      //   fields: [
-      //     "*",
-      //   ],
-      // },
+  auth: {
+    baseURL: process.env.NODE_ENV === "production" ? "https://v2.museumofcryptoart.com/api/auth" : "http://localhost:3000/api/auth",
+    provider: {
+      type: "authjs",
+      trustHost: true,
+      defaultProvider: "credentials",
+      addDefaultCallbackUrl: true,
     },
+    globalAppMiddleware: false,
   },
 
   strapi: {
@@ -127,6 +128,8 @@ export default defineNuxtConfig({
     },
     provider: "ipx",
   },
+
+  // Auth module configuration is provided by @sidebase/nuxt-auth when installed.
 
   icon: {
     provider: "server",

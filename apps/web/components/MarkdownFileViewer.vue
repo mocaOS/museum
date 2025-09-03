@@ -138,7 +138,7 @@ md.renderer.rules.link_open = function (tokens, idx, options, env, self) {
 
 // Function to fetch file data from Directus by filename_download
 async function fetchFileDataByFilename(filename) {
-  const directus = useRawDirectus();
+  const { directus } = useDirectus();
   try {
     const response = await directus.request(
       readFiles({

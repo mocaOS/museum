@@ -95,6 +95,42 @@
                       {{ collection.name }}
                     </NuxtLink>
                   </template>
+
+                  <hr>
+
+                  <NuxtLink
+                    @click="isOpen = false"
+                    v-if="!directusUser"
+                    to="/login"
+                    class="
+                      block rounded-md p-2 opacity-70 transition-colors
+                      hover:bg-muted-foreground/20 hover:opacity-100
+                    "
+                  >
+                    Login
+                  </NuxtLink>
+                  <template v-else>
+                    <NuxtLink
+                      @click="isOpen = false"
+                      to="/decc0s"
+                      class="
+                        block rounded-md p-2 opacity-70 transition-colors
+                        hover:bg-muted-foreground/20 hover:opacity-100
+                      "
+                    >
+                      Decc0s
+                    </NuxtLink>
+                    <button
+                      @click="isOpen = false; handleLogout()"
+                      class="
+                        block w-full rounded-md p-2 text-left opacity-70
+                        transition-colors
+                        hover:bg-muted-foreground/20 hover:opacity-100
+                      "
+                    >
+                      Logout
+                    </button>
+                  </template>
                 </div>
               </PopoverContent>
             </Popover>
@@ -184,7 +220,58 @@
             <Icon name="moca:logo" class="text-4xl" :class="[{ invert: $colorMode.value === 'light' }]" />
           </NuxtLink>
         </div>
-        <div class="flex items-center justify-end">
+        <div class="flex items-center justify-end gap-2">
+          <div
+            class="
+              hidden
+              md:block
+            "
+          >
+            <NavigationMenu>
+              <NavigationMenuList>
+                <NavigationMenuItem
+                  v-if="!directusUser"
+                >
+                  <NavigationMenuLink
+                    as-child
+                    :class="twMerge(navigationMenuTriggerStyle(), `
+                      bg-transparent
+                    `)"
+                  >
+                    <NuxtLink to="/login" class="font-medium">
+                      Login
+                    </NuxtLink>
+                  </NavigationMenuLink>
+                </NavigationMenuItem>
+                <template v-else>
+                  <NavigationMenuItem>
+                    <NavigationMenuLink
+                      as-child
+                      :class="twMerge(navigationMenuTriggerStyle(), `
+                        bg-transparent
+                      `)"
+                    >
+                      <NuxtLink to="/decc0s" class="font-medium">
+                        Decc0s
+                      </NuxtLink>
+                    </NavigationMenuLink>
+                  </NavigationMenuItem>
+                  <NavigationMenuItem>
+                    <NavigationMenuLink
+                      as-child
+                      :class="twMerge(navigationMenuTriggerStyle(), `
+                        bg-transparent
+                      `)"
+                    >
+                      <button @click="handleLogout" class="font-medium">
+                        Logout
+                      </button>
+                    </NavigationMenuLink>
+                  </NavigationMenuItem>
+                </template>
+              </NavigationMenuList>
+            </NavigationMenu>
+          </div>
           <ColorMode />
         </div>
       </div>
@@ -195,8 +282,10 @@
 
 <script setup lang="ts">
 import { useQuery } from "@tanstack/vue-query";
-import type { Collections, CustomDirectusTypes } from "@local/types/directus";
+import type { Collections } from "@local/types/directus";
 import { twMerge } from "tailwind-merge";
+import { useDisconnect } from "@reown/appkit/vue";
+import { readItems } from "@directus/sdk";
 import ColorMode from "~/components/ColorMode.vue";
 import {
   NavigationMenu,
@@ -208,14 +297,17 @@ import {
   navigationMenuTriggerStyle,
 } from "~/components/ui/navigation-menu";
 
-const { readItems } = useDirectusItems<CustomDirectusTypes>();
+const { directus } = useDirectus();
+const { data: authSession, status, signOut } = useAuth();
+const directusUser = computed(() => authSession.value?.user || null);
+const { disconnect } = useDisconnect();
 
 const isOpen = ref(false);
 
 const { data: collections, suspense: suspenseCollections } = useQuery<Collections[]>({
   queryKey: [ "collections" ],
   queryFn: async () => {
-    const response = await readItems("collections", {
+    const response = await directus.request(readItems("collections", {
       fields: [
         "id",
         "name",
@@ -234,9 +326,9 @@ const { data: collections, suspense: suspenseCollections } = useQuery<Collection
           _eq: "published",
         },
       },
-    });
+    }));
 
-    return response;
+    return response as Collections[];
   },
 });
 
@@ -247,4 +339,13 @@ const filteredCollections = computed(() => {
     return !collection.parent_collection;
   });
 });
+
+async function handleLogout() {
+  try {
+    await signOut({ redirect: false });
+  } catch {}
+  try {
+    await disconnect();
+  } catch {}
+}
 </script>

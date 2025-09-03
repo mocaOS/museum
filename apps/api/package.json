@@ -12,13 +12,13 @@
   },
   "dependencies": {
     "@sindresorhus/slugify": "^2.2.1",
-    "directus": "^11.4.1",
-    "directus-extension-sync": "^3.0.3",
+    "directus": "^11.11.0",
+    "directus-extension-sync": "^3.0.4",
     "dotenv": "^16.4.7",
     "pg": "^8.13.1",
-    "sharp": "^0.33.5"
+    "sharp": "^0.34.3"
   },
   "devDependencies": {
-    "directus-extension-moca": "*"
+    "directus-extension-moca": "workspace:*"
   }
 }

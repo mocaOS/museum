@@ -60,6 +60,18 @@
     "_syncId": "8a9d2d00-124b-4b8e-b8e2-6e572d8025f6"
   },
   {
+    "collection": "directus_users",
+    "action": "read",
+    "permissions": null,
+    "validation": null,
+    "presets": null,
+    "fields": [
+      "ethereum_address"
+    ],
+    "policy": "dbb083a5-0174-4f56-a3fa-60c64da11078",
+    "_syncId": "e0c8c57e-b021-4d20-b0b1-cab6214716fa"
+  },
+  {
     "collection": "nfts",
     "action": "read",
     "permissions": null,

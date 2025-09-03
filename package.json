@@ -10,18 +10,18 @@
     "dev": "FORCE_COLOR=1 turbo dev",
     "dev:web": "FORCE_COLOR=1 turbo dev --filter=@local/config --filter=directus-extension-moca --filter=api --filter=web",
     "dev:agents": "FORCE_COLOR=1 infisical run --env=dev --path=/moca-agent -- turbo dev --filter=@local/config --filter=moca-agent",
-    "postinstall": "patch-package",
+    "postinstall": "# patch-package",
     "deploy": "node deploy.js"
   },
   "dependencies": {
-    "dotenv": "^17.2.0",
+    "dotenv": "^17.2.2",
     "eslint": "^8.57.1"
   },
   "devDependencies": {
-    "patch-package": "^7.0.0",
+    "patch-package": "^7.0.2",
     "postinstall-postinstall": "^2.1.0",
-    "turbo": "^2.5.3",
-    "typescript": "5.7.2"
+    "turbo": "^2.5.6",
+    "typescript": "5.9.2"
   },
   "workspaces": [
     "apps/api",
@@ -32,6 +32,10 @@
   ],
   "overrides": {
     "borsh": "0.7.0",
-    "onnxruntime-node": "1.20.0"
+    "onnxruntime-node": "1.20.0",
+    "zod": "4.0.14"
+  },
+  "patchedDependencies": {
+    "@directus/api@30.0.0": "patches/@directus%2Fapi@30.0.0.patch"
   }
 }

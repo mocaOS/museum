@@ -17,9 +17,9 @@ export default {
 
   // R2R configuration
   r2r: {
-    url: "https://r2r.moca.qwellco.de",
-    // apiKey: "key_ZTtG88_OmkDrbZgm7-gqfQ==.VF3w85aSKDoafNWDiIn2g9RREJdMC82WZsMrM8vH188=",
-    apiKey: "key_1z-STFdVa7z9FHuYTd5kUA==.6gmgNGrhYP2TLl7PYTDtUw6NWYhQ_A3TlWd7UELNwhA=",
+    url: "https://r2r-staging.deploy.qwellco.de",
+    apiKey: "key_sQ3m4HCbc7JjGcMAVCxJJw==.Qmdgw-vn_ecLJPWUzbnxnJw_aD0gr_OkC7GBygarH0I=",
+    // apiKey: "key_1z-STFdVa7z9FHuYTd5kUA==.6gmgNGrhYP2TLl7PYTDtUw6NWYhQ_A3TlWd7UELNwhA=",
   },
 
   networks: {

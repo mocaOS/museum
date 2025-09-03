@@ -1,6 +1,12 @@
 <template>
   <div class="container mt-10">
-    <div class="bg-background-200 border-gray mx-auto max-w-[580px] space-y-12 rounded-xl border p-4 sm:rounded-3xl sm:p-14">
+    <div
+      class="
+        mx-auto max-w-[580px] space-y-12 rounded-xl border border-border
+        bg-background p-4
+        sm:rounded-3xl sm:p-14
+      "
+    >
       <h1 class="text-3xl font-semibold">
         Registration
       </h1>
@@ -14,7 +20,12 @@
             Follow us on 𝕏 and join the Discord.
           </p>
 
-          <div class="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-8">
+          <div
+            class="
+              mt-4 grid grid-cols-1 gap-4
+              sm:grid-cols-2 sm:gap-8
+            "
+          >
             <a href="https://x.com/MuseumofCrypto" target="_blank">
               <Button class="w-full">𝕏</Button>
             </a>
@@ -75,9 +86,15 @@
 
           <div
             v-if="responseMessage.message"
-            :class="cn('response-message items-center flex mt-4 text-sm', responseMessage.type === 'success' ? 'text-green-500' : 'text-red-500')"
+            :class="cn('mt-4 flex items-center text-sm response-message', responseMessage.type === 'success' ? `
+              text-green-500
+            ` : `text-red-500`)"
           >
-            <Icon v-if="responseMessage.type === 'success'" name="iconamoon:check-circle-1" class="mr-1" />
+            <Icon
+              v-if="responseMessage.type === 'success'"
+              name="iconamoon:check-circle-1"
+              class="mr-1"
+            />
             <Icon v-else name="iconamoon:sign-times-circle" class="mr-1" />
             {{ responseMessage.message }}
           </div>
