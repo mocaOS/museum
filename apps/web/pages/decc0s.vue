@@ -28,6 +28,9 @@
 
 <script setup lang="ts">
 useHead({ title: "Decc0s" });
+definePageMeta({
+  middleware: ["auth"],
+});
 </script>
 
 
