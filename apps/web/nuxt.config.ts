@@ -92,7 +92,7 @@ export default defineNuxtConfig({
       type: "authjs",
       trustHost: true,
       defaultProvider: "credentials",
-      addDefaultCallbackUrl: true,
+      addDefaultCallbackUrl: false,
     },
     globalAppMiddleware: false,
   },
@@ -160,7 +160,7 @@ export default defineNuxtConfig({
     description: "The community-driven digital cryptoart museum. Our mission is to preserve the truth.",
     titleSeparator: "·",
     indexable: process.env.NODE_ENV === "production",
-    trailingslash: true,
+    trailingslash: false,
   },
 
   robots: {

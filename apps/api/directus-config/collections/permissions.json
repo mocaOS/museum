@@ -66,6 +66,11 @@
     "validation": null,
     "presets": null,
     "fields": [
+      "id",
+      "email",
+      "first_name",
+      "last_name",
+      "role",
       "ethereum_address"
     ],
     "policy": "dbb083a5-0174-4f56-a3fa-60c64da11078",

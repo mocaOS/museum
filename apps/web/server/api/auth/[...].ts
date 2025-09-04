@@ -6,7 +6,7 @@ import { Directus } from "@local/types";
 import config from "@local/config";
 import { NuxtAuthHandler } from "#auth";
 
-interface CustomUser {
+interface CustomUser extends Partial<Directus.DirectusUsers> {
   id: string;
   name: string;
   email: string;
@@ -16,7 +16,6 @@ interface CustomUser {
   expires: number;
   first_name?: string;
   last_name?: string;
-  [key: string]: any;
 }
 
 interface ExtendedJWT extends JWT {
@@ -25,6 +24,7 @@ interface ExtendedJWT extends JWT {
   accessTokenExpires?: number;
   first_name?: string;
   last_name?: string;
+  ethereum_address?: string | null;
   error?: string;
 }
 
@@ -40,9 +40,9 @@ function createDirectusClient(token: string) {
     .with(rest());
 }
 
-async function refreshAccessToken({ accessToken, accessTokenExpires, refreshToken }: {
-  accessToken: string;
-  accessTokenExpires: number;
+async function refreshAccessToken({ _accessToken, _accessTokenExpires, refreshToken }: {
+  _accessToken: string;
+  _accessTokenExpires: number;
   refreshToken: string;
 }): Promise<ExtendedJWT> {
   try {
@@ -130,6 +130,7 @@ export default NuxtAuthHandler({
             id: userData.data.id,
             name: `${userData.data.first_name} ${userData.data.last_name || ""}`,
             email: userData.data.email,
+            ethereum_address: userData.data.ethereum_address,
             image: userData.data.avatar?.id
               ? `${directusUrl}/assets/${userData.data.avatar.id}`
               : null,
@@ -149,7 +150,7 @@ export default NuxtAuthHandler({
     strategy: "jwt",
   },
   callbacks: {
-    async redirect({ url, baseUrl }) {
+    async redirect({ url, baseUrl }: { url: string; baseUrl: string }) {
       if (!url || typeof url !== "string" || url.trim() === "") return baseUrl;
       if (url.startsWith("/")) return url;
       try {
@@ -161,7 +162,7 @@ export default NuxtAuthHandler({
       return baseUrl;
     },
 
-    async jwt({ token, user }): Promise<ExtendedJWT> {
+    async jwt({ token, user }: { token: JWT; user?: CustomUser | null }): Promise<ExtendedJWT> {
       if (user) {
         const customUser = user as CustomUser;
         token.access_token = customUser.access_token;
@@ -169,6 +170,7 @@ export default NuxtAuthHandler({
         token.accessTokenExpires = Date.now() + (customUser.expires || 900000);
         token.first_name = customUser.first_name;
         token.last_name = customUser.last_name;
+        (token as ExtendedJWT).ethereum_address = (customUser as any).ethereum_address ?? null;
       }
 
       const REFRESH_BUFFER_TIME = 5 * 60 * 1000;
@@ -179,8 +181,8 @@ export default NuxtAuthHandler({
 
       if (token.refresh_token) {
         const refreshedToken = await refreshAccessToken({
-          accessToken: token.access_token as string,
-          accessTokenExpires: token.accessTokenExpires as number,
+          _accessToken: token.access_token as string,
+          _accessTokenExpires: token.accessTokenExpires as number,
           refreshToken: token.refresh_token as string,
         });
 
@@ -199,7 +201,7 @@ export default NuxtAuthHandler({
       return token as ExtendedJWT;
     },
 
-    async session({ session, token }) {
+    async session({ session, token }: { session: Session; token: JWT }) {
       const extendedSession = session as ExtendedSession;
       if (token) {
         if (!extendedSession.user) {
@@ -210,6 +212,10 @@ export default NuxtAuthHandler({
         extendedSession.access_token = token.access_token as string;
         extendedSession.error = token.error as string | undefined;
 
+        if (extendedSession.user) {
+          (extendedSession.user as any).ethereum_address = (token as ExtendedJWT).ethereum_address ?? null;
+        }
+
         if (token.error) return extendedSession;
 
         if (token.access_token) {
@@ -219,14 +225,16 @@ export default NuxtAuthHandler({
             }
             const directus = createDirectusClient(token.access_token as string);
             const directusUserData = await directus.request(readMe({
-              fields: [ "first_name", "last_name", "email", "role" ],
+              fields: [ "first_name", "last_name", "email", "role", "ethereum_address" ],
             }));
+
             if (extendedSession.user) {
               (extendedSession.user as any).first_name = directusUserData.first_name;
               (extendedSession.user as any).last_name = directusUserData.last_name;
               extendedSession.user.name = `${directusUserData.first_name || ""} ${directusUserData.last_name || ""}`.trim();
               extendedSession.user.email = directusUserData.email;
               (extendedSession.user as any).role = directusUserData.role;
+              (extendedSession.user as any).ethereum_address = directusUserData.ethereum_address ?? (extendedSession.user as any).ethereum_address ?? null;
             }
           } catch {}
         }
@@ -239,5 +247,3 @@ export default NuxtAuthHandler({
     error: "/login",
   },
 });
-
-

@@ -7,7 +7,8 @@ const lastHealthCheck = ref<number>(0);
 const retryAttempts = ref<Map<string, number>>(new Map());
 
 export function useDirectus() {
-  const { status, data: session, getSession } = useAuth();
+  const { status, data, getSession } = useAuth();
+  const accessTokenRef = computed<string | null>(() => (data.value as any)?.access_token ?? null);
   const config = useRuntimeConfig();
 
   const shouldRetry = (operationId: string): boolean => {
@@ -26,11 +27,9 @@ export function useDirectus() {
   const createClient = () => {
     const directusUrl = String(config.public?.api.baseUrl || "http://localhost:8055");
 
-    if (status.value === "authenticated" && session.value) {
-      const accessToken = (session.value as any).access_token;
-      const error = (session.value as any).error;
-
-      if (accessToken && !error) {
+    if (status.value === "authenticated" && accessTokenRef.value) {
+      const accessToken = String(accessTokenRef.value);
+      if (accessToken) {
         try {
           const client = createDirectus<Directus.CustomDirectusTypes>(directusUrl)
             .with(staticToken(accessToken))
@@ -48,22 +47,18 @@ export function useDirectus() {
                 return result;
               } catch (error: any) {
                 if (error?.response?.status === 401) {
-                  if (error?.response?.data?.message === "Token expired.") {
-                    if (shouldRetry(operationId)) {
-                      incrementRetry(operationId);
-                      try {
-                        await getSession();
-                        await new Promise(resolve => setTimeout(resolve, 1000));
-                        return await originalRequest(...args);
-                      } catch {
-                        connectionHealth.value = "unhealthy";
-                      }
+                  if (shouldRetry(operationId)) {
+                    incrementRetry(operationId);
+                    try {
+                      await getSession();
+                      await new Promise(resolve => setTimeout(resolve, 1000));
+                      return await originalRequest(...args);
+                    } catch {
+                      connectionHealth.value = "unhealthy";
                     }
-                  } else {
+                  } else if (process.client) {
                     connectionHealth.value = "unhealthy";
-                    if (process.client) {
-                      await navigateTo("/login");
-                    }
+                    await navigateTo("/login");
                   }
                 } else if (error?.response?.status >= 500) {
                   connectionHealth.value = "degraded";
@@ -91,10 +86,7 @@ export function useDirectus() {
   return {
     directus,
     isAuthenticated: computed(() =>
-      status.value === "authenticated"
-      && session.value
-      && !!(session.value as any).access_token
-      && !(session.value as any).error,
+      status.value === "authenticated" && !!accessTokenRef.value,
     ),
     connectionHealth: readonly(connectionHealth),
     lastHealthCheck: readonly(lastHealthCheck),

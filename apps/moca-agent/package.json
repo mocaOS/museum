@@ -50,13 +50,13 @@
     "cypress:open": "bun run test:install && cypress open"
   },
   "dependencies": {
-    "@coingecko/coingecko-typescript": "^1.12.0",
-    "@elizaos/cli": "^1.5.5",
-    "@elizaos/core": "^1.5.5",
-    "@elizaos/plugin-bootstrap": "^1.5.5",
+    "@coingecko/coingecko-typescript": "^1.13.0",
+    "@elizaos/cli": "^1.5.7",
+    "@elizaos/core": "^1.5.7",
+    "@elizaos/plugin-bootstrap": "^1.5.7",
     "@elizaos/plugin-ollama": "^1.2.4",
     "@elizaos/plugin-openai": "^1.0.11",
-    "@elizaos/plugin-sql": "^1.5.5",
+    "@elizaos/plugin-sql": "^1.5.7",
     "@elizaos/plugin-venice": "^1.0.13",
     "@local/types": "workspace:*",
     "@tanstack/react-query": "^5.85.9",
@@ -66,7 +66,7 @@
     "react-dom": "^18.3.1",
     "tailwind-merge": "^2.6.0",
     "tailwindcss": "^4.1.12",
-    "zod": "3.24.2"
+    "zod": "4.1.5"
   },
   "devDependencies": {
     "@types/react": "^18.3.24",

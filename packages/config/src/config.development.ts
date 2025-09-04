@@ -15,6 +15,10 @@ export default {
     baseUrl: "https://media.qwellcode.de/api",
   },
 
+  ipfs: {
+    gateway: "https://ipfs.qwellcode.de/ipfs/",
+  },
+
   // R2R configuration
   r2r: {
     url: "https://r2r-staging.deploy.qwellco.de",
