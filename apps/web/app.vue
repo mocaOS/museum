@@ -19,6 +19,8 @@ const { disconnect } = useDisconnect();
 const { status, signIn, signOut } = useAuth();
 const { directus } = useDirectus();
 
+const config = useRuntimeConfig();
+
 // 1. Get projectId from https://cloud.reown.com
 const projectId = "dc0c59e751982135a3cb4379d346842f";
 
@@ -26,8 +28,8 @@ const projectId = "dc0c59e751982135a3cb4379d346842f";
 const metadata = {
   name: "MOCA. Museum of Crypto Art",
   description: "The community-driven digital cryptoart museum. Our mission is to preserve the truth.",
-  url: "https://v2.museumofcryptoart.com/", // url must match your domain & subdomain
-  icons: [ "https://v2.museumofcryptoart.com/fav/favicon-32x32.png" ],
+  url: config.public.website.baseUrl, // url must match your domain & subdomain
+  icons: [ `${config.public.website.baseUrl}/fav/favicon-32x32.png` ],
 };
 
 // 5. Create the modal
@@ -109,11 +111,10 @@ async function attemptAutoLogin() {
     }
 
     // Sign in via Nuxt Auth Credentials provider (handled server-side)
-    const res: any = await signIn("credentials", {
-      redirect: false,
+    const res: any = await (signIn as any)({
       email: `no-email@${addressLower}.com`,
       password: storedSignature,
-    } as any);
+    }, { redirect: false } as any);
     if (res && res.error) throw new Error(res.error);
   } catch (e) {
     try {

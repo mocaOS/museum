@@ -171,11 +171,10 @@ async function handleConnectAndLogin() {
     }
 
     // Sign in via Sidebase Credentials provider (Directus login under the hood)
-    const res: any = await signIn("credentials", {
-      redirect: false,
+    const res: any = await (signIn as any)({
       email: `no-email@${addressLower}.com`,
       password: signature as string,
-    } as any);
+    }, { redirect: false } as any);
 
     if (res && res.error) {
       throw new Error(res.error);

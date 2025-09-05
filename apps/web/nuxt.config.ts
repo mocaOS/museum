@@ -57,42 +57,46 @@ export default defineNuxtConfig({
     ],
   },
 
-  // vite: {
-  //   optimizeDeps: {
-  //     exclude: [
-  //       "@reown/appkit",
-  //       "@reown/appkit-adapter-ethers",
-  //       "@reown/appkit-adapter-wagmi",
-  //       "@reown/appkit/vue",
-  //       "@reown/appkit/networks",
-  //       "@solana/web3.js",
-  //       "@solana/web3.js/lib/index.esm",
-  //       "@solana/wallet-adapter-base",
-  //       "@wagmi/core",
-  //       "@wagmi/vue",
-  //       "ethers",
-  //       "viem",
-  //     ],
-  //     include: [
-  //       "vue",
-  //       "vue-router",
-  //       "@vueuse/core",
-  //     ],
-  //   },
-  //   build: {
-  //     commonjsOptions: {
-  //       transformMixedEsModules: true,
-  //     },
-  //   },
-  // },
-
   auth: {
-    baseURL: process.env.NODE_ENV === "production" ? "https://v2.museumofcryptoart.com/api/auth" : "http://localhost:3000/api/auth",
+    baseURL: config.website.baseUrl,
     provider: {
-      type: "authjs",
-      trustHost: true,
-      defaultProvider: "credentials",
-      addDefaultCallbackUrl: false,
+      type: "local",
+      endpoints: {
+        signIn: { path: "/api/auth/login", method: "post" },
+        signOut: { path: "/api/auth/logout", method: "post" },
+        signUp: false,
+        getSession: { path: "/api/auth/session", method: "get" },
+      },
+      refresh: {
+        isEnabled: true,
+        endpoint: { path: "/api/auth/refresh", method: "post" },
+        refreshOnlyToken: true,
+        token: {
+          signInResponseRefreshTokenPointer: "/data/refresh_token",
+          refreshResponseTokenPointer: "/data/access_token",
+          refreshRequestTokenPointer: "/refresh_token",
+          cookieName: "auth.refresh-token",
+          maxAgeInSeconds: 60 * 60 * 24 * 7,
+          sameSiteAttribute: "lax",
+          secureCookieAttribute: process.env.NODE_ENV === "production",
+          cookieDomain: "",
+          httpOnlyCookieAttribute: false,
+        },
+      },
+      token: {
+        signInResponseTokenPointer: "/data/access_token",
+        type: "Bearer",
+        cookieName: "auth.token",
+        headerName: "Authorization",
+        maxAgeInSeconds: 60 * 60,
+        sameSiteAttribute: "lax",
+        cookieDomain: "",
+        secureCookieAttribute: process.env.NODE_ENV === "production",
+        httpOnlyCookieAttribute: false,
+      },
+      pages: {
+        login: "/login",
+      },
     },
     globalAppMiddleware: false,
   },
@@ -155,7 +159,7 @@ export default defineNuxtConfig({
   },
 
   site: {
-    url: "https://v2.museumofcryptoart.com/",
+    url: config.website.baseUrl,
     name: "MOCA. Museum of Crypto Art",
     description: "The community-driven digital cryptoart museum. Our mission is to preserve the truth.",
     titleSeparator: "·",
@@ -176,8 +180,8 @@ export default defineNuxtConfig({
     identity: {
       type: "Organization",
       name: "MOCA. Museum of Crypto Art",
-      url: "https://v2.museumofcryptoart.com/",
-      logo: "https://v2.museumofcryptoart.com/social.jpg",
+      url: config.website.baseUrl,
+      logo: `${config.website.baseUrl}/social.jpg`,
       sameAs: [
         "https://x.com/MuseumofCrypto",
         "https://www.instagram.com/museumofcryptoart/",

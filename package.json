@@ -36,8 +36,9 @@
     "zod": "4.0.14",
     "prebuild-install": "^7.1.2",
     "tar-fs": "^3.0.6",
+    "tar": "^6.2.1",
     "chownr": "^2.0.0",
-    "ipx": "^2.1.1"
+    "ipx": "^3.1.1"
   },
   "patchedDependencies": {
     "@directus/api@30.0.0": "patches/@directus%2Fapi@30.0.0.patch"
