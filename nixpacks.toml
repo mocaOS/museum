@@ -1,9 +1,12 @@
 [variables]
 NPM_CONFIG_PRODUCTION = "false"
 NODE_ENV = "production"
+PYTHON = "python3"
+npm_config_python = "python3"
+SHARP_IGNORE_GLOBAL_LIBVIPS = "0"
 
 [phases.setup]
-nixPkgs = ["nodejs_22", "curl", "unzip"]
+nixPkgs = ["nodejs_20", "python3", "gcc", "gnumake", "pkg-config", "git", "vips", "curl", "unzip"]
 cmds = [
   "curl -fsSL https://bun.sh/install | bash",
   "mv /root/.bun/bin/bun /usr/local/bin/bun"

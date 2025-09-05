@@ -13,7 +13,7 @@
 
       <div>
         <p class="mt-1 text-sm text-muted-foreground">
-          Connect your wallet and sign once to authenticate with Directus.
+          Connect your wallet and sign once to authenticate.
         </p>
         <Button
           @click="handleConnectAndLogin"
