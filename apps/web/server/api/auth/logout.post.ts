@@ -13,7 +13,7 @@ export default defineEventHandler(async (event) => {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: authHeader,
+      "Authorization": authHeader,
     },
     body: JSON.stringify({ mode: "json" }),
   });
@@ -25,5 +25,3 @@ export default defineEventHandler(async (event) => {
 
   return { ok: true };
 });
-
-

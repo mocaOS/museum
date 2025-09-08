@@ -28,5 +28,3 @@ export default defineEventHandler(async (event) => {
     access_token: rawToken,
   };
 });
-
-
