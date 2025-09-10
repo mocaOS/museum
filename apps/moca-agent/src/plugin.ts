@@ -214,20 +214,13 @@ const plugin: Plugin = {
   models: {
     [ModelType.TEXT_SMALL]: async (
       _runtime,
-      { prompt, stopSequences = [] }: GenerateTextParams,
+      _params: GenerateTextParams,
     ) => {
       return "Never gonna give you up, never gonna let you down, never gonna run around and desert you...";
     },
     [ModelType.TEXT_LARGE]: async (
       _runtime,
-      {
-        prompt,
-        stopSequences = [],
-        maxTokens = 8192,
-        temperature = 0.7,
-        frequencyPenalty = 0.7,
-        presencePenalty = 0.7,
-      }: GenerateTextParams,
+      _params: GenerateTextParams,
     ) => {
       return "Never gonna make you cry, never gonna say goodbye, never gonna tell a lie and hurt you...";
     },
@@ -250,28 +243,28 @@ const plugin: Plugin = {
       async (params) => {
         logger.info("MESSAGE_RECEIVED event received");
         // print the keys
-        logger.info(Object.keys(params));
+        logger.info({ keys: Object.keys(params) });
       },
     ],
     VOICE_MESSAGE_RECEIVED: [
       async (params) => {
         logger.info("VOICE_MESSAGE_RECEIVED event received");
         // print the keys
-        logger.info(Object.keys(params));
+        logger.info({ keys: Object.keys(params) });
       },
     ],
     WORLD_CONNECTED: [
       async (params) => {
         logger.info("WORLD_CONNECTED event received");
         // print the keys
-        logger.info(Object.keys(params));
+        logger.info({ keys: Object.keys(params) });
       },
     ],
     WORLD_JOINED: [
       async (params) => {
         logger.info("WORLD_JOINED event received");
         // print the keys
-        logger.info(Object.keys(params));
+        logger.info({ keys: Object.keys(params) });
       },
     ],
   },

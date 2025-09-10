@@ -52,6 +52,7 @@
   "dependencies": {
     "@coingecko/coingecko-typescript": "^1.13.0",
     "@elizaos/cli": "^1.5.7",
+    "@elizaos/client": "^1.5.7",
     "@elizaos/core": "^1.5.7",
     "@elizaos/plugin-bootstrap": "^1.5.7",
     "@elizaos/plugin-ollama": "^1.2.4",
@@ -59,14 +60,14 @@
     "@elizaos/plugin-sql": "^1.5.7",
     "@elizaos/plugin-venice": "^1.0.13",
     "@local/types": "workspace:*",
-    "@tanstack/react-query": "^5.86.0",
-    "r2r-js": "^0.4.43",
+    "@tanstack/react-query": "^5.87.1",
     "clsx": "^2.1.1",
+    "r2r-js": "^0.4.43",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "tailwind-merge": "^2.6.0",
     "tailwindcss": "^4.1.13",
-    "zod": "4.1.5"
+    "zod": "^3.23.8"
   },
   "devDependencies": {
     "@types/react": "^18.3.24",
@@ -79,6 +80,9 @@
   },
   "publishConfig": {
     "access": "public"
+  },
+  "overrides": {
+    "zod": "^3.23.8"
   },
   "gitHead": "b165ad83e5f7a21bc1edbd83374ca087e3cd6b33"
 }
