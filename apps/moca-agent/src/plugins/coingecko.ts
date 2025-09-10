@@ -47,7 +47,7 @@ class CoinGeckoService {
   constructor(apiKey?: string) {
     this.apiKey = apiKey;
     this.useFreeApi = !apiKey;
-    
+
     if (apiKey) {
       // Start with Demo API (most common)
       this.initializeDemoClient();
@@ -58,11 +58,11 @@ class CoinGeckoService {
 
   private initializeDemoClient() {
     if (!this.apiKey || this.triedDemo) return;
-    
+
     try {
       this.client = new Coingecko({
         demoAPIKey: this.apiKey,
-        environment: 'demo',
+        environment: "demo",
       });
       this.triedDemo = true;
       logger.info("Initialized CoinGecko with Demo API");
@@ -74,11 +74,11 @@ class CoinGeckoService {
 
   private initializeProClient() {
     if (!this.apiKey || this.triedPro) return;
-    
+
     try {
       this.client = new Coingecko({
         proAPIKey: this.apiKey,
-        environment: 'pro',
+        environment: "pro",
       });
       this.triedPro = true;
       logger.info("Initialized CoinGecko with Pro API");
@@ -97,38 +97,38 @@ class CoinGeckoService {
       if (this.client) {
         try {
           const response = await this.client.coins.markets.get({
-            vs_currency: 'usd',
+            vs_currency: "usd",
             ids: tokenId,
-            order: 'market_cap_desc',
+            order: "market_cap_desc",
             per_page: 1,
             page: 1,
             sparkline: false,
-            price_change_percentage: '24h'
+            price_change_percentage: "24h",
           });
-          
+
           if (response && response.length > 0) {
             return response[0];
           }
         } catch (clientError: any) {
           // Check if it's an API key type mismatch error
-          const errorMessage = clientError?.message || '';
-          if (errorMessage.includes('Demo API key') && errorMessage.includes('pro-api.coingecko.com')) {
+          const errorMessage = clientError?.message || "";
+          if (errorMessage.includes("Demo API key") && errorMessage.includes("pro-api.coingecko.com")) {
             logger.info("Detected Demo API key being used with Pro endpoint, switching to Demo API");
             this.initializeDemoClient();
-            
+
             // Try again with Demo API
             if (this.client) {
               try {
                 const response = await this.client.coins.markets.get({
-                  vs_currency: 'usd',
+                  vs_currency: "usd",
                   ids: tokenId,
-                  order: 'market_cap_desc',
+                  order: "market_cap_desc",
                   per_page: 1,
                   page: 1,
                   sparkline: false,
-                  price_change_percentage: '24h'
+                  price_change_percentage: "24h",
                 });
-                
+
                 if (response && response.length > 0) {
                   return response[0];
                 }
@@ -136,23 +136,23 @@ class CoinGeckoService {
                 logger.warn("Demo API retry failed:", retryError);
               }
             }
-          } else if (errorMessage.includes('Pro API key') || (!this.triedPro && this.triedDemo)) {
+          } else if (errorMessage.includes("Pro API key") || (!this.triedPro && this.triedDemo)) {
             logger.info("Trying Pro API as fallback");
             this.initializeProClient();
-            
+
             // Try again with Pro API
             if (this.client) {
               try {
                 const response = await this.client.coins.markets.get({
-                  vs_currency: 'usd',
+                  vs_currency: "usd",
                   ids: tokenId,
-                  order: 'market_cap_desc',
+                  order: "market_cap_desc",
                   per_page: 1,
                   page: 1,
                   sparkline: false,
-                  price_change_percentage: '24h'
+                  price_change_percentage: "24h",
                 });
-                
+
                 if (response && response.length > 0) {
                   return response[0];
                 }
@@ -161,7 +161,7 @@ class CoinGeckoService {
               }
             }
           }
-          
+
           logger.warn("Official client failed, falling back to manual API:", clientError);
         }
       }
@@ -183,21 +183,21 @@ class CoinGeckoService {
       const baseUrl = "https://api.coingecko.com/api/v3";
 
       const headers: Record<string, string> = {
-        'Accept': 'application/json',
+        Accept: "application/json",
       };
 
       const url = `${baseUrl}/coins/markets?vs_currency=usd&ids=${tokenId}&order=market_cap_desc&per_page=1&page=1&sparkline=false&price_change_percentage=24h`;
-      
+
       logger.info(`Fetching price for ${tokenId} from CoinGecko free API (manual fallback)`);
-      
+
       const response = await fetch(url, { headers });
-      
+
       if (!response.ok) {
         throw new Error(`CoinGecko API error: ${response.status} ${response.statusText}`);
       }
 
       const data = await response.json() as CoinGeckoPrice[];
-      
+
       if (data.length === 0) {
         logger.warn(`No price data found for token: ${tokenId}`);
         return null;
@@ -221,11 +221,11 @@ class CoinGeckoService {
           return await this.client.search.get({ query });
         } catch (clientError: any) {
           // Check if it's an API key type mismatch error
-          const errorMessage = clientError?.message || '';
-          if (errorMessage.includes('Demo API key') && errorMessage.includes('pro-api.coingecko.com')) {
+          const errorMessage = clientError?.message || "";
+          if (errorMessage.includes("Demo API key") && errorMessage.includes("pro-api.coingecko.com")) {
             logger.info("Detected Demo API key being used with Pro endpoint, switching to Demo API");
             this.initializeDemoClient();
-            
+
             // Try again with Demo API
             if (this.client) {
               try {
@@ -234,10 +234,10 @@ class CoinGeckoService {
                 logger.warn("Demo API search retry failed:", retryError);
               }
             }
-          } else if (errorMessage.includes('Pro API key') || (!this.triedPro && this.triedDemo)) {
+          } else if (errorMessage.includes("Pro API key") || (!this.triedPro && this.triedDemo)) {
             logger.info("Trying Pro API for search as fallback");
             this.initializeProClient();
-            
+
             // Try again with Pro API
             if (this.client) {
               try {
@@ -247,7 +247,7 @@ class CoinGeckoService {
               }
             }
           }
-          
+
           logger.warn("Official client search failed, falling back to manual API:", clientError);
         }
       }
@@ -256,13 +256,13 @@ class CoinGeckoService {
       const baseUrl = "https://api.coingecko.com/api/v3";
 
       const headers: Record<string, string> = {
-        'Accept': 'application/json',
+        Accept: "application/json",
       };
 
       const url = `${baseUrl}/search?query=${encodeURIComponent(query)}`;
-      
+
       const response = await fetch(url, { headers });
-      
+
       if (!response.ok) {
         throw new Error(`CoinGecko API error: ${response.status} ${response.statusText}`);
       }
@@ -292,10 +292,10 @@ const mocaTokenPriceProvider: Provider = {
     try {
       const apiKey = runtime.getSetting("COINGECKO_API_KEY");
       const service = new CoinGeckoService(apiKey);
-      
+
       // MOCA token ID on CoinGecko
       const mocaData = await service.fetchTokenPrice("museum-of-crypto-art");
-      
+
       if (!mocaData) {
         logger.warn("Failed to fetch MOCA token price data");
         return {
@@ -317,10 +317,10 @@ const mocaTokenPriceProvider: Provider = {
       const volume = mocaData.total_volume ?? 0;
       const marketCap = mocaData.market_cap ?? 0;
       const lastUpdated = mocaData.last_updated ?? new Date().toISOString();
-      
+
       const changeEmoji = change24h > 0 ? "📈" : change24h < 0 ? "📉" : "➡️";
-      const changeText = change24h > 0 
-        ? `+${change24h.toFixed(2)}%` 
+      const changeText = change24h > 0
+        ? `+${change24h.toFixed(2)}%`
         : `${change24h.toFixed(2)}%`;
 
       const priceText = `🎨 $MOCA Token: $${currentPrice.toFixed(6)} USD ${changeEmoji} ${changeText} (24h)`;
@@ -374,14 +374,14 @@ const coingeckoPlugin: Plugin = {
   config: {
     COINGECKO_API_KEY: process.env.COINGECKO_API_KEY,
   },
-  
+
   async init(config: Record<string, string>) {
     logger.info("*** Initializing CoinGecko plugin ***");
     try {
       const validatedConfig = await configSchema.parseAsync(config);
 
       // Set all environment variables at once
-      for (const [key, value] of Object.entries(validatedConfig)) {
+      for (const [ key, value ] of Object.entries(validatedConfig)) {
         if (value) process.env[key] = value;
       }
 
@@ -396,7 +396,7 @@ const coingeckoPlugin: Plugin = {
     }
   },
 
-  providers: [mocaTokenPriceProvider],
+  providers: [ mocaTokenPriceProvider ],
 };
 
-export default coingeckoPlugin; 
+export default coingeckoPlugin;
