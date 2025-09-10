@@ -22,9 +22,9 @@ cmds = [
 [phases.build]
 dependsOn = ["install"]
 cmds = [
-  "/usr/local/bin/bun run build"
+  "/usr/local/bin/bunx turbo build --filter=@local/types --filter=moca-agent"
 ]
 
 [start]
-cmd = "/usr/local/bin/bun run start"
+cmd = "cd /app/apps/moca-agent && /usr/local/bin/bun run start"
 
