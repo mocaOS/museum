@@ -37,6 +37,7 @@ export function useDirectus() {
 
           if (process.client) {
             const originalRequest = client.request.bind(client);
+
             client.request = async (...args: any[]) => {
               const operationId = `${args[0]?.constructor?.name || "unknown"}_${Date.now()}`;
               try {
