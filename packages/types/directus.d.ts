@@ -1,3 +1,11 @@
+export type Agents = {
+  application_id?: string | null;
+  id: number;
+  status?: string | null;
+  token_id?: string | null;
+  url?: string | null;
+};
+
 export type Collections = {
   child_collections: any[] | Collections[];
   date_created?: string | null;
@@ -475,6 +483,7 @@ export type Rooms = {
 };
 
 export type CustomDirectusTypes = {
+  agents: Agents[];
   collections: Collections[];
   contracts: Contracts[];
   directus_access: DirectusAccess[];

@@ -33,6 +33,11 @@
         "type": "hook",
         "name": "r2r-graph-pull",
         "source": "src/r2r-graph-pull/index.ts"
+      },
+      {
+        "type": "endpoint",
+        "name": "agents",
+        "source": "src/agents/index.ts"
       }
     ],
     "host": "^10.10.0"
@@ -45,6 +50,7 @@
   },
   "dependencies": {
     "@local/config": "workspace:*",
+    "@local/types": "workspace:*",
     "axios": "^1.7.9",
     "js-base64": "^3.7.8",
     "r2r-js": "^0.4.43"

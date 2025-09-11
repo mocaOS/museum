@@ -24,6 +24,19 @@
     "_syncId": "9f7f81a8-852e-4487-9ec0-0c7a616e6832"
   },
   {
+    "collection": "agents",
+    "action": "read",
+    "permissions": null,
+    "validation": null,
+    "presets": null,
+    "fields": [
+      "token_id",
+      "status"
+    ],
+    "policy": "b5d43d0f-0d4f-4de9-8214-cca0d7c9971d",
+    "_syncId": "bc9827ef-ca84-4d12-9a9a-f80f8153a36b"
+  },
+  {
     "collection": "collections",
     "action": "read",
     "permissions": null,

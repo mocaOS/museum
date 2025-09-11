@@ -57,6 +57,7 @@
             "
           >
             <div
+              @click="startAgent(t.tokenId)"
               v-for="t in tokens"
               :key="t.id || t.tokenId"
               class="relative rounded-md border"
@@ -145,6 +146,7 @@ const address = computed(() => {
 
 const runtimeConfig = useRuntimeConfig();
 const ipfsGateway = computed(() => String((runtimeConfig.public as any)?.ipfs?.gateway || "https://ipfs.qwellcode.de/ipfs/"));
+const { directus } = useDirectus();
 
 interface OwnedToken {
   id: string;
@@ -198,4 +200,15 @@ const tokens = computed(() => {
   const arr = data.value ?? [];
   return arr.slice().sort((a, b) => Number(b.revealed) - Number(a.revealed));
 });
+
+async function startAgent(tokenId: string) {
+  try {
+    await directus.request(() => ({
+      method: "POST",
+      path: `/agents/${encodeURIComponent(tokenId)}/start`,
+    } as any));
+  } catch (error) {
+    console.error("Failed to start agent:", error);
+  }
+}
 </script>
