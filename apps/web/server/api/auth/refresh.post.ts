@@ -1,30 +1,18 @@
 import config from "@local/config";
+import { getUserSession, setUserSession } from "#imports";
 
 export default defineEventHandler(async (event) => {
-  const body = await readBody<{ refresh_token?: string }>(event);
-  const authHeader = getRequestHeader(event, "authorization");
-
-  if (!body?.refresh_token && !authHeader) {
-    throw createError({ statusCode: 400, statusMessage: "Missing refresh_token or Authorization header" });
+  const session = await getUserSession(event);
+  const refreshToken = (session as any)?.refresh_token;
+  if (!refreshToken) {
+    throw createError({ statusCode: 400, statusMessage: "Missing refresh token" });
   }
 
   const directusUrl = config.api.baseUrl;
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
-  if (authHeader) headers.Authorization = authHeader;
-
-  const payload: Record<string, any> = { mode: "json" };
-  if (body?.refresh_token) payload.refresh_token = body.refresh_token;
-
-  console.log({
-    method: "POST",
-    headers,
-    body: JSON.stringify(payload),
-  });
-
   const res = await fetch(`${directusUrl}/auth/refresh`, {
     method: "POST",
-    headers,
-    body: JSON.stringify(payload),
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ mode: "json", refresh_token: refreshToken }),
   });
 
   if (!res.ok) {
@@ -32,7 +20,18 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: res.status, statusMessage: err?.errors?.[0]?.message || err?.error?.message || "Refresh failed" });
   }
 
-  // Return upstream response as-is to match token pointers in config
-  const json = await res.json();
-  return json;
+  const tokens = await res.json();
+  const accessToken: string | undefined = tokens?.data?.access_token;
+  const newRefreshToken: string | undefined = tokens?.data?.refresh_token || refreshToken;
+  if (!accessToken) {
+    throw createError({ statusCode: 502, statusMessage: "Invalid refresh response" });
+  }
+
+  await setUserSession(event, {
+    ...(session as any),
+    access_token: accessToken,
+    refresh_token: newRefreshToken,
+  });
+
+  return { ok: true };
 });

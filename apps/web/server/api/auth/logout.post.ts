@@ -1,27 +1,25 @@
 import config from "@local/config";
+import { clearUserSession, getUserSession } from "#imports";
 
 export default defineEventHandler(async (event) => {
-  const authHeader = getRequestHeader(event, "authorization");
+  const session = await getUserSession(event);
+  const accessToken = (session as any)?.access_token as string | undefined;
+  const refreshToken = (session as any)?.refresh_token as string | undefined;
   const directusUrl = config.api.baseUrl;
 
-  if (!authHeader) {
-    // Even if no token is present, respond 200 to allow client-side cleanup
-    return { ok: true };
+  if (accessToken || refreshToken) {
+    try {
+      await fetch(`${directusUrl}/auth/logout`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        },
+        body: JSON.stringify({ mode: "json", refresh_token: refreshToken }),
+      });
+    } catch {}
   }
 
-  const res = await fetch(`${directusUrl}/auth/logout`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": authHeader,
-    },
-    body: JSON.stringify({ mode: "json" }),
-  });
-
-  if (!res.ok) {
-    // Swallow upstream errors, surface as ok=false but HTTP 200 to simplify client behavior
-    return { ok: false };
-  }
-
+  await clearUserSession(event);
   return { ok: true };
 });

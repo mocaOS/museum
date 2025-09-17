@@ -75,7 +75,7 @@ const isMounted = useMounted();
 const modal = useAppKit();
 const appKitState = useAppKitState();
 const wallet = useAppKitAccount();
-const { signIn, signOut } = useAuth();
+const { clear: clearSession } = useUserSession();
 const { directus } = useDirectus();
 
 const loading = ref(false);
@@ -136,7 +136,7 @@ async function handleConnectAndLogin() {
       signature = await handleSignMessage();
     } catch (err: any) {
       // Signature cancelled or failed
-      await signOut({ redirect: false });
+      try { await $fetch("/api/auth/logout", { method: "POST" }); } catch {}
       const norm = normalizeWalletError(err);
       const msg = walletErrorToMessage(norm);
       throw new Error(msg);
@@ -171,21 +171,20 @@ async function handleConnectAndLogin() {
     }
 
     // Sign in via Sidebase Credentials provider (Directus login under the hood)
-    const res: any = await (signIn as any)({
-      email: `no-email@${addressLower}.com`,
-      password: signature as string,
-    }, { redirect: false } as any);
-
-    if (res && res.error) {
-      throw new Error(res.error);
-    }
+    await $fetch("/api/auth/login", {
+      method: "POST",
+      body: {
+        email: `no-email@${addressLower}.com`,
+        password: signature as string,
+      },
+    });
     responseMessage.type = "success";
     responseMessage.message = "Logged in successfully!";
     navigateTo("/decc0s");
   } catch (e: any) {
     console.error(e);
     try {
-      await signOut({ redirect: false });
+      await $fetch("/api/auth/logout", { method: "POST" });
     } catch {}
     try {
       if (typeof window !== "undefined") {

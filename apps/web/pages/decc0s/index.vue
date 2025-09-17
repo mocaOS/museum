@@ -140,11 +140,8 @@ definePageMeta({
   middleware: [ "auth" ],
 });
 
-const { data: authSession } = useAuth();
-
-const address = computed(() => {
-  return authSession.value?.user.ethereum_address;
-});
+const { session } = useUserSession();
+const address = computed(() => (session.value as any)?.user?.ethereum_address);
 
 const runtimeConfig = useRuntimeConfig();
 const ipfsGateway = computed(() => String((runtimeConfig.public as any)?.ipfs?.gateway || "https://ipfs.qwellcode.de/ipfs/"));
@@ -168,6 +165,7 @@ const lastFetchAtByTokenId = reactive<Record<string, number>>({});
 const observerStops = new Map<string, () => void>();
 const pollTimer = ref<number | null>(null);
 const hasFetchedStatusByTokenId = reactive<Record<string, boolean>>({});
+const pendingNavigationTokenId = ref<string | null>(null);
 
 function enqueueFetch(tokenId: string) {
   if (!tokenId || enqueuedTokenIds.has(tokenId)) return;
@@ -197,19 +195,25 @@ async function processQueue() {
       try {
         const { readItems } = await import("@directus/sdk");
         const response = await directus.request(readItems("agents", {
-          fields: [ "status" ],
+          fields: [ "status", "token_id" ],
           filter: { token_id: { _eq: id } },
           limit: 1,
         }));
-        const status = String((response as Partial<Directus.Agents>[] | undefined)?.[0]?.status ?? "offline").toLowerCase() as AgentStatus;
+        const agent = (response as Partial<Directus.Agents>[] | undefined)?.[0];
+        const status = String(agent?.status ?? "offline").toLowerCase() as AgentStatus;
+        const agentTokenId = String((agent as any)?.token_id ?? id);
         statusByTokenId[id] = status;
+        if (status === "online" && pendingNavigationTokenId.value === id) {
+          pendingNavigationTokenId.value = null;
+          navigateTo(`/decc0s/${encodeURIComponent(agentTokenId)}`);
+        }
       } catch (e) {
         statusByTokenId[id] = "offline";
       } finally {
         hasFetchedStatusByTokenId[id] = true;
         enqueuedTokenIds.delete(id);
         lastFetchAtByTokenId[id] = Date.now();
-        await new Promise(resolve => setTimeout(resolve, 75));
+        await new Promise(resolve => setTimeout(resolve, 250));
       }
     }
   } finally {
@@ -311,17 +315,34 @@ const tokens = computed(() => {
 });
 
 async function startAgent(tokenId: string) {
+  // Immediately reflect loading state in UI
+  if (statusByTokenId[tokenId] === "online") {
+    navigateTo(`/decc0s/${encodeURIComponent(tokenId)}`);
+    return;
+  }
+  statusByTokenId[tokenId] = "starting";
+
   try {
+    pendingNavigationTokenId.value = tokenId;
     await directus.request(() => ({
       method: "POST",
       path: `/agents/${encodeURIComponent(tokenId)}/start`,
     } as any));
   } catch (error) {
     console.error("Failed to start agent:", error);
+    // Revert to offline on failure
+    statusByTokenId[tokenId] = "offline";
+    if (pendingNavigationTokenId.value === tokenId) {
+      pendingNavigationTokenId.value = null;
+    }
+    return;
   }
+
+  // Re-check status soon after triggering start
+  maybeEnqueue(tokenId, true);
 }
 
-onMounted(() => {
+onMounted(async () => {
   pollTimer.value = window.setInterval(() => {
     const list = tokens.value || [];
     for (const t of list) {
