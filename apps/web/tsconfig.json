@@ -5,5 +5,8 @@
     "noImplicitAny": true,
     "types": ["node", "next-auth"]
   },
-  "include": ["types/**/*.d.ts", "@local/config/dist/*.d.ts"]
+  "includes": [
+    "types/**/*.d.ts",
+    "@local/config/dist/*.d.ts"
+  ]
 }
