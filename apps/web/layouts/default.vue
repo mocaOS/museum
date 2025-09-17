@@ -298,8 +298,8 @@ import {
 } from "~/components/ui/navigation-menu";
 
 const { directus } = useDirectus();
-const { data: authSession, status, signOut } = useAuth();
-const directusUser = computed(() => authSession.value?.user || null);
+const { session, loggedIn, clear } = useUserSession();
+const directusUser = computed(() => (session.value as any)?.user || null);
 const { disconnect } = useDisconnect();
 
 const isOpen = ref(false);
@@ -342,10 +342,17 @@ const filteredCollections = computed(() => {
 
 async function handleLogout() {
   try {
-    await signOut({ redirect: false });
+    await $fetch("/api/auth/logout", { method: "POST" });
+  } catch {}
+  try {
+    await clear();
   } catch {}
   try {
     await disconnect();
+  } catch {}
+
+  try {
+    await navigateTo("/");
   } catch {}
 }
 </script>

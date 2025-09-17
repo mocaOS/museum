@@ -16,7 +16,7 @@ import { readUsers, registerUser } from "@directus/sdk";
 const colorMode = useColorMode();
 const wallet = useAppKitAccount();
 const { disconnect } = useDisconnect();
-const { status, signIn, signOut } = useAuth();
+const { loggedIn, clear: clearSession } = useUserSession();
 const { directus } = useDirectus();
 
 const config = useRuntimeConfig();
@@ -67,8 +67,8 @@ async function attemptAutoLogin() {
   try {
     if (typeof window === "undefined") return;
 
-    // If already authenticated via Nuxt Auth, skip wallet auto-login
-    if (status.value === "authenticated") return;
+    // If already authenticated, skip wallet auto-login
+    if (loggedIn.value) return;
 
     const storedSignature = localStorage.getItem("moca_signature");
     const storedAddress = localStorage.getItem("moca_signature_address");
@@ -110,15 +110,17 @@ async function attemptAutoLogin() {
       ));
     }
 
-    // Sign in via Nuxt Auth Credentials provider (handled server-side)
-    const res: any = await (signIn as any)({
-      email: `no-email@${addressLower}.com`,
-      password: storedSignature,
-    }, { redirect: false } as any);
-    if (res && res.error) throw new Error(res.error);
+    // Sign in via our API which sets nuxt-auth-utils session
+    await $fetch("/api/auth/login", {
+      method: "POST",
+      body: {
+        email: `no-email@${addressLower}.com`,
+        password: storedSignature,
+      },
+    });
   } catch (e) {
     try {
-      await signOut({ redirect: false });
+      await $fetch("/api/auth/logout", { method: "POST" });
     } catch {}
     try {
       await disconnect();

@@ -1,11 +1,9 @@
 export default defineNuxtRouteMiddleware(async (to) => {
-  const { status, getSession } = useAuth();
-
+  const { loggedIn, fetch } = useUserSession();
   try {
-    await getSession?.();
+    await fetch();
   } catch {}
-
-  if (status?.value !== "authenticated") {
+  if (!loggedIn.value) {
     const callbackUrl = encodeURIComponent(to.fullPath);
     return navigateTo(`/login?callbackUrl=${callbackUrl}`);
   }

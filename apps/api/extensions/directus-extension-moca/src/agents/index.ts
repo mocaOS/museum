@@ -8,6 +8,67 @@ export default defineEndpoint({
   id: "agents",
 
   handler: (router: Router, { services, getSchema }) => {
+    // Shared helpers used by endpoints below
+    async function getRequesterAddress(req: any): Promise<string> {
+      const userId = req?.accountability?.user;
+      if (!userId) throw new Error("Unauthorized");
+      const schema = await getSchema();
+      const { ItemsService } = services;
+      const usersService = new ItemsService("directus_users", { schema, accountability: req.accountability });
+      const user = await usersService.readOne(userId, { fields: [ "id", "ethereum_address" ] });
+      const requesterAddress = String(user?.ethereum_address || "").toLowerCase();
+      if (!requesterAddress) throw new Error("User has no ethereum_address");
+      return requesterAddress;
+    }
+
+    async function verifyOwnership(tokenId: string, ownerAddress: string): Promise<boolean> {
+      const graphqlEndpoint = "https://mainnet-graph.deploy.qwellco.de/subgraphs/name/moca/decc0s";
+      const query = "query GetTokenByIdAndOwner($tokenId: String!, $owner: String!) { tokens(where: { tokenId: $tokenId, owner: $owner }) { tokenId owner id } }";
+      const body = JSON.stringify({ query, variables: { tokenId, owner: ownerAddress } });
+      const response = await fetch(graphqlEndpoint, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body,
+      });
+      if (!response.ok) throw new Error(`Subgraph error: ${response.statusText}`);
+      const result = await response.json();
+      const tokens = result?.data?.tokens ?? [];
+      return Array.isArray(tokens) && tokens.length > 0;
+    }
+
+    // Coolify constants (use fixed values, not env) and helpers (shared across routes)
+    const COOLIFY_BASE_URL = "https://deploy.qwellco.de"; // no trailing slash
+    const COOLIFY_API = `${COOLIFY_BASE_URL}/api/v1`;
+    const COOLIFY_TOKEN = env.COOLIFY_TOKEN;
+    const PROJECT_UUID = "aww04oc";
+    const SERVER_UUID = "zgcgcw0";
+    const ENVIRONMENT_UUID = "igkwgkcs4g84ksgs048w08kg";
+
+    async function httpJson(method: string, url: string, body?: Record<string, unknown> | string) {
+      const headers: Record<string, string> = {
+        Authorization: `Bearer ${COOLIFY_TOKEN}`,
+      };
+      if (body !== undefined) headers["Content-Type"] = "application/json";
+
+      const response = await fetch(url, {
+        method,
+        headers,
+        body: body !== undefined ? (typeof body === "string" ? body : JSON.stringify(body)) : undefined,
+      });
+
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(`${method} ${url} -> ${response.status} ${response.statusText}: ${text}`);
+      }
+      const text = await response.text();
+      if (!text) return undefined;
+      try {
+        return JSON.parse(text);
+      } catch {
+        return text as unknown;
+      }
+    }
+
     router.post("/:token_id/start", async (req, res) => {
       try {
         const userId = (req as any).accountability?.user;
@@ -49,15 +110,6 @@ export default defineEndpoint({
         const tokens = result?.data?.tokens ?? [];
         const isOwner = Array.isArray(tokens) && tokens.length > 0;
 
-        console.log(
-          "Agent start for token",
-          tokenId,
-          "by address",
-          requesterAddress,
-          "| isOwner:",
-          isOwner,
-        );
-
         if (!isOwner) {
           return res.status(403).json({ success: false, error: "Ownership not verified" });
         }
@@ -65,38 +117,7 @@ export default defineEndpoint({
         // If ownership is verified, prepare services and Coolify helpers
         const agentsService = new ItemsService("agents", { schema });
 
-        // Coolify constants (use fixed values, not env) and helpers
-        const COOLIFY_BASE_URL = "https://deploy.qwellco.de"; // no trailing slash
-        const COOLIFY_API = `${COOLIFY_BASE_URL}/api/v1`;
-        const COOLIFY_TOKEN = env.COOLIFY_TOKEN;
-        const PROJECT_UUID = "aww04oc";
-        const SERVER_UUID = "zgcgcw0";
-        const ENVIRONMENT_UUID = "igkwgkcs4g84ksgs048w08kg";
-
-        async function httpJson(method: string, url: string, body?: Record<string, unknown> | string) {
-          const headers: Record<string, string> = {
-            Authorization: `Bearer ${COOLIFY_TOKEN}`,
-          };
-          if (body !== undefined) headers["Content-Type"] = "application/json";
-
-          const response = await fetch(url, {
-            method,
-            headers,
-            body: body !== undefined ? (typeof body === "string" ? body : JSON.stringify(body)) : undefined,
-          });
-
-          if (!response.ok) {
-            const text = await response.text();
-            throw new Error(`${method} ${url} -> ${response.status} ${response.statusText}: ${text}`);
-          }
-          const text = await response.text();
-          if (!text) return undefined;
-          try {
-            return JSON.parse(text);
-          } catch {
-            return text as unknown;
-          }
-        }
+        // Coolify constants and httpJson are defined above for reuse
 
         // Helper: poll app status until running → set agent.status to 'online'
         function scheduleStatusPoll(applicationUuid: string, agentId: number) {
@@ -128,6 +149,10 @@ export default defineEndpoint({
             // If DB already shows agent online, don't start again
             const currentStatus = (existingAgent.status || "").toLowerCase();
             if (currentStatus === "online") {
+              return res.json({ success: true, created: false, started: false, agent: existingAgent });
+            }
+            // If the agent is already starting, don't start again
+            if (currentStatus === "starting") {
               return res.json({ success: true, created: false, started: false, agent: existingAgent });
             }
             try {
@@ -293,6 +318,103 @@ export default defineEndpoint({
 
         const agent = await agentsService.readOne(createdId as any, { fields: [ "id", "status", "url", "token_id" ] });
         return res.json({ success: true, created: true, agent });
+      } catch (error: any) {
+        return res.status(500).json({ success: false, error: error?.message ?? "Internal Server Error" });
+      }
+    });
+
+    // Get agent URL for a token (ownership verification required)
+    router.get("/:token_id/url", async (req, res) => {
+      try {
+        const tokenId = String(req.params.token_id || "");
+        if (!tokenId) return res.status(400).json({ success: false, error: "Missing token_id" });
+
+        // Resolve requester address (auth required)
+        let requesterAddress: string;
+        try {
+          requesterAddress = await getRequesterAddress((req as any));
+        } catch (e: any) {
+          const msg = String(e?.message || "Unauthorized");
+          const code = msg.includes("Unauthorized") ? 401 : 400;
+          return res.status(code).json({ success: false, error: msg });
+        }
+
+        // Ownership verification via subgraph
+        const isOwner = await verifyOwnership(tokenId, requesterAddress);
+        if (!isOwner) {
+          return res.status(403).json({ success: false, error: "Ownership not verified" });
+        }
+
+        // Lookup agent record for URL
+        const schema = await getSchema();
+        const { ItemsService } = services;
+        const agentsService = new ItemsService("agents", { schema });
+
+        const existing = await agentsService.readByQuery({
+          filter: { token_id: { _eq: tokenId } },
+          limit: 1,
+          fields: [ "id", "url", "status", "token_id" ],
+        });
+        const existingAgent = Array.isArray((existing as any)) ? (existing as any)[0] as Directus.Agents : undefined;
+
+        if (!existingAgent || !existingAgent.url) {
+          return res.status(404).json({ success: false, error: "Agent not found" });
+        }
+
+        return res.json({ success: true, url: existingAgent.url, agent: existingAgent });
+      } catch (error: any) {
+        return res.status(500).json({ success: false, error: error?.message ?? "Internal Server Error" });
+      }
+    });
+
+    // Stop an existing agent by token ID (with ownership verification and backend lookup for application_id)
+    router.post("/:token_id/stop", async (req, res) => {
+      try {
+        // Resolve requester address (auth required)
+        let requesterAddress: string;
+        try {
+          requesterAddress = await getRequesterAddress((req as any));
+        } catch (e: any) {
+          const msg = String(e?.message || "Unauthorized");
+          const code = msg.includes("Unauthorized") ? 401 : 400;
+          return res.status(code).json({ success: false, error: msg });
+        }
+
+        const tokenId = String(req.params.token_id || "");
+        if (!tokenId) return res.status(400).json({ success: false, error: "Missing token_id" });
+
+        const schema = await getSchema();
+        const { ItemsService } = services;
+        const agentsService = new ItemsService("agents", { schema });
+
+        const existing = await agentsService.readByQuery({
+          filter: { token_id: { _eq: tokenId } },
+          limit: 1,
+          fields: [ "id", "status", "url", "token_id", "application_id" ],
+        });
+        const existingAgent = Array.isArray((existing as any)) ? (existing as any)[0] as Directus.Agents : undefined;
+
+        if (!existingAgent) {
+          return res.status(404).json({ success: false, error: "Agent not found" });
+        }
+
+        const applicationId = String(existingAgent.application_id || "");
+        if (!applicationId) return res.status(400).json({ success: false, error: "Agent missing application_id" });
+
+        const isOwner = await verifyOwnership(tokenId, requesterAddress);
+        if (!isOwner) {
+          return res.status(403).json({ success: false, error: "Ownership not verified" });
+        }
+
+        try {
+          const stopUrl = `${COOLIFY_API}/applications/${applicationId}/stop`;
+          await httpJson("GET", stopUrl);
+          await agentsService.updateOne(existingAgent.id as any, { status: "offline" } as Partial<Directus.Agents>);
+          const updated = await agentsService.readOne(existingAgent.id as any, { fields: [ "id", "status", "url", "token_id", "application_id" ] });
+          return res.json({ success: true, stopped: true, agent: updated });
+        } catch (e: any) {
+          return res.status(502).json({ success: false, error: e?.message ?? "Failed to stop application" });
+        }
       } catch (error: any) {
         return res.status(500).json({ success: false, error: error?.message ?? "Internal Server Error" });
       }

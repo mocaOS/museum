@@ -12,7 +12,6 @@ export default defineNuxtConfig({
 
   runtimeConfig: {
     // Server-side only config - not exposed to client
-    authSecret: process.env.NUXT_AUTH_SECRET || (process.env.NODE_ENV !== "production" ? "dev-moca-auth-secret" : undefined),
     r2r: {
       // Get R2R credentials from environment variables
       url: process.env.R2R_URL || config.r2r?.url,
@@ -43,8 +42,8 @@ export default defineNuxtConfig({
     "@vueuse/nuxt",
     "@nuxtjs/strapi",
     "@nuxt/icon",
-    "@sidebase/nuxt-auth",
     "nuxt-mcp",
+    "nuxt-auth-utils",
   ],
 
   css: [
@@ -56,51 +55,6 @@ export default defineNuxtConfig({
       tailwindcss(),
     ],
   },
-
-  auth: {
-    baseURL: config.website.baseUrl,
-    provider: {
-      type: "local",
-      endpoints: {
-        signIn: { path: "/api/auth/login", method: "post" },
-        signOut: { path: "/api/auth/logout", method: "post" },
-        signUp: false,
-        getSession: { path: "/api/auth/session", method: "get" },
-      },
-      refresh: {
-        isEnabled: true,
-        endpoint: { path: "/api/auth/refresh", method: "post" },
-        refreshOnlyToken: true,
-        token: {
-          signInResponseRefreshTokenPointer: "/data/refresh_token",
-          refreshResponseTokenPointer: "/data/access_token",
-          refreshRequestTokenPointer: "/refresh_token",
-          cookieName: "auth.refresh-token",
-          maxAgeInSeconds: 60 * 60 * 24 * 7,
-          sameSiteAttribute: "lax",
-          secureCookieAttribute: process.env.NODE_ENV === "production",
-          cookieDomain: "",
-          httpOnlyCookieAttribute: false,
-        },
-      },
-      token: {
-        signInResponseTokenPointer: "/data/access_token",
-        type: "Bearer",
-        cookieName: "auth.token",
-        headerName: "Authorization",
-        maxAgeInSeconds: 60 * 60,
-        sameSiteAttribute: "lax",
-        cookieDomain: "",
-        secureCookieAttribute: process.env.NODE_ENV === "production",
-        httpOnlyCookieAttribute: false,
-      },
-      pages: {
-        login: "/login",
-      },
-    },
-    globalAppMiddleware: false,
-  },
-
   strapi: {
     url: "https://api.museumofcryptoart.com",
     prefix: "/api",
@@ -133,7 +87,7 @@ export default defineNuxtConfig({
     provider: "ipx",
   },
 
-  // Auth module configuration is provided by @sidebase/nuxt-auth when installed.
+  // Authentication handled via `nuxt-auth-utils`.
 
   icon: {
     provider: "server",
