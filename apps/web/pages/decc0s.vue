@@ -60,6 +60,7 @@
               @click="startAgent(t.tokenId)"
               v-for="t in tokens"
               :key="t.id || t.tokenId"
+              :ref="(el: any) => onTokenEl(el as HTMLElement | SVGElement, t.tokenId)"
               class="relative rounded-md border"
             >
               <GlowingEffect
@@ -103,8 +104,8 @@
                   </div>
                   <div class="flex items-center justify-center">
                     <Icon
-                      name="material-symbols:play-circle-outline"
-                      class="size-6"
+                      :name="iconForStatus(statusByTokenId[t.tokenId])"
+                      :class="cn('size-6', iconClassForStatus(statusByTokenId[t.tokenId]))"
                     />
                   </div>
                 </div>
@@ -131,6 +132,7 @@
 <script setup lang="ts">
 import { useQuery } from "@tanstack/vue-query";
 import type { Directus } from "@local/types";
+import { useIntersectionObserver } from "@vueuse/core";
 import { cn } from "~/lib/utils";
 
 useHead({ title: "Decc0s" });
@@ -141,7 +143,7 @@ definePageMeta({
 const { data: authSession } = useAuth();
 
 const address = computed(() => {
-  return (authSession.value?.user as Directus.DirectusUsers).ethereum_address;
+  return authSession.value?.user.ethereum_address;
 });
 
 const runtimeConfig = useRuntimeConfig();
@@ -153,6 +155,113 @@ interface OwnedToken {
   tokenId: string;
   image?: string | null;
   revealed: boolean;
+}
+
+type AgentStatus = "online" | "offline" | "starting";
+
+const statusByTokenId = reactive<Record<string, AgentStatus | undefined>>({});
+const fetchQueue: string[] = [];
+const enqueuedTokenIds = new Set<string>();
+const isProcessingQueue = ref(false);
+const visibleByTokenId = reactive<Record<string, boolean>>({});
+const lastFetchAtByTokenId = reactive<Record<string, number>>({});
+const observerStops = new Map<string, () => void>();
+const pollTimer = ref<number | null>(null);
+const hasFetchedStatusByTokenId = reactive<Record<string, boolean>>({});
+
+function enqueueFetch(tokenId: string) {
+  if (!tokenId || enqueuedTokenIds.has(tokenId)) return;
+  enqueuedTokenIds.add(tokenId);
+  fetchQueue.push(tokenId);
+  processQueue();
+}
+
+function maybeEnqueue(tokenId: string, immediate = false) {
+  const now = Date.now();
+  const last = lastFetchAtByTokenId[tokenId] || 0;
+  if (immediate || now - last >= 10_000) {
+    if (immediate && !hasFetchedStatusByTokenId[tokenId]) {
+      statusByTokenId[tokenId] = "starting";
+    }
+    lastFetchAtByTokenId[tokenId] = now;
+    enqueueFetch(tokenId);
+  }
+}
+
+async function processQueue() {
+  if (isProcessingQueue.value) return;
+  isProcessingQueue.value = true;
+  try {
+    while (fetchQueue.length) {
+      const id = fetchQueue.shift() as string;
+      try {
+        const { readItems } = await import("@directus/sdk");
+        const response = await directus.request(readItems("agents", {
+          fields: [ "status" ],
+          filter: { token_id: { _eq: id } },
+          limit: 1,
+        }));
+        const status = String((response as Partial<Directus.Agents>[] | undefined)?.[0]?.status ?? "offline").toLowerCase() as AgentStatus;
+        statusByTokenId[id] = status;
+      } catch (e) {
+        statusByTokenId[id] = "offline";
+      } finally {
+        hasFetchedStatusByTokenId[id] = true;
+        enqueuedTokenIds.delete(id);
+        lastFetchAtByTokenId[id] = Date.now();
+        await new Promise(resolve => setTimeout(resolve, 75));
+      }
+    }
+  } finally {
+    isProcessingQueue.value = false;
+  }
+}
+
+function onTokenEl(el: HTMLElement | SVGElement | null, tokenId: string) {
+  if (!el) {
+    const stop = observerStops.get(tokenId);
+    if (stop) stop();
+    observerStops.delete(tokenId);
+    visibleByTokenId[tokenId] = false;
+    return;
+  }
+  if (observerStops.has(tokenId)) return;
+  const { stop } = useIntersectionObserver(
+    el,
+    ([ entry ]) => {
+      const isVisible = entry.isIntersecting;
+      visibleByTokenId[tokenId] = isVisible;
+      if (isVisible) {
+        maybeEnqueue(tokenId, true);
+      }
+    },
+    { rootMargin: "200px" },
+  );
+  observerStops.set(tokenId, stop);
+}
+
+function iconForStatus(status?: AgentStatus) {
+  switch (status) {
+    case "online":
+      return "material-symbols:check-circle-outline";
+    case "starting":
+      return "line-md:loading-twotone-loop";
+    case "offline":
+    default:
+      return "material-symbols:play-circle-outline";
+  }
+}
+
+function iconClassForStatus(status?: AgentStatus) {
+  switch (status) {
+    case "online":
+      return "text-emerald-500";
+    case "starting":
+      return "text-amber-500";
+    case "offline":
+    default:
+      return "";
+  }
 }
 
 const SUBGRAPH_URL = "https://mainnet-graph.deploy.qwellco.de/subgraphs/name/moca/decc0s";
@@ -211,4 +320,26 @@ async function startAgent(tokenId: string) {
     console.error("Failed to start agent:", error);
   }
 }
+
+onMounted(() => {
+  pollTimer.value = window.setInterval(() => {
+    const list = tokens.value || [];
+    for (const t of list) {
+      if (visibleByTokenId[t.tokenId]) {
+        maybeEnqueue(t.tokenId, false);
+      }
+    }
+  }, 10_000);
+});
+
+onBeforeUnmount(() => {
+  if (pollTimer.value) {
+    clearInterval(pollTimer.value);
+    pollTimer.value = null;
+  }
+  for (const [ tokenId, stop ] of observerStops.entries()) {
+    stop();
+    observerStops.delete(tokenId);
+  }
+});
 </script>
