@@ -60,7 +60,6 @@
               @click="startAgent(t.tokenId)"
               v-for="t in tokens"
               :key="t.id || t.tokenId"
-              :ref="(el: any) => onTokenEl(el as HTMLElement | SVGElement, t.tokenId)"
               class="relative rounded-md border"
             >
               <GlowingEffect
@@ -132,7 +131,6 @@
 <script setup lang="ts">
 import { useQuery } from "@tanstack/vue-query";
 import type { Directus } from "@local/types";
-import { useIntersectionObserver } from "@vueuse/core";
 import { cn } from "~/lib/utils";
 
 useHead({ title: "Decc0s" });
@@ -157,92 +155,6 @@ interface OwnedToken {
 type AgentStatus = "online" | "offline" | "starting";
 
 const statusByTokenId = reactive<Record<string, AgentStatus | undefined>>({});
-const fetchQueue: string[] = [];
-const enqueuedTokenIds = new Set<string>();
-const isProcessingQueue = ref(false);
-const visibleByTokenId = reactive<Record<string, boolean>>({});
-const lastFetchAtByTokenId = reactive<Record<string, number>>({});
-const observerStops = new Map<string, () => void>();
-const pollTimer = ref<number | null>(null);
-const hasFetchedStatusByTokenId = reactive<Record<string, boolean>>({});
-const pendingNavigationTokenId = ref<string | null>(null);
-
-function enqueueFetch(tokenId: string) {
-  if (!tokenId || enqueuedTokenIds.has(tokenId)) return;
-  enqueuedTokenIds.add(tokenId);
-  fetchQueue.push(tokenId);
-  processQueue();
-}
-
-function maybeEnqueue(tokenId: string, immediate = false) {
-  const now = Date.now();
-  const last = lastFetchAtByTokenId[tokenId] || 0;
-  if (immediate || now - last >= 10_000) {
-    if (immediate && !hasFetchedStatusByTokenId[tokenId]) {
-      statusByTokenId[tokenId] = "starting";
-    }
-    lastFetchAtByTokenId[tokenId] = now;
-    enqueueFetch(tokenId);
-  }
-}
-
-async function processQueue() {
-  if (isProcessingQueue.value) return;
-  isProcessingQueue.value = true;
-  try {
-    while (fetchQueue.length) {
-      const id = fetchQueue.shift() as string;
-      try {
-        const { readItems } = await import("@directus/sdk");
-        const response = await directus.request(readItems("agents", {
-          fields: [ "status", "token_id" ],
-          filter: { token_id: { _eq: id } },
-          limit: 1,
-        }));
-        const agent = (response as Partial<Directus.Agents>[] | undefined)?.[0];
-        const status = String(agent?.status ?? "offline").toLowerCase() as AgentStatus;
-        const agentTokenId = String((agent as any)?.token_id ?? id);
-        statusByTokenId[id] = status;
-        if (status === "online" && pendingNavigationTokenId.value === id) {
-          pendingNavigationTokenId.value = null;
-          navigateTo(`/decc0s/${encodeURIComponent(agentTokenId)}`);
-        }
-      } catch (e) {
-        statusByTokenId[id] = "offline";
-      } finally {
-        hasFetchedStatusByTokenId[id] = true;
-        enqueuedTokenIds.delete(id);
-        lastFetchAtByTokenId[id] = Date.now();
-        await new Promise(resolve => setTimeout(resolve, 250));
-      }
-    }
-  } finally {
-    isProcessingQueue.value = false;
-  }
-}
-
-function onTokenEl(el: HTMLElement | SVGElement | null, tokenId: string) {
-  if (!el) {
-    const stop = observerStops.get(tokenId);
-    if (stop) stop();
-    observerStops.delete(tokenId);
-    visibleByTokenId[tokenId] = false;
-    return;
-  }
-  if (observerStops.has(tokenId)) return;
-  const { stop } = useIntersectionObserver(
-    el,
-    ([ entry ]) => {
-      const isVisible = entry.isIntersecting;
-      visibleByTokenId[tokenId] = isVisible;
-      if (isVisible) {
-        maybeEnqueue(tokenId, true);
-      }
-    },
-    { rootMargin: "200px" },
-  );
-  observerStops.set(tokenId, stop);
-}
 
 function iconForStatus(status?: AgentStatus) {
   switch (status) {
@@ -314,6 +226,72 @@ const tokens = computed(() => {
   return arr.slice().sort((a, b) => Number(b.revealed) - Number(a.revealed));
 });
 
+// Token IDs for status fetching
+const tokenIds = computed(() => (tokens.value || []).map(t => t.tokenId));
+
+// Initial batch fetch of ALL agent statuses
+const { data: initialAgentsData } = useQuery<Partial<Directus.Agents>[]>({
+  queryKey: [ "agents-status-initial", tokenIds ],
+  enabled: computed(() => tokenIds.value.length > 0),
+  queryFn: async () => {
+    const { readItems } = await import("@directus/sdk");
+    const ids = (tokenIds.value || []).filter(Boolean).map(String);
+    if (ids.length === 0) return [] as Partial<Directus.Agents>[];
+    const response = await directus.request((readItems as any)("agents", {
+      fields: [ "status", "token_id" ],
+      filter: { _or: ids.map(id => ({ token_id: { _eq: id } })) },
+      limit: ids.length,
+    }));
+    return (response as Partial<Directus.Agents>[] | undefined) || [];
+  },
+});
+
+watch(initialAgentsData, (list) => {
+  const arr = (list as Partial<Directus.Agents>[] | undefined) || [];
+  const seen = new Set<string>();
+  for (const agent of arr) {
+    const id = String((agent as any)?.token_id ?? "");
+    if (!id) continue;
+    const status = String(agent?.status ?? "offline").toLowerCase() as AgentStatus;
+    statusByTokenId[id] = status;
+    seen.add(id);
+  }
+  for (const id of tokenIds.value) {
+    if (!seen.has(id) && statusByTokenId[id] === undefined) statusByTokenId[id] = "offline";
+  }
+}, { immediate: true });
+
+// Poll ONLY agents that are currently "starting"
+const startingTokenIds = computed(() => tokenIds.value.filter(id => statusByTokenId[id] === "starting"));
+
+const { data: startingAgentsData, refetch: refetchStartingStatuses } = useQuery<Partial<Directus.Agents>[]>({
+  queryKey: [ "agents-status-starting", startingTokenIds ],
+  enabled: computed(() => startingTokenIds.value.length > 0),
+  queryFn: async () => {
+    const { readItems } = await import("@directus/sdk");
+    const ids = (startingTokenIds.value || []).filter(Boolean).map(String);
+    if (ids.length === 0) return [] as Partial<Directus.Agents>[];
+    const response = await directus.request((readItems as any)("agents", {
+      fields: [ "status", "token_id" ],
+      filter: { _or: ids.map(id => ({ token_id: { _eq: id } })) },
+      limit: ids.length,
+    }));
+    return (response as Partial<Directus.Agents>[] | undefined) || [];
+  },
+  refetchInterval: 10_000,
+  refetchIntervalInBackground: true,
+});
+
+watch(startingAgentsData, (list) => {
+  const arr = (list as Partial<Directus.Agents>[] | undefined) || [];
+  for (const agent of arr) {
+    const id = String((agent as any)?.token_id ?? "");
+    if (!id) continue;
+    const status = String(agent?.status ?? "offline").toLowerCase() as AgentStatus;
+    statusByTokenId[id] = status;
+  }
+}, { immediate: true });
+
 async function startAgent(tokenId: string) {
   // Immediately reflect loading state in UI
   if (statusByTokenId[tokenId] === "online") {
@@ -323,7 +301,6 @@ async function startAgent(tokenId: string) {
   statusByTokenId[tokenId] = "starting";
 
   try {
-    pendingNavigationTokenId.value = tokenId;
     await directus.request(() => ({
       method: "POST",
       path: `/agents/${encodeURIComponent(tokenId)}/start`,
@@ -332,35 +309,12 @@ async function startAgent(tokenId: string) {
     console.error("Failed to start agent:", error);
     // Revert to offline on failure
     statusByTokenId[tokenId] = "offline";
-    if (pendingNavigationTokenId.value === tokenId) {
-      pendingNavigationTokenId.value = null;
-    }
     return;
   }
 
+  await new Promise(resolve => setTimeout(resolve, 30_000));
+
   // Re-check status soon after triggering start
-  maybeEnqueue(tokenId, true);
+  await refetchStartingStatuses();
 }
-
-onMounted(async () => {
-  pollTimer.value = window.setInterval(() => {
-    const list = tokens.value || [];
-    for (const t of list) {
-      if (visibleByTokenId[t.tokenId]) {
-        maybeEnqueue(t.tokenId, false);
-      }
-    }
-  }, 10_000);
-});
-
-onBeforeUnmount(() => {
-  if (pollTimer.value) {
-    clearInterval(pollTimer.value);
-    pollTimer.value = null;
-  }
-  for (const [ tokenId, stop ] of observerStops.entries()) {
-    stop();
-    observerStops.delete(tokenId);
-  }
-});
 </script>
