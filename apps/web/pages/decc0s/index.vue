@@ -13,11 +13,42 @@
             Decc0s
           </h1>
         </div>
-        <div
-          v-if="address"
-          class="truncate font-mono text-xs text-muted-foreground"
-        >
-          {{ address }}
+        <div v-if="directusUserId" class="flex items-center gap-2">
+          <div
+            class="grid grid-cols-[1fr_auto] gap-2 rounded-md border px-2 py-1"
+          >
+            <div>
+              <div class="truncate text-xs font-medium">
+                {{ applicationDisplayId }}
+              </div>
+              <div class="truncate text-[10px] text-muted-foreground">
+                {{ applicationStatusLabel }}
+              </div>
+            </div>
+            <div class="flex items-center justify-center">
+              <Icon
+                :name="iconForStatus(appStatus)"
+                :class="cn('h-4 w-4', iconClassForStatus(appStatus))"
+              />
+            </div>
+          </div>
+          <Button
+            @click="onToggleStartStopHeader"
+            size="sm"
+            :disabled="appStatus === 'starting' || (appStatus !== 'online' && selectedTokenIdsArray.length === 0)"
+          >
+            <span
+              v-if="appStatus === 'starting'"
+              class="inline-flex items-center gap-1"
+            >
+              <Icon
+                name="line-md:loading-twotone-loop"
+                class="h-4 w-4"
+              />
+              Starting
+            </span>
+            <span v-else>{{ headerButtonLabel }}</span>
+          </Button>
         </div>
       </div>
 
@@ -57,10 +88,9 @@
             "
           >
             <div
-              @click="startAgent(t.tokenId)"
+              @click="toggleSelected(t.tokenId)"
               v-for="t in tokens"
               :key="t.id || t.tokenId"
-              :ref="(el: any) => onTokenEl(el as HTMLElement | SVGElement, t.tokenId)"
               class="relative rounded-md border"
             >
               <GlowingEffect
@@ -104,8 +134,13 @@
                   </div>
                   <div class="flex items-center justify-center">
                     <Icon
-                      :name="iconForStatus(statusByTokenId[t.tokenId])"
-                      :class="cn('size-6', iconClassForStatus(statusByTokenId[t.tokenId]))"
+                      :name="isTokenSelected(t.tokenId) ? 'material-symbols:check-box' : 'material-symbols:check-box-outline-blank'"
+                      :class="cn(
+                        'size-6',
+                        isTokenSelected(t.tokenId)
+                          ? 'text-emerald-500'
+                          : 'text-muted-foreground',
+                      )"
                     />
                   </div>
                 </div>
@@ -131,9 +166,9 @@
 
 <script setup lang="ts">
 import { useQuery } from "@tanstack/vue-query";
-import type { Directus } from "@local/types";
-import { useIntersectionObserver } from "@vueuse/core";
+import type { Applications } from "@local/types/directus";
 import { cn } from "~/lib/utils";
+import { Button } from "~/components/ui/button";
 
 useHead({ title: "Decc0s" });
 definePageMeta({
@@ -141,6 +176,7 @@ definePageMeta({
 });
 
 const { session } = useUserSession();
+const directusUserId = computed(() => (session.value as any)?.user?.id || null);
 const address = computed(() => (session.value as any)?.user?.ethereum_address);
 
 const runtimeConfig = useRuntimeConfig();
@@ -155,94 +191,6 @@ interface OwnedToken {
 }
 
 type AgentStatus = "online" | "offline" | "starting";
-
-const statusByTokenId = reactive<Record<string, AgentStatus | undefined>>({});
-const fetchQueue: string[] = [];
-const enqueuedTokenIds = new Set<string>();
-const isProcessingQueue = ref(false);
-const visibleByTokenId = reactive<Record<string, boolean>>({});
-const lastFetchAtByTokenId = reactive<Record<string, number>>({});
-const observerStops = new Map<string, () => void>();
-const pollTimer = ref<number | null>(null);
-const hasFetchedStatusByTokenId = reactive<Record<string, boolean>>({});
-const pendingNavigationTokenId = ref<string | null>(null);
-
-function enqueueFetch(tokenId: string) {
-  if (!tokenId || enqueuedTokenIds.has(tokenId)) return;
-  enqueuedTokenIds.add(tokenId);
-  fetchQueue.push(tokenId);
-  processQueue();
-}
-
-function maybeEnqueue(tokenId: string, immediate = false) {
-  const now = Date.now();
-  const last = lastFetchAtByTokenId[tokenId] || 0;
-  if (immediate || now - last >= 10_000) {
-    if (immediate && !hasFetchedStatusByTokenId[tokenId]) {
-      statusByTokenId[tokenId] = "starting";
-    }
-    lastFetchAtByTokenId[tokenId] = now;
-    enqueueFetch(tokenId);
-  }
-}
-
-async function processQueue() {
-  if (isProcessingQueue.value) return;
-  isProcessingQueue.value = true;
-  try {
-    while (fetchQueue.length) {
-      const id = fetchQueue.shift() as string;
-      try {
-        const { readItems } = await import("@directus/sdk");
-        const response = await directus.request(readItems("agents", {
-          fields: [ "status", "token_id" ],
-          filter: { token_id: { _eq: id } },
-          limit: 1,
-        }));
-        const agent = (response as Partial<Directus.Agents>[] | undefined)?.[0];
-        const status = String(agent?.status ?? "offline").toLowerCase() as AgentStatus;
-        const agentTokenId = String((agent as any)?.token_id ?? id);
-        statusByTokenId[id] = status;
-        if (status === "online" && pendingNavigationTokenId.value === id) {
-          pendingNavigationTokenId.value = null;
-          navigateTo(`/decc0s/${encodeURIComponent(agentTokenId)}`);
-        }
-      } catch (e) {
-        statusByTokenId[id] = "offline";
-      } finally {
-        hasFetchedStatusByTokenId[id] = true;
-        enqueuedTokenIds.delete(id);
-        lastFetchAtByTokenId[id] = Date.now();
-        await new Promise(resolve => setTimeout(resolve, 250));
-      }
-    }
-  } finally {
-    isProcessingQueue.value = false;
-  }
-}
-
-function onTokenEl(el: HTMLElement | SVGElement | null, tokenId: string) {
-  if (!el) {
-    const stop = observerStops.get(tokenId);
-    if (stop) stop();
-    observerStops.delete(tokenId);
-    visibleByTokenId[tokenId] = false;
-    return;
-  }
-  if (observerStops.has(tokenId)) return;
-  const { stop } = useIntersectionObserver(
-    el,
-    ([ entry ]) => {
-      const isVisible = entry.isIntersecting;
-      visibleByTokenId[tokenId] = isVisible;
-      if (isVisible) {
-        maybeEnqueue(tokenId, true);
-      }
-    },
-    { rootMargin: "200px" },
-  );
-  observerStops.set(tokenId, stop);
-}
 
 function iconForStatus(status?: AgentStatus) {
   switch (status) {
@@ -314,53 +262,111 @@ const tokens = computed(() => {
   return arr.slice().sort((a, b) => Number(b.revealed) - Number(a.revealed));
 });
 
-async function startAgent(tokenId: string) {
-  // Immediately reflect loading state in UI
-  if (statusByTokenId[tokenId] === "online") {
-    navigateTo(`/decc0s/${encodeURIComponent(tokenId)}`);
-    return;
-  }
-  statusByTokenId[tokenId] = "starting";
+// Token IDs for status fetching
+const tokenIds = computed(() => (tokens.value || []).map(t => t.tokenId));
 
+// Application status for header widget on this page
+const { data: applicationsData, refetch: refetchApplications } = useQuery<Applications[]>({
+  queryKey: [ "decc0s-header-applications", directusUserId ],
+  enabled: computed(() => !!directusUserId.value),
+  queryFn: async () => {
+    const { readItems } = await import("@directus/sdk");
+    const response = await directus.request((readItems as any)("applications", {
+      fields: [ "id", "status", "decc0s", { owner: [ "id" ] } ],
+      filter: { owner: { _eq: directusUserId.value } },
+      limit: 1,
+    }));
+    return response as Applications[];
+  },
+  refetchInterval: 10_000,
+  refetchIntervalInBackground: true,
+});
+
+const application = computed(() => (applicationsData.value && applicationsData.value[0]) || null);
+const appStatus = computed<AgentStatus>(() => {
+  const s = String((application.value as any)?.status || "offline").toLowerCase();
+  return (s === "online" || s === "starting") ? (s as AgentStatus) : "offline";
+});
+// Selection based on applications.decc0s
+const applicationTokenIds = computed<string[]>(() => {
+  const decc0 = String((application.value as any)?.decc0s || "");
+  return decc0.split(",").map(s => s.trim()).filter(Boolean);
+});
+const selectedTokenIds = ref<Set<string>>(new Set());
+const initializedFromApp = ref(false);
+watch(application, () => {
+  if (initializedFromApp.value) return;
+  if (applicationTokenIds.value.length > 0) {
+    selectedTokenIds.value = new Set(applicationTokenIds.value);
+  } else {
+    selectedTokenIds.value = new Set();
+  }
+  initializedFromApp.value = true;
+}, { immediate: true });
+function isTokenSelected(id: string): boolean {
+  return selectedTokenIds.value.has(String(id));
+}
+function toggleSelected(id: string) {
+  const key = String(id);
+  const next = new Set(selectedTokenIds.value);
+  if (next.has(key)) {
+    next.delete(key);
+  } else {
+    next.add(key);
+  }
+  selectedTokenIds.value = next;
+}
+const selectedTokenIdsArray = computed<string[]>(() => Array.from(selectedTokenIds.value));
+function arraysEqualAsSets(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) return false;
+  const set = new Set(a);
+  for (const id of b) if (!set.has(id)) return false;
+  return true;
+}
+const selectionDiffersFromApp = computed<boolean>(() => {
+  if (!application.value) return false;
+  return !arraysEqualAsSets(selectedTokenIdsArray.value, applicationTokenIds.value);
+});
+const headerButtonLabel = computed<string>(() => {
+  if (!application.value) return "Start";
+  if (selectionDiffersFromApp.value) return "Restart";
+  return appStatus.value === "online" ? "Stop" : "Start";
+});
+const applicationDisplayId = computed(() => {
+  const decc0 = (application.value as any)?.decc0s;
+  return decc0 ? `#${decc0}` : "#—";
+});
+const applicationStatusLabel = computed(() => {
+  switch (appStatus.value) {
+    case "online": return "Online";
+    case "starting": return "Starting";
+    default: return "Offline";
+  }
+});
+
+async function onToggleStartStopHeader() {
+  const selected = selectedTokenIdsArray.value;
+  const firstTokenId = (selected && selected[0]) ? String(selected[0]) : ((tokenIds.value && tokenIds.value[0]) ? String(tokenIds.value[0]) : "");
+  if (!firstTokenId) return;
   try {
-    pendingNavigationTokenId.value = tokenId;
-    await directus.request(() => ({
-      method: "POST",
-      path: `/agents/${encodeURIComponent(tokenId)}/start`,
-    } as any));
-  } catch (error) {
-    console.error("Failed to start agent:", error);
-    // Revert to offline on failure
-    statusByTokenId[tokenId] = "offline";
-    if (pendingNavigationTokenId.value === tokenId) {
-      pendingNavigationTokenId.value = null;
+    if (appStatus.value === "online") {
+      if (selectionDiffersFromApp.value) {
+        await directus.request(() => ({ method: "POST", path: "/applications/start", body: { tokenIds: selected.length ? selected : [ firstTokenId ] } } as any));
+      } else {
+        await directus.request(() => ({ method: "POST", path: "/applications/stop" } as any));
+      }
+      await refetchApplications();
+    } else if (appStatus.value === "offline") {
+      await directus.request(() => ({ method: "POST", path: "/applications/start", body: { tokenIds: selected.length ? selected : [ firstTokenId ] } } as any));
+      await refetchApplications();
+    } else if (appStatus.value === "starting" && selectionDiffersFromApp.value) {
+      await directus.request(() => ({ method: "POST", path: "/applications/start", body: { tokenIds: selected.length ? selected : [ firstTokenId ] } } as any));
+      await refetchApplications();
     }
-    return;
+  } catch (e) {
+    console.error(e);
   }
-
-  // Re-check status soon after triggering start
-  maybeEnqueue(tokenId, true);
 }
 
-onMounted(async () => {
-  pollTimer.value = window.setInterval(() => {
-    const list = tokens.value || [];
-    for (const t of list) {
-      if (visibleByTokenId[t.tokenId]) {
-        maybeEnqueue(t.tokenId, false);
-      }
-    }
-  }, 10_000);
-});
-
-onBeforeUnmount(() => {
-  if (pollTimer.value) {
-    clearInterval(pollTimer.value);
-    pollTimer.value = null;
-  }
-  for (const [ tokenId, stop ] of observerStops.entries()) {
-    stop();
-    observerStops.delete(tokenId);
-  }
-});
+// (Token-level agent status polling removed; token tiles now use checkbox selection only)
 </script>

@@ -37,6 +37,21 @@
     "_syncId": "bc9827ef-ca84-4d12-9a9a-f80f8153a36b"
   },
   {
+    "collection": "applications",
+    "action": "read",
+    "permissions": null,
+    "validation": null,
+    "presets": null,
+    "fields": [
+      "status",
+      "url",
+      "decc0s",
+      "id"
+    ],
+    "policy": "b5d43d0f-0d4f-4de9-8214-cca0d7c9971d",
+    "_syncId": "5aa9f243-0e0e-42a4-ad41-a79fd4af5813"
+  },
+  {
     "collection": "collections",
     "action": "read",
     "permissions": null,

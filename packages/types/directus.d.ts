@@ -6,6 +6,15 @@ export type Agents = {
   url?: string | null;
 };
 
+export type Applications = {
+  application_id?: string | null;
+  decc0s?: string | null;
+  id: number;
+  owner?: string | DirectusUsers | null;
+  status?: string | null;
+  url?: string | null;
+};
+
 export type Collections = {
   child_collections: any[] | Collections[];
   date_created?: string | null;
@@ -393,6 +402,7 @@ export type DirectusTranslations = {
 
 export type DirectusUsers = {
   appearance?: string | null;
+  applications: any[] | Applications[];
   auth_data?: unknown | null;
   avatar?: string | DirectusFiles | null;
   description?: string | null;
@@ -484,6 +494,7 @@ export type Rooms = {
 
 export type CustomDirectusTypes = {
   agents: Agents[];
+  applications: Applications[];
   collections: Collections[];
   contracts: Contracts[];
   directus_access: DirectusAccess[];

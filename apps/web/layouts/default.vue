@@ -307,7 +307,7 @@ const isOpen = ref(false);
 const { data: collections, suspense: suspenseCollections } = useQuery<Collections[]>({
   queryKey: [ "collections" ],
   queryFn: async () => {
-    const response = await directus.request(readItems("collections", {
+    const response = await directus.request((readItems as any)("collections", {
       fields: [
         "id",
         "name",
