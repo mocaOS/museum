@@ -14,27 +14,14 @@
           </h1>
         </div>
         <div v-if="directusUserId" class="flex items-center gap-2">
-          <div
-            class="grid grid-cols-[1fr_auto] gap-2 rounded-md border px-2 py-1"
-          >
-            <div>
-              <div class="truncate text-xs font-medium">
-                {{ applicationDisplayId }}
-              </div>
-              <div class="truncate text-[10px] text-muted-foreground">
-                {{ applicationStatusLabel }}
-              </div>
-            </div>
-            <div class="flex items-center justify-center">
-              <Icon
-                :name="iconForStatus(appStatus)"
-                :class="cn('h-4 w-4', iconClassForStatus(appStatus))"
-              />
-            </div>
-          </div>
+          <Icon
+            :name="iconForStatus(appStatus)"
+            :class="cn('h-5 w-5', iconClassForStatus(appStatus))"
+          />
           <Button
             @click="onToggleStartStopHeader"
             size="sm"
+            class="w-28"
             :disabled="appStatus === 'starting' || (appStatus !== 'online' && selectedTokenIdsArray.length === 0)"
           >
             <span
@@ -170,20 +157,121 @@ import type { Applications } from "@local/types/directus";
 import { cn } from "~/lib/utils";
 import { Button } from "~/components/ui/button";
 
-useHead({ title: "Decc0s" });
 definePageMeta({
   middleware: [ "auth" ],
 });
 
+interface OwnedToken {
+  id: string;
+  tokenId: string;
+  image?: string | null;
+  revealed: boolean;
+}
+
+type AgentStatus = "online" | "offline" | "starting";
+
+const SUBGRAPH_URL = "https://mainnet-graph.deploy.qwellco.de/subgraphs/name/moca/decc0s";
+
+const queryDocument = `
+  query OwnedTokens($owner: Bytes!) {
+    tokens(where: { owner: $owner }) {
+      id
+      tokenId
+      owner
+      revealed
+      traits_imageURI
+    }
+  }
+`;
+
 const { session } = useUserSession();
+const runtimeConfig = useRuntimeConfig();
+const { directus } = useDirectus();
+const selectedTokenIds = ref<Set<string>>(new Set());
+const initializedFromApp = ref(false);
+
 const directusUserId = computed(() => (session.value as any)?.user?.id || null);
 const address = computed(() => (session.value as any)?.user?.ethereum_address);
-
-const runtimeConfig = useRuntimeConfig();
 const ipfsGateway = computed(() => String((runtimeConfig.public as any)?.ipfs?.gateway || "https://ipfs.qwellcode.de/ipfs/"));
-const { directus } = useDirectus();
-
 const directusBaseUrl = computed(() => String((runtimeConfig.public as any)?.api?.baseUrl || "http://localhost:8055"));
+
+const { data, isLoading, error, suspense: suspenseOwnedTokens } = useQuery<OwnedToken[]>({
+  queryKey: [ "decc0s-owned", address ],
+  enabled: computed(() => !!address.value),
+  queryFn: async () => fetchOwnedTokens(address.value as string),
+});
+
+await suspenseOwnedTokens();
+
+const { data: applicationsData, refetch: refetchApplications, suspense: suspenseApplications } = useQuery<Applications[]>({
+  queryKey: [ "decc0s-header-applications", directusUserId ],
+  enabled: computed(() => !!directusUserId.value),
+  queryFn: async () => {
+    const { readItems } = await import("@directus/sdk");
+    const response = await directus.request((readItems as any)("applications", {
+      fields: [ "id", "status", "decc0s", { owner: [ "id" ] } ],
+      filter: { owner: { _eq: directusUserId.value } },
+      limit: 1,
+    }));
+    return response as Applications[];
+  },
+  refetchInterval: 10_000,
+  refetchIntervalInBackground: true,
+});
+
+await suspenseApplications();
+
+const tokens = computed(() => {
+  const arr = data.value ?? [];
+  return arr.slice().sort((a, b) => Number(b.revealed) - Number(a.revealed));
+});
+const tokenIds = computed(() => (tokens.value || []).map(t => t.tokenId));
+const application = computed(() => (applicationsData.value && applicationsData.value[0]) || null);
+const appStatus = computed<AgentStatus>(() => {
+  const s = String((application.value as any)?.status || "offline").toLowerCase();
+  return (s === "online" || s === "starting") ? (s as AgentStatus) : "offline";
+});
+const applicationTokenIds = computed<string[]>(() => {
+  const decc0 = String((application.value as any)?.decc0s || "");
+  return decc0.split(",").map(s => s.trim()).filter(Boolean);
+});
+const selectedTokenIdsArray = computed<string[]>(() => Array.from(selectedTokenIds.value));
+const selectionDiffersFromApp = computed<boolean>(() => {
+  if (!application.value) return false;
+  return !arraysEqualAsSets(selectedTokenIdsArray.value, applicationTokenIds.value);
+});
+const headerButtonLabel = computed<string>(() => {
+  if (!application.value) return "Start";
+  if (selectionDiffersFromApp.value) return "Restart";
+  return appStatus.value === "online" ? "Stop" : "Start";
+});
+
+watch(applicationTokenIds, (newTokenIds) => {
+  if (initializedFromApp.value) return;
+  if (newTokenIds.length > 0) {
+    selectedTokenIds.value = new Set(newTokenIds);
+    initializedFromApp.value = true;
+  }
+}, { immediate: true });
+
+async function fetchOwnedTokens(owner: string): Promise<OwnedToken[]> {
+  const res = await fetch(SUBGRAPH_URL, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ query: queryDocument, variables: { owner } }),
+  });
+  if (!res.ok) throw new Error(`Graph request failed (${res.status})`);
+  const body = await res.json();
+  if (body.errors?.length) throw new Error(body.errors[0]?.message || "Graph error");
+  const items = (body.data?.tokens || []) as any[];
+  return items.map((it) => {
+    const id = String(it.id ?? it.tokenId ?? "");
+    const tokenId = String(it.tokenId ?? "");
+    const image = it.traits_imageURI ?? null;
+    const revealed = Boolean(it.revealed);
+    return { id, tokenId, image, revealed } as OwnedToken;
+  });
+}
 
 async function postApplicationsStart(tokenIds: string[]) {
   const token = (session.value as any)?.access_token as string | undefined;
@@ -206,15 +294,6 @@ async function postApplicationsStop() {
     },
   });
 }
-
-interface OwnedToken {
-  id: string;
-  tokenId: string;
-  image?: string | null;
-  revealed: boolean;
-}
-
-type AgentStatus = "online" | "offline" | "starting";
 
 function iconForStatus(status?: AgentStatus) {
   switch (status) {
@@ -240,96 +319,10 @@ function iconClassForStatus(status?: AgentStatus) {
   }
 }
 
-const SUBGRAPH_URL = "https://mainnet-graph.deploy.qwellco.de/subgraphs/name/moca/decc0s";
-
-const queryDocument = `
-  query OwnedTokens($owner: Bytes!) {
-    tokens(where: { owner: $owner }) {
-      id
-      tokenId
-      owner
-      revealed
-      traits_imageURI
-    }
-  }
-`;
-
-async function fetchOwnedTokens(owner: string): Promise<OwnedToken[]> {
-  const res = await fetch(SUBGRAPH_URL, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ query: queryDocument, variables: { owner } }),
-  });
-  if (!res.ok) throw new Error(`Graph request failed (${res.status})`);
-  const body = await res.json();
-  if (body.errors?.length) throw new Error(body.errors[0]?.message || "Graph error");
-  const items = (body.data?.tokens || []) as any[];
-  return items.map((it) => {
-    const id = String(it.id ?? it.tokenId ?? "");
-    const tokenId = String(it.tokenId ?? "");
-    const image = it.traits_imageURI ?? null;
-    const revealed = Boolean(it.revealed);
-    return { id, tokenId, image, revealed } as OwnedToken;
-  });
-}
-
-const { data, isLoading, error, suspense } = useQuery<OwnedToken[]>({
-  queryKey: [ "decc0s-owned", address ],
-  enabled: computed(() => !!address.value),
-  queryFn: async () => fetchOwnedTokens(address.value as string),
-});
-
-await suspense();
-
-const tokens = computed(() => {
-  const arr = data.value ?? [];
-  return arr.slice().sort((a, b) => Number(b.revealed) - Number(a.revealed));
-});
-
-// Token IDs for status fetching
-const tokenIds = computed(() => (tokens.value || []).map(t => t.tokenId));
-
-// Application status for header widget on this page
-const { data: applicationsData, refetch: refetchApplications } = useQuery<Applications[]>({
-  queryKey: [ "decc0s-header-applications", directusUserId ],
-  enabled: computed(() => !!directusUserId.value),
-  queryFn: async () => {
-    const { readItems } = await import("@directus/sdk");
-    const response = await directus.request((readItems as any)("applications", {
-      fields: [ "id", "status", "decc0s", { owner: [ "id" ] } ],
-      filter: { owner: { _eq: directusUserId.value } },
-      limit: 1,
-    }));
-    return response as Applications[];
-  },
-  refetchInterval: 10_000,
-  refetchIntervalInBackground: true,
-});
-
-const application = computed(() => (applicationsData.value && applicationsData.value[0]) || null);
-const appStatus = computed<AgentStatus>(() => {
-  const s = String((application.value as any)?.status || "offline").toLowerCase();
-  return (s === "online" || s === "starting") ? (s as AgentStatus) : "offline";
-});
-// Selection based on applications.decc0s
-const applicationTokenIds = computed<string[]>(() => {
-  const decc0 = String((application.value as any)?.decc0s || "");
-  return decc0.split(",").map(s => s.trim()).filter(Boolean);
-});
-const selectedTokenIds = ref<Set<string>>(new Set());
-const initializedFromApp = ref(false);
-watch(application, () => {
-  if (initializedFromApp.value) return;
-  if (applicationTokenIds.value.length > 0) {
-    selectedTokenIds.value = new Set(applicationTokenIds.value);
-  } else {
-    selectedTokenIds.value = new Set();
-  }
-  initializedFromApp.value = true;
-}, { immediate: true });
 function isTokenSelected(id: string): boolean {
   return selectedTokenIds.value.has(String(id));
 }
+
 function toggleSelected(id: string) {
   const key = String(id);
   const next = new Set(selectedTokenIds.value);
@@ -340,33 +333,13 @@ function toggleSelected(id: string) {
   }
   selectedTokenIds.value = next;
 }
-const selectedTokenIdsArray = computed<string[]>(() => Array.from(selectedTokenIds.value));
+
 function arraysEqualAsSets(a: string[], b: string[]): boolean {
   if (a.length !== b.length) return false;
   const set = new Set(a);
   for (const id of b) if (!set.has(id)) return false;
   return true;
 }
-const selectionDiffersFromApp = computed<boolean>(() => {
-  if (!application.value) return false;
-  return !arraysEqualAsSets(selectedTokenIdsArray.value, applicationTokenIds.value);
-});
-const headerButtonLabel = computed<string>(() => {
-  if (!application.value) return "Start";
-  if (selectionDiffersFromApp.value) return "Restart";
-  return appStatus.value === "online" ? "Stop" : "Start";
-});
-const applicationDisplayId = computed(() => {
-  const decc0 = (application.value as any)?.decc0s;
-  return decc0 ? `#${decc0}` : "#—";
-});
-const applicationStatusLabel = computed(() => {
-  switch (appStatus.value) {
-    case "online": return "Online";
-    case "starting": return "Starting";
-    default: return "Offline";
-  }
-});
 
 async function onToggleStartStopHeader() {
   const selected = selectedTokenIdsArray.value;
@@ -392,5 +365,5 @@ async function onToggleStartStopHeader() {
   }
 }
 
-// (Token-level agent status polling removed; token tiles now use checkbox selection only)
+useHead({ title: "Decc0s" });
 </script>
