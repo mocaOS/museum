@@ -14,7 +14,7 @@
  * - Delete any existing decc0_*.ts files that weren't specified
  */
 
-import { existsSync, readFileSync, readdirSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -90,6 +90,12 @@ console.log(`🎭 Generating characters for token IDs: ${tokenIds.join(", ")}`);
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const CODEX_DIR = join(__dirname, "codex");
 const CHARACTERS_DIR = join(__dirname, "src", "characters");
+
+// Ensure the characters directory exists
+if (!existsSync(CHARACTERS_DIR)) {
+  mkdirSync(CHARACTERS_DIR, { recursive: true });
+  console.log(`📁 Created characters directory: ${CHARACTERS_DIR}`);
+}
 
 // Function to format token ID to match codex filename pattern
 function formatTokenId(tokenId: number): string {
