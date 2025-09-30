@@ -8,7 +8,6 @@ import {
   type ProjectAgent,
   logger,
 } from "@elizaos/core";
-import { character as mocaCuratorCharacter } from "./character.ts";
 import starterPlugin from "./plugin.ts";
 import coingeckoPlugin from "./plugins/coingecko.ts";
 import r2rRAGPlugin from "./plugins/r2r-rag.ts";
@@ -68,7 +67,7 @@ const decc0Characters = await loadCharactersFromDirectory();
 const project: Project = {
   agents: [
     // Include the main MOCA Curator agent
-    createProjectAgent(mocaCuratorCharacter),
+    // createProjectAgent(mocaCuratorCharacter),
     // Include all DeCC0 character agents
     ...decc0Characters.map(createProjectAgent),
   ],
