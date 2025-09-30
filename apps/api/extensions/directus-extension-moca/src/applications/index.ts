@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import type { Router } from "express";
+import { json as expressJson } from "express";
 import { defineEndpoint } from "@directus/extensions-sdk";
 import type { Directus } from "@local/types";
 
@@ -8,6 +9,8 @@ export default defineEndpoint({
   id: "applications",
 
   handler: (router: Router, { services, getSchema }) => {
+    // Ensure JSON bodies are parsed for this endpoint
+    router.use(expressJson());
     async function getRequester(req: any): Promise<{ userId: string; address: string }> {
       const userId = req?.accountability?.user;
       if (!userId) throw new Error("Unauthorized");
@@ -101,8 +104,9 @@ export default defineEndpoint({
       try {
         // requester and tokens
         const { userId, address } = await getRequester((req as any));
-        const body = (req as any).body || {};
-        const tokenIds: string[] = Array.isArray(body?.tokenIds) ? body.tokenIds.map((t: any) => String(t)) : [];
+        const rawBody = (req as any).body;
+        const body = typeof rawBody === "string" ? (rawBody ? JSON.parse(rawBody) : {}) : (rawBody || {});
+        const tokenIds: string[] = Array.isArray((body as any)?.tokenIds) ? (body as any).tokenIds.map((t: any) => String(t)) : [];
         if (!tokenIds.length) return res.status(400).json({ success: false, error: "Missing tokenIds" });
         const firstTokenId = tokenIds[0];
 
@@ -120,8 +124,9 @@ export default defineEndpoint({
         const existing = await applicationsService.readByQuery({
           filter: { owner: { _eq: userId } },
           limit: 1,
-          fields: [ "id", "status", "url", "application_id", "decc0s", { owner: [ "id" ] } ],
+          fields: [ "id", "status", "url", "application_id", "decc0s", "owner.id" ] as any,
         });
+
         const existingApp = Array.isArray((existing as any)) ? (existing as any)[0] as Directus.Applications : undefined;
 
         // constants for Coolify build
@@ -163,7 +168,7 @@ export default defineEndpoint({
             await httpJson("GET", startUrl);
             await applicationsService.updateOne((existingApp as any).id as any, { status: "starting", decc0s: tokenIds.join(","), url: domainUrl } as Partial<Directus.Applications>);
             scheduleStatusPoll(applicationUuid, applicationsService, (existingApp as any).id as any);
-            const updated = await applicationsService.readOne((existingApp as any).id as any, { fields: [ "id", "status", "url", "application_id", "decc0s", { owner: [ "id" ] } ] });
+            const updated = await applicationsService.readOne((existingApp as any).id as any, { fields: [ "id", "status", "url", "application_id", "decc0s", "owner.id" ] as any });
             return res.json({ success: true, created: false, started: true, application: updated });
           } catch (e: any) {
             return res.status(502).json({ success: false, error: e?.message ?? "Failed to start application" });
@@ -198,7 +203,7 @@ export default defineEndpoint({
               build_pack: BUILD_PACK,
               ports_exposes: String(EXPOSE_PORT),
               name: subdomain,
-              description: `Application for owner ${userId}, token ${firstTokenId}`,
+              description: `Agent for Token ID: ${firstTokenId}`,
               domains: domainUrl,
               install_command: INSTALL_COMMAND,
               build_command: BUILD_COMMAND,
@@ -239,7 +244,7 @@ export default defineEndpoint({
           }
         })();
 
-        const application = await applicationsService.readOne(createdId as any, { fields: [ "id", "status", "url", "application_id", "decc0s", { owner: [ "id" ] } ] });
+        const application = await applicationsService.readOne(createdId as any, { fields: [ "id", "status", "url", "application_id", "decc0s", "owner.id" ] as any });
         return res.json({ success: true, created: true, application });
       } catch (error: any) {
         const msg = String(error?.message || "Internal Server Error");
@@ -270,7 +275,7 @@ export default defineEndpoint({
         const decc0s = String((application as any).decc0s || "");
         const tokens = decc0s.split(",").map(s => s.trim()).filter(Boolean);
         if (tokens.length > 0) {
-          const ok = await verifyOwnership(tokens[0], address);
+          const ok = await verifyOwnership(tokens[0] as string, address);
           if (!ok) return res.status(403).json({ success: false, error: "Ownership not verified" });
         }
 

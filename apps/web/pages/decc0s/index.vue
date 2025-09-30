@@ -183,6 +183,30 @@ const runtimeConfig = useRuntimeConfig();
 const ipfsGateway = computed(() => String((runtimeConfig.public as any)?.ipfs?.gateway || "https://ipfs.qwellcode.de/ipfs/"));
 const { directus } = useDirectus();
 
+const directusBaseUrl = computed(() => String((runtimeConfig.public as any)?.api?.baseUrl || "http://localhost:8055"));
+
+async function postApplicationsStart(tokenIds: string[]) {
+  const token = (session.value as any)?.access_token as string | undefined;
+  await fetch(`${directusBaseUrl.value}/applications/start`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({ tokenIds }),
+  });
+}
+
+async function postApplicationsStop() {
+  const token = (session.value as any)?.access_token as string | undefined;
+  await fetch(`${directusBaseUrl.value}/applications/stop`, {
+    method: "POST",
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  });
+}
+
 interface OwnedToken {
   id: string;
   tokenId: string;
@@ -351,16 +375,16 @@ async function onToggleStartStopHeader() {
   try {
     if (appStatus.value === "online") {
       if (selectionDiffersFromApp.value) {
-        await directus.request(() => ({ method: "POST", path: "/applications/start", body: { tokenIds: selected.length ? selected : [ firstTokenId ] } } as any));
+        await postApplicationsStart(selected.length ? selected : [ firstTokenId ]);
       } else {
-        await directus.request(() => ({ method: "POST", path: "/applications/stop" } as any));
+        await postApplicationsStop();
       }
       await refetchApplications();
     } else if (appStatus.value === "offline") {
-      await directus.request(() => ({ method: "POST", path: "/applications/start", body: { tokenIds: selected.length ? selected : [ firstTokenId ] } } as any));
+      await postApplicationsStart(selected.length ? selected : [ firstTokenId ]);
       await refetchApplications();
     } else if (appStatus.value === "starting" && selectionDiffersFromApp.value) {
-      await directus.request(() => ({ method: "POST", path: "/applications/start", body: { tokenIds: selected.length ? selected : [ firstTokenId ] } } as any));
+      await postApplicationsStart(selected.length ? selected : [ firstTokenId ]);
       await refetchApplications();
     }
   } catch (e) {
