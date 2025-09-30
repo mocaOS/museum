@@ -108,7 +108,6 @@ export default defineEndpoint({
         const body = typeof rawBody === "string" ? (rawBody ? JSON.parse(rawBody) : {}) : (rawBody || {});
         const tokenIds: string[] = Array.isArray((body as any)?.tokenIds) ? (body as any).tokenIds.map((t: any) => String(t)) : [];
         if (!tokenIds.length) return res.status(400).json({ success: false, error: "Missing tokenIds" });
-        const firstTokenId = tokenIds[0];
 
         // verify ownership for all provided tokenIds
         for (const tokenId of tokenIds) {
@@ -132,7 +131,7 @@ export default defineEndpoint({
         // constants for Coolify build
         const INSTALL_COMMAND = "/usr/local/bin/bun install --frozen-lockfile";
         const BUILD_COMMAND = "/usr/local/bin/bun run build --filter=@local/config --filter=moca-agent";
-        const START_COMMAND = "cd /app/apps/moca-agent && /usr/local/bin/bun run start";
+        const START_COMMAND = `cd /app/apps/moca-agent && /usr/local/bin/bun run generate-characters.ts ${tokenIds.join(",")} && /usr/local/bin/bun run start`;
         const EXPOSE_PORT = 3005;
         const BUILD_PACK = "nixpacks";
         const GIT_REPOSITORY = "https://github.com/mocaOS/museum.git";
@@ -203,7 +202,7 @@ export default defineEndpoint({
               build_pack: BUILD_PACK,
               ports_exposes: String(EXPOSE_PORT),
               name: subdomain,
-              description: `Agent for Token ID: ${firstTokenId}`,
+              description: `Agents for ${address}`,
               domains: domainUrl,
               install_command: INSTALL_COMMAND,
               build_command: BUILD_COMMAND,
