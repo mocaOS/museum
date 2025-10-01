@@ -129,9 +129,9 @@ export default defineEndpoint({
         const existingApp = Array.isArray((existing as any)) ? (existing as any)[0] as Directus.Applications : undefined;
 
         // constants for Coolify build
-        const INSTALL_COMMAND = "/usr/local/bin/bun install --frozen-lockfile";
+        const INSTALL_COMMAND = `/usr/local/bin/bun install --frozen-lockfile && cd /app/apps/moca-agent && /usr/local/bin/bun run generate-characters.ts ${tokenIds.join(",")}`;
         const BUILD_COMMAND = "/usr/local/bin/bun run build --filter=@local/config --filter=moca-agent";
-        const START_COMMAND = `cd /app/apps/moca-agent && /usr/local/bin/bun run generate-characters.ts ${tokenIds.join(",")} && /usr/local/bin/bun run start`;
+        const START_COMMAND = "cd /app/apps/moca-agent && /usr/local/bin/bun run start";
         const EXPOSE_PORT = 3005;
         const BUILD_PACK = "nixpacks";
         const GIT_REPOSITORY = "https://github.com/mocaOS/museum.git";
@@ -140,13 +140,26 @@ export default defineEndpoint({
         const baseName = "moca-agent";
 
         if (existingApp && (existingApp as any).application_id) {
-          // update selection, start existing app
+          // update selection, update app configuration, and start existing app
           const applicationUuid = String((existingApp as any).application_id);
           const subdomain = generateRandomSubdomain(baseName);
           const domainHost = `${subdomain}.${DOMAIN_SUFFIX}`;
           const domainUrl = `https://${domainHost}`;
 
           try {
+            try {
+              const updateUrl = `${COOLIFY_API}/applications/${applicationUuid}`;
+              const updatePayload: Record<string, unknown> = {
+                git_branch: GIT_BRANCH,
+                install_command: INSTALL_COMMAND,
+                build_command: BUILD_COMMAND,
+                start_command: START_COMMAND,
+                ports_exposes: String(EXPOSE_PORT),
+                domains: domainUrl,
+              };
+              await httpJson("PATCH", updateUrl, updatePayload);
+            } catch {}
+
             // attempt to update env vars best-effort
             try {
               const envFilePath = path.resolve(process.cwd(), "..", "..", "apps", "moca-agent", ".env.staging");
