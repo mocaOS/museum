@@ -64,33 +64,6 @@ index ca165f4df7d2c091f7bdaffa3ecdd414289717ca..512cb9a575ea4bce0da41d8de37e8c67
          mode: Joi.string().valid('cookie', 'json', 'session'),
          otp: Joi.string(),
      }).unknown();
-diff --git a/dist/controllers/auth.js b/dist/controllers/auth.js
-index 7b6ed705f8523af289b958f26dbb6f10c63dc4ee..dcc66396bde710ad2c306998d4b282b498a9bb49 100644
---- a/dist/controllers/auth.js
-+++ b/dist/controllers/auth.js
-@@ -69,6 +69,22 @@ function getCurrentRefreshToken(req, mode) {
-             return payload.session;
-         }
-     }
-+    // Fallback: allow Authorization header (Bearer <access_token>) to carry session id
-+    const authHeader = req.get('authorization') || req.headers['authorization'];
-+    if (typeof authHeader === 'string') {
-+        const parts = authHeader.split(' ');
-+        const scheme = parts[0];
-+        const token = parts[1];
-+        if (scheme?.toLowerCase() === 'bearer' && token && isDirectusJWT(token)) {
-+            try {
-+                const payload = verifyAccessJWT(token, getSecret());
-+                if (payload?.session) return payload.session;
-+            }
-+            catch (_e) {
-+                // ignore and fall through
-+            }
-+        }
-+    }
-     return undefined;
- }
- router.post('/refresh', asyncHandler(async (req, res, next) => {
 diff --git a/dist/controllers/users.js b/dist/controllers/users.js
 index 5ae4ded9f7b386253f66e15c33656d2c05ccd3e3..fc353064f114106b4ddec1fb4cbb62cf62545287 100644
 --- a/dist/controllers/users.js
@@ -151,19 +124,7 @@ index 4d0d07b72d88b88631a7e24e784ee0c16fc24ac9..d58a195a61407100e848f9b1709b10fe
              .from('directus_users')
              .where('id', userId)
              .first();
-@@ -139,9 +139,8 @@ export class AuthenticationService {
-         };
-         const refreshToken = nanoid(64);
-         const refreshTokenExpiration = new Date(Date.now() + getMilliseconds(env['REFRESH_TOKEN_TTL'], 0));
--        if (options?.session) {
--            tokenPayload.session = refreshToken;
--        }
-+        // Always embed the session identifier in the access token to support Authorization-based refresh
-+        tokenPayload.session = refreshToken;
-         const customClaims = await emitter.emitFilter('auth.jwt', tokenPayload, {
-             status: 'pending',
-             user: user?.id,
-@@ -380,7 +379,7 @@ export class AuthenticationService {
+@@ -380,7 +380,7 @@ export class AuthenticationService {
      }
      async verifyPassword(userID, password) {
          const user = await this.knex
