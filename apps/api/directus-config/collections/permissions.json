@@ -46,7 +46,8 @@
       "status",
       "url",
       "decc0s",
-      "id"
+      "id",
+      "owner"
     ],
     "policy": "b5d43d0f-0d4f-4de9-8214-cca0d7c9971d",
     "_syncId": "5aa9f243-0e0e-42a4-ad41-a79fd4af5813"
