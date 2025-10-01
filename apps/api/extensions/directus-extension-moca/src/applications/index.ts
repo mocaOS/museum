@@ -173,7 +173,6 @@ export default defineEndpoint({
                 build_command: BUILD_COMMAND,
                 start_command: START_COMMAND,
                 ports_exposes: String(EXPOSE_PORT),
-                domains: domainUrl,
               };
               await httpJson("PATCH", updateUrl, updatePayload);
             } catch {}
