@@ -160,21 +160,6 @@ export default defineEndpoint({
               await httpJson("PATCH", updateUrl, updatePayload);
             } catch {}
 
-            // attempt to update env vars best-effort
-            try {
-              const envFilePath = path.resolve(process.cwd(), "..", "..", "apps", "moca-agent", ".env.staging");
-              const envRaw = readFileSync(envFilePath, "utf8");
-              const envMap = parseDotEnv(envRaw);
-              const entries = Object.entries(envMap).map(([ key, value ]) => ({ key, value }));
-              if (entries.length > 0) {
-                const bulkUrl = `${COOLIFY_API}/applications/${applicationUuid}/envs/bulk`;
-                const bulkBody = {
-                  data: entries.map(({ key, value }) => ({ key, value, is_preview: false, is_build_time: false, is_literal: true, is_multiline: false, is_shown_once: false })),
-                } as Record<string, unknown>;
-                await httpJson("PATCH", bulkUrl, bulkBody);
-              }
-            } catch {}
-
             // start existing application
             const startUrl = `${COOLIFY_API}/applications/${applicationUuid}/start?instant_deploy=true&force=false`;
             await httpJson("GET", startUrl);
