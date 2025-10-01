@@ -147,9 +147,9 @@ export default defineEndpoint({
         const existingApp = Array.isArray((existing as any)) ? (existing as any)[0] as Directus.Applications : undefined;
 
         // constants for Coolify build
-        const INSTALL_COMMAND = `/usr/local/bin/bun install --frozen-lockfile && cd /app/apps/moca-agent && /usr/local/bin/bun run generate-characters.ts ${tokenIds.join(",")}`;
-        const BUILD_COMMAND = "/usr/local/bin/bun run build --filter=@local/config --filter=moca-agent";
-        const START_COMMAND = "cd /app/apps/moca-agent && /usr/local/bin/bun run start";
+        const INSTALL_COMMAND = "/usr/local/bin/bun install --frozen-lockfile";
+        const BUILD_COMMAND = "#";
+        const START_COMMAND = `cd /app/apps/moca-agent && /usr/local/bin/bun run generate-characters.ts ${tokenIds.join(",")} && /usr/local/bin/bun run start`;
         const EXPOSE_PORT = 3005;
         const BUILD_PACK = "nixpacks";
         const GIT_REPOSITORY = "https://github.com/mocaOS/museum.git";
