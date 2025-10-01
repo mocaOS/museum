@@ -87,8 +87,6 @@ export default defineNuxtConfig({
     provider: "ipx",
   },
 
-  // Authentication handled via `nuxt-auth-utils`.
-
   icon: {
     provider: "server",
     mode: "svg",

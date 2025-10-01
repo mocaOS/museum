@@ -4,14 +4,24 @@ import { getUserSession, setUserSession } from "#imports";
 export default defineEventHandler(async (event) => {
   const session = await getUserSession(event);
   const refreshToken = (session as any)?.refresh_token;
+  const currentAccessToken = (session as any)?.access_token;
+
   if (!refreshToken) {
     throw createError({ statusCode: 400, statusMessage: "Missing refresh token" });
   }
 
   const directusUrl = config.api.baseUrl;
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+
+  // Include Authorization header with access token if available
+  // This allows Directus to extract session from the token as a fallback
+  if (currentAccessToken) {
+    headers.Authorization = `Bearer ${currentAccessToken}`;
+  }
+
   const res = await fetch(`${directusUrl}/auth/refresh`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers,
     body: JSON.stringify({ mode: "json", refresh_token: refreshToken }),
   });
 

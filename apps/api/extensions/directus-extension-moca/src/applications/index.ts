@@ -195,7 +195,7 @@ export default defineEndpoint({
             // start existing application
             const startUrl = `${COOLIFY_API}/applications/${applicationUuid}/start?instant_deploy=true&force=true`;
             await httpJson("GET", startUrl);
-            await applicationsService.updateOne((existingApp as any).id as any, { status: "starting", decc0s: tokenIds.join(","), url: domainUrl } as Partial<Directus.Applications>);
+            await applicationsService.updateOne((existingApp as any).id as any, { status: "starting", decc0s: tokenIds.join(",") } as Partial<Directus.Applications>);
             scheduleStatusPoll(applicationUuid, applicationsService, (existingApp as any).id as any);
             const updated = await applicationsService.readOne((existingApp as any).id as any, { fields: [ "id", "status", "url", "application_id", "decc0s", "owner.id" ] as any });
             return res.json({ success: true, created: false, started: true, application: updated });
