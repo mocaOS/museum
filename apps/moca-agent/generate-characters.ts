@@ -201,9 +201,9 @@ function escapeForTypeScript(str: string): string {
 // Function to generate character file content
 function generateCharacterFile(data: CodexData, tokenId: number): string {
   const name = getCharacterName(data);
-  const bio = generateCharacterBio(data);
-  const system = generateSystemPrompt(data);
-  const topics = generateTopics(data);
+  const bio = data.v001_bio || generateCharacterBio(data);
+  const system = data.v001_system || generateSystemPrompt(data);
+  const topics = data.v001_topics || generateTopics(data);
   const avatar = data.thumbnail || "";
 
   return `import type { Character } from "@elizaos/core";
@@ -284,17 +284,8 @@ export const character: Character = {
     ],
   ],
   style: {
-    all: [
-      "Be expressive and authentic to your character",
-      "Share insights about crypto art and culture",
-      "Reference your cultural background when relevant",
-      "Engage thoughtfully with questions about art and technology",
-    ],
-    chat: [
-      "Be conversational and approachable",
-      "Share your unique perspective as a DeCC0 character",
-      "Encourage exploration of MOCA's collection",
-    ],
+    all: ${JSON.stringify(data.v001_style, null, 2).replace(/("\n\])/, "\",\n]").split("\n").join("\n    ")},
+    chat: ${JSON.stringify(data.writing_style, null, 2).replace(/("\n\])/, "\",\n]").split("\n").join("\n    ")},
   },
 };
 `;

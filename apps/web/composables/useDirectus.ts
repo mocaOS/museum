@@ -61,7 +61,23 @@ function getOrCreateClient(directusUrl: string) {
             try {
               const previousToken = currentAccessToken.value;
               // Attempt to refresh access token via our API, then refetch session
-              await $fetch("/api/auth/refresh", { method: "POST" }).catch(() => {});
+              const refreshResult = await $fetch("/api/auth/refresh", { method: "POST" }).catch((e): { ok: boolean } | null => {
+                // If refresh fails with 401, session is cleared - redirect to login
+                if (e?.statusCode === 401) {
+                  if (process.client) {
+                    connectionHealth.value = "unhealthy";
+                    navigateTo("/login");
+                  }
+                  return null;
+                }
+                return null;
+              });
+              
+              // If refresh failed, don't retry the request
+              if (!refreshResult) {
+                throw error;
+              }
+              
               const { fetch: refreshSession } = useUserSession();
               await refreshSession().catch(() => {});
               // Wait briefly for token state to update after refresh
@@ -81,6 +97,9 @@ function getOrCreateClient(directusUrl: string) {
               return await originalRequest(withOptions(command, retryOptions));
             } catch {
               connectionHealth.value = "unhealthy";
+              if (process.client) {
+                await navigateTo("/login");
+              }
             }
           } else if (process.client) {
             connectionHealth.value = "unhealthy";

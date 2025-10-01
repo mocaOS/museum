@@ -1,5 +1,5 @@
 import config from "@local/config";
-import { getUserSession, setUserSession } from "#imports";
+import { getUserSession, setUserSession, clearUserSession } from "#imports";
 
 export default defineEventHandler(async (event) => {
   const session = await getUserSession(event);
@@ -18,6 +18,12 @@ export default defineEventHandler(async (event) => {
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: { message: res.statusText } }));
+    
+    // If refresh token is invalid/expired (401), clear the session so user can log in again
+    if (res.status === 401) {
+      await clearUserSession(event);
+    }
+    
     throw createError({ statusCode: res.status, statusMessage: err?.errors?.[0]?.message || err?.error?.message || "Refresh failed" });
   }
 
