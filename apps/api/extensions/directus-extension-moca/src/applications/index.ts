@@ -306,5 +306,39 @@ export default defineEndpoint({
         return res.status(code).json({ success: false, error: msg });
       }
     });
+
+    router.get("/url", async (req, res) => {
+      try {
+        const { userId, address } = await getRequester((req as any));
+        const schema = await getSchema();
+        const { ItemsService } = services;
+        const applicationsService = new ItemsService("applications", { schema });
+
+        const existing = await applicationsService.readByQuery({
+          filter: { owner: { _eq: userId } },
+          limit: 1,
+          fields: [ "id", "url", "status", "application_id", "decc0s" ],
+        });
+        const application = Array.isArray((existing as any)) ? (existing as any)[0] as Directus.Applications : undefined;
+
+        if (!application || !application.url) {
+          return res.status(404).json({ success: false, error: "Application not found" });
+        }
+
+        // verify ownership using first configured token (if present)
+        const decc0s = String((application as any).decc0s || "");
+        const tokens = decc0s.split(",").map(s => s.trim()).filter(Boolean);
+        if (tokens.length > 0) {
+          const ok = await verifyOwnership(tokens[0] as string, address);
+          if (!ok) return res.status(403).json({ success: false, error: "Ownership not verified" });
+        }
+
+        return res.json({ success: true, url: application.url, application });
+      } catch (error: any) {
+        const msg = String(error?.message || "Internal Server Error");
+        const code = msg === "Unauthorized" ? 401 : (msg.includes("ethereum_address") ? 400 : 500);
+        return res.status(code).json({ success: false, error: msg });
+      }
+    });
   },
 });

@@ -1,6 +1,3 @@
-import { readdirSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 import {
   type Character,
   type IAgentRuntime,
@@ -8,42 +5,20 @@ import {
   type ProjectAgent,
   logger,
 } from "@elizaos/core";
+
 import starterPlugin from "./plugin.ts";
 import coingeckoPlugin from "./plugins/coingecko.ts";
 import r2rRAGPlugin from "./plugins/r2r-rag.ts";
 
+// Import all DeCC0 characters statically
+import { character as decc0_1001 } from "./characters/decc0_1001.ts";
+
 /**
- * Dynamically loads all character files from the characters directory
+ * Array of all DeCC0 characters
  */
-async function loadCharactersFromDirectory(): Promise<Character[]> {
-  const __dirname = dirname(fileURLToPath(import.meta.url));
-  const charactersDir = join(__dirname, "characters");
-  const characters: Character[] = [];
-
-  try {
-    const files = readdirSync(charactersDir);
-
-    for (const file of files) {
-      if (file.endsWith(".ts") && file.startsWith("decc0_")) {
-        try {
-          const characterModule = await import(`./characters/${file}`);
-          if (characterModule.character) {
-            characters.push(characterModule.character);
-            logger.info(`✅ Loaded character from: ${file}`);
-          } else {
-            logger.warn(`⚠️  No character export found in: ${file}`);
-          }
-        } catch (error) {
-          logger.error(`❌ Failed to load character from ${file}:`, error);
-        }
-      }
-    }
-  } catch (error) {
-    logger.warn("⚠️  Could not read characters directory:", error);
-  }
-
-  return characters;
-}
+const decc0Characters: Character[] = [
+  decc0_1001,
+];
 
 /**
  * Creates a project agent for a given character
@@ -59,9 +34,6 @@ function createProjectAgent(character: Character): ProjectAgent {
     plugins: [ starterPlugin, coingeckoPlugin, r2rRAGPlugin ],
   };
 }
-
-// Load all characters dynamically
-const decc0Characters = await loadCharactersFromDirectory();
 
 // Create project with all agents
 const project: Project = {

@@ -12,6 +12,7 @@
  * - Read codex data from codex/Art_DeCC0_XXXXX.codex.json files
  * - Generate character files in src/characters/decc0_TOKENID.ts
  * - Delete any existing decc0_*.ts files that weren't specified
+ * - Update src/index.ts with the necessary imports and character array
  */
 
 import { existsSync, mkdirSync, readFileSync, readdirSync, unlinkSync, writeFileSync } from "node:fs";
@@ -353,6 +354,101 @@ for (const file of decc0Files) {
       deletedCount++;
     }
   }
+}
+
+// Update index.ts with character imports
+console.log("\n📝 Updating index.ts with character imports...");
+const INDEX_PATH = join(__dirname, "src", "index.ts");
+
+try {
+  // Sort token IDs for consistent ordering
+  const sortedTokenIds = [ ...tokenIds ].sort((a, b) => a - b);
+
+  // Read current index.ts
+  const currentContent = readFileSync(INDEX_PATH, "utf-8");
+  const lines = currentContent.split("\n");
+
+  // Find key line indices to identify sections
+  let coreImportEnd = -1;
+  let pluginImportStart = -1;
+  let pluginImportEnd = -1;
+  let arrayStart = -1;
+  let arrayEnd = -1;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+
+    // Find end of core @elizaos/core import block
+    if (line.includes("} from \"@elizaos/core\";")) {
+      coreImportEnd = i;
+    }
+
+    // Find plugin imports
+    if (line.includes("import starterPlugin")) {
+      pluginImportStart = i;
+    }
+    if (line.includes("import r2rRAGPlugin")) {
+      pluginImportEnd = i;
+    }
+
+    // Find array declaration
+    if (line.includes("const decc0Characters: Character[] = [")) {
+      arrayStart = i;
+    }
+    if (arrayStart !== -1 && arrayEnd === -1 && line.includes("];")) {
+      arrayEnd = i;
+    }
+  }
+
+  // Validate that we found all necessary sections
+  if (coreImportEnd === -1 || pluginImportStart === -1 || pluginImportEnd === -1 || arrayStart === -1 || arrayEnd === -1) {
+    throw new Error("Could not find required sections in index.ts");
+  }
+
+  // Build the new file content
+  const newLines: string[] = [];
+
+  // 1. Core imports (up to and including @elizaos/core import)
+  newLines.push(...lines.slice(0, coreImportEnd + 1));
+  newLines.push("");
+
+  // 2. Plugin imports (these should stay the same)
+  newLines.push("import starterPlugin from \"./plugin.ts\";");
+  newLines.push("import coingeckoPlugin from \"./plugins/coingecko.ts\";");
+  newLines.push("import r2rRAGPlugin from \"./plugins/r2r-rag.ts\";");
+
+  // 3. Character imports (only if we have characters to import)
+  if (sortedTokenIds.length > 0) {
+    newLines.push("");
+    newLines.push("// Import all DeCC0 characters statically");
+    for (const id of sortedTokenIds) {
+      newLines.push(`import { character as decc0_${id} } from \"./characters/decc0_${id}.ts\";`);
+    }
+  }
+
+  // 4. Array comment and declaration
+  newLines.push("");
+  newLines.push("/**");
+  newLines.push(" * Array of all DeCC0 characters");
+  newLines.push(" */");
+  newLines.push("const decc0Characters: Character[] = [");
+  if (sortedTokenIds.length > 0) {
+    for (const id of sortedTokenIds) {
+      newLines.push(`  decc0_${id},`);
+    }
+  }
+  newLines.push("];");
+
+  // 5. Rest of the file (after the array closing bracket)
+  newLines.push(...lines.slice(arrayEnd + 1));
+
+  // Write updated content
+  const newContent = newLines.join("\n");
+  writeFileSync(INDEX_PATH, newContent, "utf-8");
+  console.log(`✅ Updated index.ts with ${sortedTokenIds.length} character import(s)`);
+} catch (error) {
+  console.error("❌ Error updating index.ts:", error);
+  throw error;
 }
 
 // Summary

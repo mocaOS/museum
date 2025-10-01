@@ -36,6 +36,14 @@
             </span>
             <span v-else>{{ headerButtonLabel }}</span>
           </Button>
+          <Button
+            @click="openChat"
+            v-if="appStatus === 'online' && applicationUrl"
+            size="sm"
+            variant="outline"
+          >
+            Chat now!
+          </Button>
         </div>
       </div>
 
@@ -213,7 +221,24 @@ const { data: applicationsData, refetch: refetchApplications, suspense: suspense
       filter: { owner: { _eq: directusUserId.value } },
       limit: 1,
     }));
-    return response as Applications[];
+
+    const apps = response as Applications[];
+
+    if (apps.length > 0) {
+      try {
+        const urlData = await directus.request(() => ({
+          method: "GET",
+          path: "/applications/url",
+        })) as { success?: boolean; url?: string };
+        if (urlData.success && urlData.url) {
+          apps[0] = { ...apps[0], url: urlData.url };
+        }
+      } catch (e) {
+        console.warn("Failed to fetch application URL:", e);
+      }
+    }
+
+    return apps;
   },
   refetchInterval: 10_000,
   refetchIntervalInBackground: true,
@@ -227,6 +252,7 @@ const tokens = computed(() => {
 });
 const tokenIds = computed(() => (tokens.value || []).map(t => t.tokenId));
 const application = computed(() => (applicationsData.value && applicationsData.value[0]) || null);
+const applicationUrl = computed(() => String((application.value as any)?.url || ""));
 const appStatus = computed<AgentStatus>(() => {
   const s = String((application.value as any)?.status || "offline").toLowerCase();
   return (s === "online" || s === "starting") ? (s as AgentStatus) : "offline";
@@ -362,6 +388,12 @@ async function onToggleStartStopHeader() {
     }
   } catch (e) {
     console.error(e);
+  }
+}
+
+function openChat() {
+  if (applicationUrl.value) {
+    window.open(applicationUrl.value, "_blank");
   }
 }
 
