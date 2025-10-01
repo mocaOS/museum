@@ -67,7 +67,25 @@ export default defineEndpoint({
         try {
           const app = await httpJson("GET", `${COOLIFY_API}/applications/${applicationUuid}`) as { status?: string } | undefined;
           const status = typeof app?.status === "string" ? app!.status.toLowerCase() : "";
-          if (status.includes("running")) {
+
+          // Check if there's an ongoing deployment for this application
+          let isDeploying = false;
+          try {
+            const deployments = await httpJson("GET", `${COOLIFY_API}/deployments`) as any[] | undefined;
+            if (Array.isArray(deployments)) {
+              isDeploying = deployments.some((deployment: any) => {
+                const deploymentUrl = String(deployment?.deployment_url || "");
+                return deploymentUrl.includes(applicationUuid);
+              });
+            }
+          } catch {
+            // ignore deployment check errors
+          }
+
+          if (isDeploying) {
+            // Keep status as "starting" while deployment is in progress
+            await applicationsService.updateOne(applicationId as any, { status: "starting" } as Partial<Directus.Applications>);
+          } else if (status.includes("running")) {
             await applicationsService.updateOne(applicationId as any, { status: "online" } as Partial<Directus.Applications>);
             clearInterval(interval);
           }
@@ -158,6 +176,21 @@ export default defineEndpoint({
                 domains: domainUrl,
               };
               await httpJson("PATCH", updateUrl, updatePayload);
+            } catch {}
+
+            // update env vars best-effort
+            try {
+              const envFilePath = path.resolve(process.cwd(), "..", "..", "apps", "moca-agent", ".env.staging");
+              const envRaw = readFileSync(envFilePath, "utf8");
+              const envMap = parseDotEnv(envRaw);
+              const entries = Object.entries(envMap).map(([ key, value ]) => ({ key, value }));
+              if (entries.length > 0) {
+                const bulkUrl = `${COOLIFY_API}/applications/${applicationUuid}/envs/bulk`;
+                const bulkBody = {
+                  data: entries.map(({ key, value }) => ({ key, value, is_preview: false, is_build_time: false, is_literal: true, is_multiline: false, is_shown_once: false })),
+                } as Record<string, unknown>;
+                await httpJson("PATCH", bulkUrl, bulkBody);
+              }
             } catch {}
 
             // start existing application
