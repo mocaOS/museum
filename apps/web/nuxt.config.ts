@@ -23,6 +23,19 @@ export default defineNuxtConfig({
       apiKey: process.env.LITELLM_API_KEY,
       model: process.env.LITELLM_MODEL,
     },
+    session: {
+      // Session password for encrypting cookies (min 32 characters)
+      password: process.env.NUXT_SESSION_PASSWORD || "",
+      // Cookie name
+      name: "moca-session",
+      // Session duration: 7 days
+      maxAge: 60 * 60 * 24 * 7,
+      cookie: {
+        sameSite: "lax" as const,
+        secure: process.env.NODE_ENV === "production",
+        httpOnly: true,
+      },
+    },
     public: {
       ...config,
       // Override r2r config to only include public parts (URL and API key)

@@ -1,18 +1,3 @@
-diff --git a/node_modules/@directus/api/.bun-tag-15933567e08b1cc1 b/.bun-tag-15933567e08b1cc1
-new file mode 100644
-index 0000000000000000000000000000000000000000..e69de29bb2d1d6434b8b29ae775ad8c2e48c5391
-diff --git a/node_modules/@directus/api/.bun-tag-7baa9071a1e533c0 b/.bun-tag-7baa9071a1e533c0
-new file mode 100644
-index 0000000000000000000000000000000000000000..e69de29bb2d1d6434b8b29ae775ad8c2e48c5391
-diff --git a/node_modules/@directus/api/.bun-tag-867ffcc6eaf49db7 b/.bun-tag-867ffcc6eaf49db7
-new file mode 100644
-index 0000000000000000000000000000000000000000..e69de29bb2d1d6434b8b29ae775ad8c2e48c5391
-diff --git a/node_modules/@directus/api/.bun-tag-de0f6b6a88a7379 b/.bun-tag-de0f6b6a88a7379
-new file mode 100644
-index 0000000000000000000000000000000000000000..e69de29bb2d1d6434b8b29ae775ad8c2e48c5391
-diff --git a/node_modules/@directus/api/.bun-tag-ef1e465f68ec201d b/.bun-tag-ef1e465f68ec201d
-new file mode 100644
-index 0000000000000000000000000000000000000000..e69de29bb2d1d6434b8b29ae775ad8c2e48c5391
 diff --git a/dist/auth/drivers/local.js b/dist/auth/drivers/local.js
 index ca165f4df7d2c091f7bdaffa3ecdd414289717ca..512cb9a575ea4bce0da41d8de37e8c67147eacc2 100644
 --- a/dist/auth/drivers/local.js
@@ -76,7 +61,7 @@ index 5ae4ded9f7b386253f66e15c33656d2c05ccd3e3..fc353064f114106b4ddec1fb4cbb62cf
  import checkRateLimit from '../middleware/rate-limiter-registration.js';
  import { respond } from '../middleware/respond.js';
  import useCollection from '../middleware/use-collection.js';
-@@ -298,15 +299,32 @@ router.post('/:pk/tfa/disable', asyncHandler(async (req, _res, next) => {
+@@ -309,15 +310,32 @@ router.post('/:pk/tfa/disable', asyncHandler(async (req, _res, next) => {
  }), respond);
  const registerSchema = Joi.object({
      email: Joi.string().email().required(),
@@ -124,7 +109,7 @@ index 4d0d07b72d88b88631a7e24e784ee0c16fc24ac9..d58a195a61407100e848f9b1709b10fe
              .from('directus_users')
              .where('id', userId)
              .first();
-@@ -380,7 +380,7 @@ export class AuthenticationService {
+@@ -417,7 +417,7 @@ export class AuthenticationService {
      }
      async verifyPassword(userID, password) {
          const user = await this.knex
@@ -137,7 +122,7 @@ diff --git a/dist/services/users.js b/dist/services/users.js
 index 31dacbf3d78d05ca730a99fd9ac0acb5050b9131..0c0c25267f26d2d1343cb682c72f187c7f03aeb1 100644
 --- a/dist/services/users.js
 +++ b/dist/services/users.js
-@@ -381,6 +381,7 @@ export class UsersService extends ItemsService {
+@@ -382,6 +382,7 @@ export class UsersService extends ItemsService {
          const emailFilter = settings?.['public_registration_email_filter'];
          const first_name = input.first_name ?? null;
          const last_name = input.last_name ?? null;
@@ -145,7 +130,7 @@ index 31dacbf3d78d05ca730a99fd9ac0acb5050b9131..0c0c25267f26d2d1343cb682c72f187c
          const partialUser = {
              // Required fields
              email: input.email,
-@@ -390,6 +391,7 @@ export class UsersService extends ItemsService {
+@@ -391,6 +392,7 @@ export class UsersService extends ItemsService {
              // Optional fields
              first_name,
              last_name,
