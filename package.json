@@ -40,5 +40,7 @@
     "chownr": "^2.0.0",
     "ipx": "^3.1.1"
   },
-  "patchedDependencies": {}
+  "patchedDependencies": {
+    "@directus/api@31.0.0": "patches/@directus%2Fapi@31.0.0.patch"
+  }
 }

@@ -190,6 +190,9 @@
       "version": "1.0.0",
     },
   },
+  "patchedDependencies": {
+    "@directus/api@31.0.0": "patches/@directus%2Fapi@31.0.0.patch",
+  },
   "overrides": {
     "borsh": "0.7.0",
     "chownr": "^2.0.0",
