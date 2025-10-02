@@ -98,6 +98,13 @@ export default defineNuxtConfig({
     ],
   },
 
+  components: [
+    {
+      path: "~/components",
+      pathPrefix: false,
+    },
+  ],
+
   shadcn: {
     /**
      * Prefix for all the imported component

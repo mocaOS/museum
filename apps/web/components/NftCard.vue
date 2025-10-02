@@ -31,7 +31,7 @@
           @click="$emit('view')"
           class="flex h-full w-16 cursor-pointer items-center justify-center  hover:scale-110"
         >
-          <Icon name="moca:zoom" class="size-4" />
+          <Icon icon="moca:zoom" class="size-4" />
         </div>
       </div>
     </div>

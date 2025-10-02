@@ -6,8 +6,8 @@
   "dependencies": {
     "@creazy231/eslint-config": "^2.1.0",
     "eslint": "^8.57.1",
-    "eslint-config-turbo": "^2.5.6",
-    "eslint-plugin-better-tailwindcss": "^3.7.7",
+    "eslint-config-turbo": "^2.5.8",
+    "eslint-plugin-better-tailwindcss": "^3.7.9",
     "vue-eslint-parser": "^9.4.3"
   },
   "publishConfig": {

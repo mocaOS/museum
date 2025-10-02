@@ -14,7 +14,7 @@
                 "
               >
                 <div class="group/50 cursor-pointer transition-all">
-                  <Icon name="moca:menu" />
+                  <Icon icon="moca:menu" />
                 </div>
               </PopoverTrigger>
               <PopoverContent
@@ -217,7 +217,7 @@
         </div>
         <div class="flex items-center justify-center">
           <NuxtLink to="/library" class="focus-visible:outline-hidden">
-            <Icon name="moca:logo" class="text-4xl" :class="[{ invert: $colorMode.value === 'light' }]" />
+            <Icon icon="moca:logo" class="text-4xl" :class="[{ invert: $colorMode.value === 'light' }]" />
           </NuxtLink>
         </div>
         <div class="flex items-center justify-end gap-2">

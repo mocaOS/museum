@@ -33,12 +33,12 @@
         >
           <Icon
             v-if="responseMessage.type === 'success'"
-            name="iconamoon:check-circle-1"
+            icon="iconamoon:check-circle-1"
             class="mr-1 h-5 w-5 shrink-0"
           />
           <Icon
             v-else
-            name="iconamoon:sign-times-circle"
+            icon="iconamoon:sign-times-circle"
             class="mr-1 h-5 w-5 shrink-0"
           />
           {{ responseMessage.message }}

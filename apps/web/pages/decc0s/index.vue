@@ -15,7 +15,7 @@
         </div>
         <div v-if="directusUserId" class="flex items-center gap-2">
           <Icon
-            :name="iconForStatus(appStatus)"
+            :icon="iconForStatus(appStatus)"
             :class="cn('h-5 w-5', iconClassForStatus(appStatus))"
           />
           <Button
@@ -29,7 +29,7 @@
               class="inline-flex items-center gap-1"
             >
               <Icon
-                name="line-md:loading-twotone-loop"
+                icon="line-md:loading-twotone-loop"
                 class="h-4 w-4"
               />
               Starting
@@ -129,7 +129,7 @@
                   </div>
                   <div class="flex items-center justify-center">
                     <Icon
-                      :name="isTokenSelected(t.tokenId) ? 'material-symbols:check-box' : 'material-symbols:check-box-outline-blank'"
+                      :icon="isTokenSelected(t.tokenId) ? 'material-symbols:check-box' : 'material-symbols:check-box-outline-blank'"
                       :class="cn(
                         'size-6',
                         isTokenSelected(t.tokenId)

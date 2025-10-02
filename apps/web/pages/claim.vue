@@ -56,8 +56,8 @@
           v-if="responseMessage.message"
           :class="cn('response-message items-center flex mt-4 text-sm', responseMessage.type === 'success' ? 'text-green-500' : 'text-red-500')"
         >
-          <Icon v-if="responseMessage.type === 'success'" name="iconamoon:check-circle-1" class="mr-1" />
-          <Icon v-else name="iconamoon:sign-times-circle" class="mr-1" />
+          <Icon v-if="responseMessage.type === 'success'" icon="iconamoon:check-circle-1" class="mr-1" />
+          <Icon v-else icon="iconamoon:sign-times-circle" class="mr-1" />
           {{ responseMessage.message }}
         </div>
       </div>
