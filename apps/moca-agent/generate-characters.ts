@@ -10,9 +10,11 @@
  *
  * This will:
  * - Read codex data from codex/Art_DeCC0_XXXXX.codex.json files
- * - Generate character files in src/characters/decc0_TOKENID.ts
- * - Delete any existing decc0_*.ts files that weren't specified
- * - Update src/index.ts with the necessary imports and character array
+ * - Generate character files in src/characters/decc0_TOKENID.ts for found token IDs
+ * - Skip token IDs that don't have corresponding codex files (with warning)
+ * - Delete any existing decc0_*.ts files that weren't successfully generated
+ * - Update src/index.ts with the necessary imports and character array for found tokens only
+ * - Exit with success if at least one character was successfully generated
  */
 
 import { existsSync, mkdirSync, readFileSync, readdirSync, unlinkSync, writeFileSync } from "node:fs";
@@ -294,6 +296,8 @@ export const character: Character = {
 // Main generation logic
 let successCount = 0;
 let errorCount = 0;
+const successfulTokenIds: number[] = [];
+const missingTokenIds: number[] = [];
 
 for (const tokenId of tokenIds) {
   const formattedId = formatTokenId(tokenId);
@@ -301,7 +305,8 @@ for (const tokenId of tokenIds) {
   const codexPath = join(CODEX_DIR, codexFilename);
 
   if (!existsSync(codexPath)) {
-    console.error(`❌ Codex file not found for token ID ${tokenId}: ${codexPath}`);
+    console.error(`⚠️  Codex file not found for token ID ${tokenId}: ${codexPath}`);
+    missingTokenIds.push(tokenId);
     errorCount++;
     continue;
   }
@@ -321,6 +326,7 @@ for (const tokenId of tokenIds) {
     const name = getCharacterName(codexData);
     console.log(`✅ Generated character for ${name} (Token ID: ${tokenId})`);
     successCount++;
+    successfulTokenIds.push(tokenId);
   } catch (error) {
     console.error(`❌ Error generating character for token ID ${tokenId}:`, error);
     errorCount++;
@@ -338,7 +344,8 @@ for (const file of decc0Files) {
   const match = file.match(/decc0_(\d+)\.ts/);
   if (match) {
     const fileTokenId = Number.parseInt(match[1], 10);
-    if (!tokenIds.includes(fileTokenId)) {
+    // Only keep files for successfully generated characters
+    if (!successfulTokenIds.includes(fileTokenId)) {
       const filePath = join(CHARACTERS_DIR, file);
       unlinkSync(filePath);
       console.log(`🗑️  Deleted: ${file}`);
@@ -352,8 +359,8 @@ console.log("\n📝 Updating index.ts with character imports...");
 const INDEX_PATH = join(__dirname, "src", "index.ts");
 
 try {
-  // Sort token IDs for consistent ordering
-  const sortedTokenIds = [ ...tokenIds ].sort((a, b) => a - b);
+  // Sort token IDs for consistent ordering (only use successfully generated ones)
+  const sortedTokenIds = [ ...successfulTokenIds ].sort((a, b) => a - b);
 
   // Read current index.ts
   const currentContent = readFileSync(INDEX_PATH, "utf-8");
@@ -447,10 +454,23 @@ console.log("");
 console.log("=".repeat(60));
 console.log("📊 Generation Summary:");
 console.log(`   ✅ Successfully generated: ${successCount} character(s)`);
-console.log(`   ❌ Errors: ${errorCount}`);
+if (successfulTokenIds.length > 0) {
+  console.log(`      Token IDs: ${successfulTokenIds.sort((a, b) => a - b).join(", ")}`);
+}
+if (missingTokenIds.length > 0) {
+  console.log(`   ⚠️  Missing codex files: ${missingTokenIds.length}`);
+  console.log(`      Token IDs: ${missingTokenIds.sort((a, b) => a - b).join(", ")}`);
+}
+if (errorCount > missingTokenIds.length) {
+  console.log(`   ❌ Other errors: ${errorCount - missingTokenIds.length}`);
+}
 console.log(`   🗑️  Deleted: ${deletedCount} old character file(s)`);
 console.log("=".repeat(60));
 
-if (errorCount > 0) {
+// Exit with error only if no characters were successfully generated
+if (successCount === 0) {
+  console.error("\n❌ No characters were successfully generated. Exiting with error.");
   process.exit(1);
+} else if (missingTokenIds.length > 0) {
+  console.log("\n⚠️  Some token IDs were not found, but successfully generated characters have been processed.");
 }

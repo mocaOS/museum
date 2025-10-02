@@ -14,14 +14,11 @@
           </h1>
         </div>
         <div v-if="directusUserId" class="flex items-center gap-2">
-          <Icon
-            :icon="iconForStatus(appStatus)"
-            :class="cn('h-5 w-5', iconClassForStatus(appStatus))"
-          />
           <Button
             @click="onToggleStartStopHeader"
             size="sm"
             class="w-28"
+            :variant="headerButtonVariant"
             :disabled="appStatus === 'starting' || (appStatus !== 'online' && selectedTokenIdsArray.length === 0)"
           >
             <span
@@ -38,9 +35,10 @@
           </Button>
           <Button
             @click="openChat"
-            v-if="appStatus === 'online' && applicationUrl"
+            v-if="application && applicationUrl"
             size="sm"
-            variant="outline"
+            :variant="chatButtonVariant"
+            :disabled="appStatus !== 'online'"
           >
             Chat now!
           </Button>
@@ -271,6 +269,16 @@ const headerButtonLabel = computed<string>(() => {
   if (selectionDiffersFromApp.value) return "Restart";
   return appStatus.value === "online" ? "Stop" : "Start";
 });
+const headerButtonVariant = computed<"outline" | "default" | undefined>(() => {
+  if (appStatus.value === "starting") return "outline";
+  if (headerButtonLabel.value === "Stop") return "outline";
+  return undefined; // default (primary)
+});
+const chatButtonVariant = computed<"outline" | "default" | undefined>(() => {
+  if (headerButtonLabel.value === "Restart") return "outline";
+  if (appStatus.value !== "online") return "outline";
+  return undefined; // default (primary)
+});
 
 watch(applicationTokenIds, (newTokenIds) => {
   if (initializedFromApp.value) return;
@@ -330,18 +338,6 @@ function iconForStatus(status?: AgentStatus) {
     case "offline":
     default:
       return "material-symbols:play-circle-outline";
-  }
-}
-
-function iconClassForStatus(status?: AgentStatus) {
-  switch (status) {
-    case "online":
-      return "text-emerald-500";
-    case "starting":
-      return "text-amber-500";
-    case "offline":
-    default:
-      return "";
   }
 }
 
