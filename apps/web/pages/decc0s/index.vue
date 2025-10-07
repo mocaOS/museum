@@ -14,6 +14,12 @@
           </h1>
         </div>
         <div v-if="directusUserId" class="flex items-center gap-2">
+          <p
+            v-if="loadingInfo && appStatus === 'starting'"
+            class="text-xs text-orange-400"
+          >
+            {{ loadingInfo }}
+          </p>
           <Button
             @click="onToggleStartStopHeader"
             size="sm"
@@ -210,6 +216,8 @@ const { data, isLoading, error, suspense: suspenseOwnedTokens } = useQuery<Owned
 
 await suspenseOwnedTokens();
 
+const loadingInfo = ref<string>("");
+
 const { data: applicationsData, refetch: refetchApplications, suspense: suspenseApplications } = useQuery<Applications[]>({
   queryKey: [ "decc0s-header-applications", directusUserId ],
   enabled: computed(() => !!directusUserId.value),
@@ -228,13 +236,22 @@ const { data: applicationsData, refetch: refetchApplications, suspense: suspense
         const urlData = await directus.request(() => ({
           method: "GET",
           path: "/applications/url",
-        })) as { success?: boolean; url?: string };
+        })) as { success?: boolean; url?: string; info?: string };
         if (urlData.success && urlData.url) {
           apps[0] = { ...apps[0], url: urlData.url };
         }
+        // Update loading info from the response
+        if (urlData.info) {
+          loadingInfo.value = urlData.info;
+        } else {
+          loadingInfo.value = "";
+        }
       } catch (e) {
         console.warn("Failed to fetch application URL:", e);
+        loadingInfo.value = "";
       }
+    } else {
+      loadingInfo.value = "";
     }
 
     return apps;

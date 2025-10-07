@@ -6,9 +6,13 @@ import type { Directus } from "@local/types";
 export default defineEndpoint({
   id: "applications",
 
-  handler: (router: Router, { services, getSchema }) => {
+  handler: (router: Router, { services, getSchema, env }) => {
     // Ensure JSON bodies are parsed for this endpoint
     router.use(expressJson());
+
+    // Store logs for each application
+    const applicationLogs = new Map<number, string[]>();
+
     async function getRequester(req: any): Promise<{ userId: string; address: string }> {
       const userId = req?.accountability?.user;
       if (!userId) throw new Error("Unauthorized");
@@ -66,18 +70,52 @@ export default defineEndpoint({
           const app = await httpJson("GET", `${COOLIFY_API}/applications/${applicationUuid}`) as { status?: string } | undefined;
           const status = typeof app?.status === "string" ? app!.status.toLowerCase() : "";
 
-          // Check if there's an ongoing deployment for this application
+          // Check if there's an ongoing deployment for this application and get its logs
           let isDeploying = false;
           try {
             const deployments = await httpJson("GET", `${COOLIFY_API}/deployments`) as any[] | undefined;
             if (Array.isArray(deployments)) {
-              isDeploying = deployments.some((deployment: any) => {
-                const deploymentUrl = String(deployment?.deployment_url || "");
+              // Find the deployment for this application
+              const deployment = deployments.find((d: any) => {
+                const deploymentUrl = String(d?.deployment_url || "");
                 return deploymentUrl.includes(applicationUuid);
               });
+
+              if (deployment) {
+                isDeploying = true;
+
+                // Get logs directly from the deployment object
+                const deploymentLogs = JSON.parse(deployment.logs);
+
+                if (Array.isArray(deploymentLogs)) {
+                  // Clear existing logs for this application
+                  applicationLogs.set(applicationId, []);
+
+                  console.log(deploymentLogs);
+
+                  // Add each log entry from the deployment
+                  for (const logEntry of deploymentLogs) {
+                    if (logEntry && typeof logEntry === "object") {
+                      const message = String(logEntry?.message || logEntry?.line || logEntry?.output || "");
+                      if (message) {
+                        const logLine = message;
+                        const logs = applicationLogs.get(applicationId) || [];
+                        logs.push(logLine);
+                        applicationLogs.set(applicationId, logs);
+                      }
+                    }
+                  }
+
+                  const logs = applicationLogs.get(applicationId) || [];
+
+                  if (logs.length > 100) {
+                    applicationLogs.set(applicationId, logs.slice(-50));
+                  }
+                }
+              }
             }
-          } catch {
-            // ignore deployment check errors
+          } catch (e: any) {
+            // Ignore deployment check errors
           }
 
           if (isDeploying) {
@@ -87,8 +125,8 @@ export default defineEndpoint({
             await applicationsService.updateOne(applicationId as any, { status: "online" } as Partial<Directus.Applications>);
             clearInterval(interval);
           }
-        } catch {
-          // ignore
+        } catch (e: any) {
+          // Ignore errors
         }
       }, 5000);
     }
@@ -400,7 +438,69 @@ export default defineEndpoint({
           if (!ok) return res.status(403).json({ success: false, error: "Ownership not verified" });
         }
 
-        return res.json({ success: true, url: application.url, application });
+        // Generate loading message from logs using LiteLLM
+        let info = "";
+        const applicationId = (application as any).id;
+
+        if (applicationLogs.has(applicationId)) {
+          const logs = applicationLogs.get(applicationId)!;
+
+          if (logs.length > 0) {
+            try {
+              // Remove timestamps from logs (format: 2025-10-07 08:34:18.183404 or similar ISO timestamps)
+              const cleanedLogs = logs.map((log) => {
+                return log.replace(/^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}(?:\.\d+)?\s+/, "");
+              }).join("\n");
+
+              // Get LiteLLM configuration from environment
+              const litellmUrl = (env as any).LITELLM_URL;
+              const litellmApiKey = (env as any).LITELLM_API_KEY;
+              const litellmModel = (env as any).LITELLM_MODEL;
+
+              if (litellmUrl && litellmApiKey && litellmModel) {
+                const prompt = `You are generating a status message for a user who is deploying their Decc0 AI agent on Coolify infrastructure. Based on the following deployment logs, generate a single short and friendly loading message (maximum 65 characters) that tells the user what's currently happening with their Decc0 agent deployment. Be concise, encouraging, and contextual to Decc0/Coolify.
+
+Logs:
+${cleanedLogs}
+
+Respond with ONLY the loading message, nothing else.`;
+
+                const chatEndpoint = `${litellmUrl.endsWith("/") ? litellmUrl : `${litellmUrl}/`}chat/completions`;
+
+                const response = await fetch(chatEndpoint, {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${litellmApiKey}`,
+                  },
+                  body: JSON.stringify({
+                    model: litellmModel,
+                    messages: [
+                      {
+                        role: "user",
+                        content: prompt,
+                      },
+                    ],
+                    temperature: 0.7,
+                    max_tokens: 100,
+                  }),
+                });
+
+                if (response.ok) {
+                  const data = await response.json();
+                  const generatedMessage = data.choices?.[0]?.message?.content || "";
+                  // Clean up the message (remove quotes if present)
+                  info = generatedMessage.trim().replace(/^["']|["']$/g, "");
+                }
+              }
+            } catch (e: any) {
+              // If LLM call fails, silently ignore and return no info
+              console.error("Failed to generate loading message:", e?.message);
+            }
+          }
+        }
+
+        return res.json({ success: true, url: application.url, application, info });
       } catch (error: any) {
         const msg = String(error?.message || "Internal Server Error");
         const code = msg === "Unauthorized" ? 401 : (msg.includes("ethereum_address") ? 400 : 500);
