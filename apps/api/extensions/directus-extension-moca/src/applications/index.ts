@@ -1,5 +1,3 @@
-import { readFileSync } from "node:fs";
-import path from "node:path";
 import type { Router } from "express";
 import { json as expressJson } from "express";
 import { defineEndpoint } from "@directus/extensions-sdk";
@@ -118,6 +116,55 @@ export default defineEndpoint({
       return envs;
     }
 
+    async function getApplicationEnvFromDirectus(schema: any): Promise<Record<string, string>> {
+      try {
+        const { ItemsService } = services;
+        const settingsService = new ItemsService("settings", { schema });
+
+        const setting = await settingsService.readByQuery({
+          filter: { key: { _eq: "application_env" } },
+          limit: 1,
+          fields: [ "key", "value" ],
+        });
+
+        const settingItem = Array.isArray(setting) ? setting[0] as Directus.Settings : undefined;
+
+        if (!settingItem?.value || typeof settingItem.value !== "string") {
+          throw new Error("application_env setting not found or invalid");
+        }
+
+        return parseDotEnv(settingItem.value);
+      } catch (error: any) {
+        console.error("Error fetching application_env from Directus:", error?.message);
+        return {};
+      }
+    }
+
+    async function deleteAllCoolifyEnvVars(applicationUuid: string): Promise<void> {
+      try {
+        // Get all existing environment variables
+        const envVars = await httpJson("GET", `${COOLIFY_API}/applications/${applicationUuid}/envs`) as any[] | undefined;
+
+        if (!Array.isArray(envVars) || envVars.length === 0) {
+          return;
+        }
+
+        // Delete each environment variable
+        for (const envVar of envVars) {
+          const envId = envVar?.id || envVar?.uuid;
+          if (envId) {
+            try {
+              await httpJson("DELETE", `${COOLIFY_API}/applications/${applicationUuid}/envs/${envId}`);
+            } catch (error: any) {
+              console.error(`Failed to delete env var ${envId}:`, error?.message);
+            }
+          }
+        }
+      } catch (error: any) {
+        console.error("Error deleting Coolify environment variables:", error?.message);
+      }
+    }
+
     router.post("/start", async (req, res) => {
       try {
         // requester and tokens
@@ -160,9 +207,6 @@ export default defineEndpoint({
         if (existingApp && (existingApp as any).application_id) {
           // update selection, update app configuration, and start existing app
           const applicationUuid = String((existingApp as any).application_id);
-          const subdomain = generateRandomSubdomain(baseName);
-          const domainHost = `${subdomain}.${DOMAIN_SUFFIX}`;
-          const domainUrl = `https://${domainHost}`;
 
           try {
             try {
@@ -179,11 +223,14 @@ export default defineEndpoint({
 
             // update env vars best-effort
             try {
-              const envFilePath = path.resolve(process.cwd(), "..", "..", "apps", "moca-agent", ".env.staging");
-              const envRaw = readFileSync(envFilePath, "utf8");
-              const envMap = parseDotEnv(envRaw);
+              const schema = await getSchema();
+              const envMap = await getApplicationEnvFromDirectus(schema);
               const entries = Object.entries(envMap).map(([ key, value ]) => ({ key, value }));
               if (entries.length > 0) {
+                // Delete all existing environment variables first
+                await deleteAllCoolifyEnvVars(applicationUuid);
+
+                // Add new environment variables
                 const bulkUrl = `${COOLIFY_API}/applications/${applicationUuid}/envs/bulk`;
                 const bulkBody = {
                   data: entries.map(({ key, value }) => ({ key, value, is_preview: false, is_build_time: false, is_literal: true, is_multiline: false, is_shown_once: false })),
@@ -254,11 +301,14 @@ export default defineEndpoint({
 
             // upload env vars best-effort
             try {
-              const envFilePath = path.resolve(process.cwd(), "..", "..", "apps", "moca-agent", ".env.staging");
-              const envRaw = readFileSync(envFilePath, "utf8");
-              const envMap = parseDotEnv(envRaw);
+              const schema = await getSchema();
+              const envMap = await getApplicationEnvFromDirectus(schema);
               const entries = Object.entries(envMap).map(([ key, value ]) => ({ key, value }));
               if (entries.length > 0) {
+                // Delete all existing environment variables first (in case any were created during setup)
+                await deleteAllCoolifyEnvVars(applicationUuid);
+
+                // Add new environment variables
                 const bulkUrl = `${COOLIFY_API}/applications/${applicationUuid}/envs/bulk`;
                 const bulkBody = {
                   data: entries.map(({ key, value }) => ({ key, value, is_preview: false, is_build_time: false, is_literal: true, is_multiline: false, is_shown_once: false })),

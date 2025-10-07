@@ -334,6 +334,7 @@ export type DirectusSessions = {
 };
 
 export type DirectusSettings = {
+  ai_group: string;
   auth_login_attempts?: number | null;
   auth_password_policy?: string | null;
   basemaps?: unknown | null;
@@ -345,6 +346,7 @@ export type DirectusSettings = {
   default_theme_light?: string | null;
   id: number;
   mapbox_key?: string | null;
+  mcp_prompts_collection_validation: string;
   module_bar?: unknown | null;
   project_color: string;
   project_descriptor?: string | null;
@@ -492,6 +494,11 @@ export type Rooms = {
   token_id?: string | null;
 };
 
+export type Settings = {
+  key: string;
+  value?: string | null;
+};
+
 export type CustomDirectusTypes = {
   agents: Agents[];
   applications: Applications[];
@@ -527,4 +534,5 @@ export type CustomDirectusTypes = {
   directus_webhooks: DirectusWebhooks[];
   nfts: Nfts[];
   rooms: Rooms[];
+  settings: Settings[];
 };

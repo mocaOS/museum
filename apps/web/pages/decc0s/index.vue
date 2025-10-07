@@ -195,6 +195,7 @@ const runtimeConfig = useRuntimeConfig();
 const { directus } = useDirectus();
 const selectedTokenIds = ref<Set<string>>(new Set());
 const initializedFromApp = ref(false);
+const isStarting = ref(false);
 
 const directusUserId = computed(() => (session.value as any)?.user?.id || null);
 const address = computed(() => (session.value as any)?.user?.ethereum_address);
@@ -252,6 +253,7 @@ const tokenIds = computed(() => (tokens.value || []).map(t => t.tokenId));
 const application = computed(() => (applicationsData.value && applicationsData.value[0]) || null);
 const applicationUrl = computed(() => String((application.value as any)?.url || ""));
 const appStatus = computed<AgentStatus>(() => {
+  if (isStarting.value) return "starting";
   const s = String((application.value as any)?.status || "offline").toLowerCase();
   return (s === "online" || s === "starting") ? (s as AgentStatus) : "offline";
 });
@@ -329,18 +331,6 @@ async function postApplicationsStop() {
   });
 }
 
-function iconForStatus(status?: AgentStatus) {
-  switch (status) {
-    case "online":
-      return "material-symbols:check-circle-outline";
-    case "starting":
-      return "line-md:loading-twotone-loop";
-    case "offline":
-    default:
-      return "material-symbols:play-circle-outline";
-  }
-}
-
 function isTokenSelected(id: string): boolean {
   return selectedTokenIds.value.has(String(id));
 }
@@ -370,20 +360,25 @@ async function onToggleStartStopHeader() {
   try {
     if (appStatus.value === "online") {
       if (selectionDiffersFromApp.value) {
+        isStarting.value = true;
         await postApplicationsStart(selected.length ? selected : [ firstTokenId ]);
       } else {
         await postApplicationsStop();
       }
       await refetchApplications();
     } else if (appStatus.value === "offline") {
+      isStarting.value = true;
       await postApplicationsStart(selected.length ? selected : [ firstTokenId ]);
       await refetchApplications();
     } else if (appStatus.value === "starting" && selectionDiffersFromApp.value) {
+      isStarting.value = true;
       await postApplicationsStart(selected.length ? selected : [ firstTokenId ]);
       await refetchApplications();
     }
   } catch (e) {
     console.error(e);
+  } finally {
+    isStarting.value = false;
   }
 }
 

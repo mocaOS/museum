@@ -269,6 +269,7 @@ type Subscription {
   agents_mutated(event: EventEnum): agents_mutated
   rooms_mutated(event: EventEnum): rooms_mutated
   applications_mutated(event: EventEnum): applications_mutated
+  settings_mutated(event: EventEnum): settings_mutated
 }
 
 """The `Boolean` scalar type represents `true` or `false`."""
@@ -1773,6 +1774,17 @@ type server_info_project {
 type server_info_query_limit {
   default: Int
   max: Int
+}
+
+type settings {
+  key: ID!
+  value: String
+}
+
+type settings_mutated {
+  key: ID!
+  event: EventEnum
+  data: settings
 }
 
 type users_me_tfa_generate_data {

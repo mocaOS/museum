@@ -27,6 +27,10 @@ type Query {
   applications_by_id(id: ID!, version: String): applications
   applications_aggregated(groupBy: [String], filter: applications_filter, limit: Int, offset: Int, page: Int, search: String, sort: [String]): [applications_aggregated!]!
   applications_by_version(version: String!, id: ID!): version_applications
+  settings(filter: settings_filter, sort: [String], limit: Int, offset: Int, page: Int, search: String): [settings!]!
+  settings_by_id(id: ID!, version: String): settings
+  settings_aggregated(groupBy: [String], filter: settings_filter, limit: Int, offset: Int, page: Int, search: String, sort: [String]): [settings_aggregated!]!
+  settings_by_version(version: String!, id: ID!): version_settings
 }
 
 type Mutation {
@@ -44,6 +48,8 @@ type Mutation {
   create_rooms_item(data: create_rooms_input!): rooms
   create_applications_items(filter: applications_filter, sort: [String], limit: Int, offset: Int, page: Int, search: String, data: [create_applications_input!]): [applications!]!
   create_applications_item(data: create_applications_input!): applications
+  create_settings_items(filter: settings_filter, sort: [String], limit: Int, offset: Int, page: Int, search: String, data: [create_settings_input!]): [settings!]!
+  create_settings_item(data: create_settings_input!): settings
   update_contracts_items(filter: contracts_filter, sort: [String], limit: Int, offset: Int, page: Int, search: String, ids: [ID]!, data: update_contracts_input!): [contracts!]!
   update_contracts_batch(filter: contracts_filter, sort: [String], limit: Int, offset: Int, page: Int, search: String, data: [update_contracts_input!]): [contracts!]!
   update_contracts_item(id: ID!, data: update_contracts_input!): contracts
@@ -65,6 +71,9 @@ type Mutation {
   update_applications_items(filter: applications_filter, sort: [String], limit: Int, offset: Int, page: Int, search: String, ids: [ID]!, data: update_applications_input!): [applications!]!
   update_applications_batch(filter: applications_filter, sort: [String], limit: Int, offset: Int, page: Int, search: String, data: [update_applications_input!]): [applications!]!
   update_applications_item(id: ID!, data: update_applications_input!): applications
+  update_settings_items(filter: settings_filter, sort: [String], limit: Int, offset: Int, page: Int, search: String, ids: [ID]!, data: update_settings_input!): [settings!]!
+  update_settings_batch(filter: settings_filter, sort: [String], limit: Int, offset: Int, page: Int, search: String, data: [update_settings_input!]): [settings!]!
+  update_settings_item(id: ID!, data: update_settings_input!): settings
   delete_contracts_items(ids: [ID]!): delete_many
   delete_contracts_item(id: ID!): delete_one
   delete_directus_sync_id_map_items(ids: [ID]!): delete_many
@@ -79,6 +88,8 @@ type Mutation {
   delete_rooms_item(id: ID!): delete_one
   delete_applications_items(ids: [ID]!): delete_many
   delete_applications_item(id: ID!): delete_one
+  delete_settings_items(ids: [ID]!): delete_many
+  delete_settings_item(id: ID!): delete_one
 }
 
 type Subscription {
@@ -110,6 +121,7 @@ type Subscription {
   agents_mutated(event: EventEnum): agents_mutated
   rooms_mutated(event: EventEnum): rooms_mutated
   applications_mutated(event: EventEnum): applications_mutated
+  settings_mutated(event: EventEnum): settings_mutated
 }
 
 """The `Boolean` scalar type represents `true` or `false`."""
@@ -1047,6 +1059,29 @@ type rooms_mutated {
   data: rooms
 }
 
+type settings {
+  key: ID!
+  value: String
+}
+
+type settings_aggregated {
+  group: JSON
+  countAll: Int
+  count: settings_aggregated_count
+  countDistinct: settings_aggregated_count
+}
+
+type settings_aggregated_count {
+  key: Int
+  value: Int
+}
+
+type settings_mutated {
+  key: ID!
+  event: EventEnum
+  data: settings
+}
+
 """"""
 type version_agents {
   id: ID
@@ -1137,6 +1172,12 @@ type version_rooms {
   image: JSON
   model: JSON
   token_id: String
+}
+
+""""""
+type version_settings {
+  key: ID
+  value: String
 }
 
 input agents_filter {
@@ -1465,6 +1506,11 @@ input create_rooms_input {
   image: create_directus_files_input
   model: create_directus_files_input
   token_id: String
+}
+
+input create_settings_input {
+  key: ID!
+  value: String
 }
 
 input date_filter_operators {
@@ -2062,6 +2108,13 @@ input rooms_filter {
   _or: [rooms_filter]
 }
 
+input settings_filter {
+  key: string_filter_operators
+  value: string_filter_operators
+  _and: [settings_filter]
+  _or: [settings_filter]
+}
+
 input string_filter_operators {
   _eq: String
   _neq: String
@@ -2284,4 +2337,9 @@ input update_rooms_input {
   image: update_directus_files_input
   model: update_directus_files_input
   token_id: String
+}
+
+input update_settings_input {
+  key: ID
+  value: String
 }
