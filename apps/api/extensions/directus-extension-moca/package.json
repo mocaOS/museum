@@ -43,6 +43,11 @@
         "type": "endpoint",
         "name": "applications",
         "source": "src/applications/index.ts"
+      },
+      {
+        "type": "endpoint",
+        "name": "codex",
+        "source": "src/codex/index.ts"
       }
     ],
     "host": "^10.10.0"
