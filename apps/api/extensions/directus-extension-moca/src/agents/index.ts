@@ -1,13 +1,12 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import type { Router } from "express";
 import { defineEndpoint } from "@directus/extensions-sdk";
 import type { Directus } from "@local/types";
 
 export default defineEndpoint({
   id: "agents",
 
-  handler: (router: Router, { services, getSchema }) => {
+  handler: (router, { services, getSchema }) => {
     // Shared helpers used by endpoints below
     async function getRequesterAddress(req: any): Promise<string> {
       const userId = req?.accountability?.user;

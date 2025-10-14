@@ -63,7 +63,8 @@
     "@local/types": "workspace:*",
     "axios": "^1.12.2",
     "js-base64": "^3.7.8",
-    "r2r-js": "^0.4.43"
+    "r2r-js": "^0.4.43",
+    "express": "^5.1.0"
   },
   "devDependencies": {
     "@directus/extensions-sdk": "^16.0.2",
