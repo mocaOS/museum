@@ -21,48 +21,68 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, unlinkSync, writeFile
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-interface CodexData {
-  id: number;
-  name: string[];
+interface MessageExample {
+  content: {
+    text: string;
+  };
+  name: string;
+}
+
+interface AgentProfile {
   adjectives?: string[];
-  background?: string;
-  background_ipfs?: string;
-  background_or_foreground?: string;
-  background_texture?: string;
-  bgthumbnail?: string;
-  biography?: string | string[];
-  character_image_description?: string;
-  character_image_summary?: string;
-  character_ipfs?: string;
-  citation?: string;
+  bio?: string[];
+  knowledge?: string[];
+  messageExamples?: Array<Array<MessageExample> | { messages: MessageExample[] }>;
+  name?: string;
+  plugins?: string[];
+  postExamples?: string[];
+  settings?: Record<string, unknown>;
+  style?: {
+    all?: string[];
+    chat?: string[];
+    post?: string[];
+  };
+  system?: string;
+  target?: string;
+  timestamp_created?: string;
+  topics?: string[];
+  username?: string;
+  version?: string;
+}
+
+interface CodexData {
+  agent_profiles?: Record<string, AgentProfile> & {
+    latest?: string;
+  };
+  timestamp_created?: string;
+  whatness?: string[];
+  writing_comma?: string;
+  writing_ellipses?: string;
+  writing_exclamation?: string;
+  writing_flavor?: string;
+  writing_flavor_cultural?: string;
+  writing_questions?: string;
+  writing_quirks?: string;
+  writing_quotation_marks?: string;
+  writing_sentence_complexity?: string;
+  writing_style?: string[];
+  x?: number;
+  name?: string[];
+  description?: string;
+  characterization?: string;
+  biography?: string[];
+  biography_addendum?: string;
   cultural_affiliation?: string;
-  dna1?: string;
-  dna2?: string;
-  dna3?: string;
-  dna4?: string;
+  philosophical_affiliation?: string;
+  gender?: string[];
+  self_identity?: string;
   favorite_book?: string;
   favorite_cryptoartist?: string;
-  final_ipfs?: string;
-  gender?: string;
+  favorite_role?: string;
+  cryptoart_focus?: string;
+  topics?: string[];
   mood?: string;
-  multiplicity?: string;
-  pairedart_image_description?: string;
-  pairedart_image_summary?: string;
-  soul?: number;
   thumbnail?: string;
-  timestamp?: string;
-  type?: string;
-  v001_adjectives?: string[];
-  v001_bio?: string[];
-  v001_description?: string;
-  v001_name?: string;
-  v001_style?: string[];
-  v001_system?: string;
-  v001_timestamp?: string;
-  v001_topics?: string[];
-  v001_username?: string;
-  whatness?: string;
-  writing_style?: string;
 }
 
 // Parse command-line arguments for token IDs
@@ -105,54 +125,73 @@ function formatTokenId(tokenId: number): string {
   return tokenId.toString().padStart(5, "0");
 }
 
+// Helper function to get the latest agent profile from codex data
+function getLatestProfile(data: CodexData): AgentProfile | undefined {
+  if (!data.agent_profiles?.latest) return undefined;
+
+  const version = data.agent_profiles.latest;
+
+  return data.agent_profiles[version];
+}
+
 // Function to generate a character name from codex data
-function getCharacterName(data: CodexData): string {
-  if (data.name && Array.isArray(data.name) && data.name.length > 0) {
+function getCharacterName(data: CodexData, tokenId: number): string {
+  const profile = getLatestProfile(data);
+
+  // Try to get name from agent profile first
+  if (profile?.name) {
+    return profile.name;
+  }
+
+  // Try to get name from root level
+  if (data.name && data.name.length > 0) {
     return data.name[0];
   }
-  return `DeCC0 #${data.id}`;
+
+  // Fallback to token ID
+  return `DeCC0 #${tokenId}`;
 }
 
 // Function to generate character bio from codex data
 function generateCharacterBio(data: CodexData): string[] {
-  const bio: string[] = [];
+  const profile = getLatestProfile(data);
 
-  if (data.biography) {
-    // Biography might be a string or array, handle both cases
-    if (Array.isArray(data.biography)) {
-      bio.push(...data.biography);
-    } else {
-      bio.push(data.biography);
-    }
+  if (profile?.bio && profile.bio.length > 0) {
+    return profile.bio;
   }
 
-  if (data.cultural_affiliation) {
-    bio.push(`Cultural Background: ${data.cultural_affiliation}`);
-  }
-
-  if (data.dna1 || data.dna2 || data.dna3 || data.dna4) {
-    const dna = [ data.dna1, data.dna2, data.dna3, data.dna4 ].filter(Boolean).join(", ");
-    if (dna) {
-      bio.push(`Artistic DNA: ${dna}`);
-    }
-  }
-
-  return bio;
+  // Fallback to default bio if no profile bio is available
+  return [
+    "A DeCC0 NFT character from the Museum of Crypto Art (M○C△).",
+    "Part of a groundbreaking collection that embodies the principles of decentralized creativity.",
+  ];
 }
 
 // Function to generate system prompt
-function generateSystemPrompt(data: CodexData): string {
-  const name = getCharacterName(data);
-  let prompt = `You are ${name}, a DeCC0 NFT character from the Museum of Crypto Art (M○C△).\n\n`;
+function generateSystemPrompt(data: CodexData, tokenId: number): string {
+  const profile = getLatestProfile(data);
 
-  if (data.biography) {
-    // Biography might be a string or array, handle both cases
-    const bioText = Array.isArray(data.biography) ? data.biography.join("\n\n") : data.biography;
-    prompt += `${bioText}\n\n`;
+  // Use system prompt from agent profile if available
+  if (profile?.system) {
+    return profile.system;
   }
 
-  if (data.cultural_affiliation) {
-    prompt += `You are rooted in ${data.cultural_affiliation} culture.\n\n`;
+  // Otherwise, generate a default system prompt
+  const name = getCharacterName(data, tokenId);
+  let prompt = `You are ${name}, a DeCC0 NFT character from the Museum of Crypto Art (M○C△).\n\n`;
+
+  // Add bio if available
+  if (profile?.bio && profile.bio.length > 0) {
+    prompt += `${profile.bio.join("\n\n")}\n\n`;
+  }
+
+  // Add knowledge if available
+  if (profile?.knowledge && profile.knowledge.length > 0) {
+    prompt += "Key knowledge:\n";
+    profile.knowledge.slice(0, 5).forEach((k) => {
+      prompt += `- ${k}\n`;
+    });
+    prompt += "\n";
   }
 
   prompt += "As a DeCC0 character, you embody the principles of decentralized creativity and crypto art. ";
@@ -168,26 +207,25 @@ function generateSystemPrompt(data: CodexData): string {
 
 // Function to generate topics
 function generateTopics(data: CodexData): string[] {
-  const topics: string[] = [
+  const profile = getLatestProfile(data);
+
+  // Use topics from agent profile if available
+  if (profile?.topics && profile.topics.length > 0) {
+    return profile.topics;
+  }
+
+  // Use topics from root level if available
+  if (data.topics && data.topics.length > 0) {
+    return data.topics;
+  }
+
+  // Default topics
+  return [
     "DeCC0 NFT collection",
     "Crypto art and NFT culture",
     "MOCA's mission and collection",
     "Blockchain technology and art",
   ];
-
-  if (data.cultural_affiliation) {
-    topics.push(`${data.cultural_affiliation} culture and art`);
-  }
-
-  if (data.favorite_cryptoartist) {
-    topics.push("Favorite crypto artists");
-  }
-
-  if (data.favorite_book) {
-    topics.push("Literature and art");
-  }
-
-  return topics;
 }
 
 // Helper function to escape strings for TypeScript output
@@ -200,23 +238,105 @@ function escapeForTypeScript(str: string): string {
     .replace(/\t/g, "\\t"); // Escape tabs
 }
 
+// Helper function to format string arrays with proper indentation and trailing commas
+function formatStringArray(arr: string[], indent: number): string {
+  if (arr.length === 0) return "[]";
+  const indentStr = " ".repeat(indent);
+  const items = arr.map(item => `${indentStr}"${escapeForTypeScript(item)}",`).join("\n");
+  return `[\n${items}\n${" ".repeat(indent - 2)}]`;
+}
+
+// Helper function to format message examples with proper indentation and trailing commas
+function formatMessageExamples(examples: Array<Array<MessageExample>>, indent: number): string {
+  if (examples.length === 0) return "[]";
+  const indentStr = " ".repeat(indent);
+  const innerIndent = " ".repeat(indent + 2);
+  const contentIndent = " ".repeat(indent + 4);
+
+  const formatted = examples.map((conversation) => {
+    const messages = conversation.map((msg) => {
+      return `${innerIndent}{\n${contentIndent}content: {\n${contentIndent}  text: "${escapeForTypeScript(msg.content.text)}",\n${contentIndent}},\n${contentIndent}name: "${escapeForTypeScript(msg.name)}",\n${innerIndent}},`;
+    }).join("\n");
+    return `${indentStr}[\n${messages}\n${indentStr}],`;
+  }).join("\n");
+
+  return `[\n${formatted}\n${" ".repeat(indent - 2)}]`;
+}
+
+// Helper function to normalize message examples
+function normalizeMessageExamples(examples: Array<Array<MessageExample> | { messages: MessageExample[] }>): Array<Array<MessageExample>> {
+  return examples.map((example) => {
+    if (Array.isArray(example)) {
+      return example;
+    }
+    if ("messages" in example) {
+      return example.messages;
+    }
+    return [];
+  });
+}
+
 // Function to generate character file content
 function generateCharacterFile(data: CodexData, tokenId: number): string {
-  const name = getCharacterName(data);
-  const bio = data.v001_bio || generateCharacterBio(data);
-  const system = data.v001_system || generateSystemPrompt(data);
-  const topics = data.v001_topics || generateTopics(data);
+  const profile = getLatestProfile(data);
+
+  const name = getCharacterName(data, tokenId);
+  const bio = profile?.bio || generateCharacterBio(data);
+  const system = generateSystemPrompt(data, tokenId);
+  const topics = generateTopics(data);
   const avatar = data.thumbnail || "";
 
-  return `import type { Character } from "@elizaos/core";
+  // Use messageExamples from profile if available, otherwise use defaults
+  let messageExamples: Array<Array<MessageExample>> = [
+    [
+      {
+        name: "{{user}}",
+        content: {
+          text: "Tell me about yourself",
+        },
+      },
+      {
+        name,
+        content: {
+          text: `I am ${name}, a DeCC0 NFT character from MOCA's collection. I represent the intersection of art, technology, and culture in the blockchain era.`,
+        },
+      },
+    ],
+    [
+      {
+        name: "{{user}}",
+        content: {
+          text: "What is DeCC0?",
+        },
+      },
+      {
+        name,
+        content: {
+          text: "DeCC0 is a groundbreaking NFT collection that embodies the principles of decentralized creativity. Each character in the collection has a unique story and artistic heritage.",
+        },
+      },
+    ],
+  ];
 
-/**
- * DeCC0 Character: ${name} (Token ID: ${tokenId})
- * Generated from codex data on ${new Date().toISOString()}
- */
-export const character: Character = {
-  name: "${escapeForTypeScript(name)}",
-  plugins: [
+  if (profile?.messageExamples && profile.messageExamples.length > 0) {
+    messageExamples = normalizeMessageExamples(profile.messageExamples);
+  }
+
+  // Get style from profile
+  const styleAll = profile?.style?.all || data.writing_style || [];
+  const styleChat = profile?.style?.chat || [];
+
+  // Get plugins from profile, or use defaults
+  const plugins = profile?.plugins || [];
+
+  // Build plugins array - use profile plugins if available, otherwise use default conditional logic
+  let pluginsCode: string;
+  if (plugins.length > 0) {
+    // Format plugins array with proper indentation and trailing commas
+    const pluginsArray = plugins.map(p => `"${escapeForTypeScript(p)}"`).join(",\n    ");
+    pluginsCode = `[\n    ${pluginsArray},\n  ]`;
+  } else {
+    pluginsCode = `[
     // Core plugins first
     "@elizaos/plugin-sql",
 
@@ -246,48 +366,30 @@ export const character: Character = {
 
     // Bootstrap plugin
     ...(!process.env.IGNORE_BOOTSTRAP ? [ "@elizaos/plugin-bootstrap" ] : []),
-  ],
+  ]`;
+  }
+
+  return `import type { Character } from "@elizaos/core";
+
+/**
+ * DeCC0 Character: ${name} (Token ID: ${tokenId})
+ * Generated from codex data on ${new Date().toISOString()}
+ */
+export const character: Character = {
+  name: "${escapeForTypeScript(name)}",
+  plugins: ${pluginsCode},
   settings: {
     secrets: {},
     avatar: "${escapeForTypeScript(avatar)}",
   },
   system:
     "${escapeForTypeScript(system)}",
-  bio: ${JSON.stringify(bio, null, 2).replace(/("\n\])/, "\",\n]").split("\n").join("\n  ")},
-  topics: ${JSON.stringify(topics, null, 2).replace(/("\n\])/, "\",\n]").split("\n").join("\n  ")},
-  messageExamples: [
-    [
-      {
-        name: "{{user}}",
-        content: {
-          text: "Tell me about yourself",
-        },
-      },
-      {
-        name: "${escapeForTypeScript(name)}",
-        content: {
-          text: "I am ${escapeForTypeScript(name)}, a DeCC0 NFT character from MOCA's collection. I represent the intersection of art, technology, and culture in the blockchain era.",
-        },
-      },
-    ],
-    [
-      {
-        name: "{{user}}",
-        content: {
-          text: "What is DeCC0?",
-        },
-      },
-      {
-        name: "${escapeForTypeScript(name)}",
-        content: {
-          text: "DeCC0 is a groundbreaking NFT collection that embodies the principles of decentralized creativity. Each character in the collection has a unique story and artistic heritage.",
-        },
-      },
-    ],
-  ],
+  bio: ${formatStringArray(bio, 4)},
+  topics: ${formatStringArray(topics, 4)},
+  messageExamples: ${formatMessageExamples(messageExamples, 4)},
   style: {
-    all: ${JSON.stringify(data.v001_style, null, 2).replace(/("\n\])/, "\",\n]").split("\n").join("\n    ")},
-    chat: ${JSON.stringify(data.writing_style, null, 2).replace(/("\n\])/, "\",\n]").split("\n").join("\n    ")},
+    all: ${formatStringArray(styleAll, 6)},
+    chat: ${formatStringArray(styleChat, 6)},
   },
 };
 `;
@@ -323,7 +425,7 @@ for (const tokenId of tokenIds) {
     // Write character file
     writeFileSync(characterPath, characterContent, "utf-8");
 
-    const name = getCharacterName(codexData);
+    const name = getCharacterName(codexData, tokenId);
     console.log(`✅ Generated character for ${name} (Token ID: ${tokenId})`);
     successCount++;
     successfulTokenIds.push(tokenId);

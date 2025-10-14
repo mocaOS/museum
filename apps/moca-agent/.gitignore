@@ -58,3 +58,6 @@ cache/
 
 src/characters/*
 !src/characters/.gitkeep
+
+codex/*
+!codex/.gitkeep
