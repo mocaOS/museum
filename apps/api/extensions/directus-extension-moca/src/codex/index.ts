@@ -1,12 +1,11 @@
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
-import type { Router } from "express";
 import { defineEndpoint } from "@directus/extensions-sdk";
 
 export default defineEndpoint({
   id: "codex",
 
-  handler: (router: Router) => {
+  handler: (router) => {
     // GET /codex/:token_id
     router.get("/:token_id", async (req, res) => {
       try {
