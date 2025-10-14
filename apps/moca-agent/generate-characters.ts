@@ -20,7 +20,6 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import config from "@local/config";
 
 interface MessageExample {
   content: {
@@ -112,7 +111,7 @@ if (tokenIds.length === 0) {
 console.log(`🎭 Generating characters for token IDs: ${tokenIds.join(", ")}`);
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const API_BASE_URL = config.api.baseUrl;
+const API_BASE_URL = "https://api-staging.moca.qwellco.de";
 const CHARACTERS_DIR = join(__dirname, "src", "characters");
 
 // Ensure the characters directory exists
