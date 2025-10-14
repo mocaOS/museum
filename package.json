@@ -38,7 +38,8 @@
     "tar-fs": "^3.0.6",
     "tar": "^6.2.1",
     "chownr": "^2.0.0",
-    "ipx": "^3.1.1"
+    "ipx": "^3.1.1",
+    "zod": "^3.23.8"
   },
   "patchedDependencies": {
     "@directus/api@31.0.0": "patches/@directus%2Fapi@31.0.0.patch"
