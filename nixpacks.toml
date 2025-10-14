@@ -4,9 +4,13 @@ NODE_ENV = "production"
 PYTHON = "python3"
 npm_config_python = "python3"
 SHARP_IGNORE_GLOBAL_LIBVIPS = "0"
+# Enable Bun cache
+BUN_INSTALL_CACHE_DIR = "/root/.bun/install/cache"
 
 [phases.setup]
 nixPkgs = ["nodejs_22", "python3", "gcc", "gnumake", "pkg-config", "git", "vips", "curl", "unzip"]
+# Cache the Bun installation
+cacheDirectories = ["/root/.bun"]
 cmds = [
   "curl -fsSL https://bun.sh/install | bash",
   "mv /root/.bun/bin/bun /usr/local/bin/bun"
@@ -14,12 +18,16 @@ cmds = [
 
 [phases.install]
 dependsOn = ["setup"]
+# Cache node_modules and Bun cache
+cacheDirectories = ["node_modules", "/root/.bun/install/cache"]
 cmds = [
   "/usr/local/bin/bun install --frozen-lockfile"
 ]
 
 [phases.build]
 dependsOn = ["install"]
+# Cache build outputs if applicable
+cacheDirectories = ["node_modules", "dist", ".turbo"]
 cmds = [
   "/usr/local/bin/bun run build"
 ]
