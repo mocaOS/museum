@@ -59,6 +59,7 @@
     "@elizaos/plugin-openai": "1.0.11",
     "@elizaos/plugin-sql": "1.5.7",
     "@elizaos/plugin-venice": "1.0.13",
+    "@local/config": "workspace:*",
     "@local/types": "workspace:*",
     "@tanstack/react-query": "^5.90.2",
     "clsx": "^2.1.1",

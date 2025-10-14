@@ -11,13 +11,13 @@ import coingeckoPlugin from "./plugins/coingecko.ts";
 import r2rRAGPlugin from "./plugins/r2r-rag.ts";
 
 // Import all DeCC0 characters statically
-import { character as decc0_1 } from "./characters/decc0_1.ts";
+import { character as decc0_1001 } from "./characters/decc0_1001.ts";
 
 /**
  * Array of all DeCC0 characters
  */
 const decc0Characters: Character[] = [
-  decc0_1,
+  decc0_1001,
 ];
 
 /**

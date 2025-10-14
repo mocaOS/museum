@@ -26,17 +26,11 @@ export default defineEndpoint({
         const filename = `Art_DeCC0_${paddedTokenId}.codex.json`;
 
         // Construct the path to the codex file
-        // The codex folder is in apps/moca-agent/codex/
-        // From the API extension directory, we need to go up several levels
-        const codexPath = path.resolve(
-          process.cwd(),
-          "..",
-          "..",
-          "apps",
-          "moca-agent",
-          "codex",
-          filename,
-        );
+        // The codex folder is in apps/api/codex/ (will be a docker volume)
+        // Use environment variable if set, otherwise use default path
+        const codexDir
+          = process.env.CODEX_DIR || path.resolve(process.cwd(), "codex");
+        const codexPath = path.join(codexDir, filename);
 
         // Check if file exists
         if (!existsSync(codexPath)) {

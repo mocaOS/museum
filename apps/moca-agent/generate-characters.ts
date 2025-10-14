@@ -9,7 +9,7 @@
  *   bun run generate-characters.ts 1 5 10
  *
  * This will:
- * - Read codex data from codex/Art_DeCC0_XXXXX.codex.json files
+ * - Fetch codex data from Directus API (/codex/:token_id endpoint)
  * - Generate character files in src/characters/decc0_TOKENID.ts for found token IDs
  * - Skip token IDs that don't have corresponding codex files (with warning)
  * - Delete any existing decc0_*.ts files that weren't successfully generated
@@ -20,6 +20,7 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import config from "@local/config";
 
 interface MessageExample {
   content: {
@@ -111,7 +112,7 @@ if (tokenIds.length === 0) {
 console.log(`🎭 Generating characters for token IDs: ${tokenIds.join(", ")}`);
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const CODEX_DIR = join(__dirname, "codex");
+const API_BASE_URL = config.api.baseUrl;
 const CHARACTERS_DIR = join(__dirname, "src", "characters");
 
 // Ensure the characters directory exists
@@ -120,10 +121,7 @@ if (!existsSync(CHARACTERS_DIR)) {
   console.log(`📁 Created characters directory: ${CHARACTERS_DIR}`);
 }
 
-// Function to format token ID to match codex filename pattern
-function formatTokenId(tokenId: number): string {
-  return tokenId.toString().padStart(5, "0");
-}
+console.log(`🔗 Using API base URL: ${API_BASE_URL}`);
 
 // Helper function to get the latest agent profile from codex data
 function getLatestProfile(data: CodexData): AgentProfile | undefined {
@@ -402,20 +400,32 @@ const successfulTokenIds: number[] = [];
 const missingTokenIds: number[] = [];
 
 for (const tokenId of tokenIds) {
-  const formattedId = formatTokenId(tokenId);
-  const codexFilename = `Art_DeCC0_${formattedId}.codex.json`;
-  const codexPath = join(CODEX_DIR, codexFilename);
-
-  if (!existsSync(codexPath)) {
-    console.error(`⚠️  Codex file not found for token ID ${tokenId}: ${codexPath}`);
-    missingTokenIds.push(tokenId);
-    errorCount++;
-    continue;
-  }
+  const codexUrl = `${API_BASE_URL}/codex/${tokenId}`;
 
   try {
-    // Read and parse codex data
-    const codexData: CodexData = JSON.parse(readFileSync(codexPath, "utf-8"));
+    console.log(`🌐 Fetching codex from Directus API for token ID ${tokenId}...`);
+
+    // Fetch codex data from Directus API
+    const response = await fetch(codexUrl);
+
+    if (!response.ok) {
+      if (response.status === 404) {
+        console.error(`⚠️  Codex file not found for token ID ${tokenId}: ${codexUrl}`);
+        missingTokenIds.push(tokenId);
+        errorCount++;
+        continue;
+      }
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+
+    const apiResponse = await response.json();
+
+    // Extract codex data from API response
+    if (!apiResponse.success || !apiResponse.data) {
+      throw new Error("Invalid API response format");
+    }
+
+    const codexData: CodexData = apiResponse.data;
 
     // Generate character file
     const characterFilename = `decc0_${tokenId}.ts`;
