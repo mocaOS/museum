@@ -116,7 +116,7 @@ const DIRECTUS_URL = process.env.DIRECTUS_URL || API_BASE_URL;
 const DIRECTUS_TOKEN = process.env.DIRECTUS_API_KEY;
 
 if (!DIRECTUS_TOKEN) {
-  console.error("❌ Error: DIRECTUS_ADMIN_TOKEN environment variable is required");
+  console.error("❌ Error: DIRECTUS_API_KEY environment variable is required");
   process.exit(1);
 }
 
