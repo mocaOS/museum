@@ -35,6 +35,11 @@
         "source": "src/r2r-graph-pull/index.ts"
       },
       {
+        "type": "hook",
+        "name": "opensea-listings-sync",
+        "source": "src/opensea-listings-sync/index.ts"
+      },
+      {
         "type": "endpoint",
         "name": "applications",
         "source": "src/applications/index.ts"

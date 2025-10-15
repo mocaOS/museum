@@ -29,7 +29,6 @@ function createProjectAgent(character: Character): ProjectAgent {
     init: async (_runtime: IAgentRuntime) => {
       logger.info("Initializing character");
       logger.info("Name: ", character.name);
-      logger.warn("OPENAI_API_KEY: ", process.env.OPENAI_API_KEY);
     },
     plugins: [ starterPlugin, coingeckoPlugin, r2rRAGPlugin ],
   };
