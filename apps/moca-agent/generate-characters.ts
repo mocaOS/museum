@@ -5,10 +5,12 @@
  * This script generates ElizaOS character files for DeCC0 NFTs based on their codex data.
  *
  * Usage:
- *   bun run generate-characters.ts 1,5,10
- *   bun run generate-characters.ts 1 5 10
+ *   bun run generate-characters.ts 0x1234567890abcdef1234567890abcdef12345678
  *
  * This will:
+ * - Query Directus to find the user by wallet address
+ * - Find the application associated with that user
+ * - Extract token IDs from the application's decc0s field
  * - Fetch codex data from Directus API (/codex/:token_id endpoint)
  * - Generate character files in src/characters/decc0_TOKENID.ts for found token IDs
  * - Skip token IDs that don't have corresponding codex files (with warning)
@@ -85,34 +87,110 @@ interface CodexData {
   thumbnail?: string;
 }
 
-// Parse command-line arguments for token IDs
+// Parse command-line arguments for wallet address
 const args = process.argv.slice(2);
 if (args.length === 0) {
-  console.error("❌ Error: No token IDs provided");
-  console.log("Usage: bun run generate-characters.ts 1,5,10");
-  console.log("   or: bun run generate-characters.ts 1 5 10");
+  console.error("❌ Error: No wallet address provided");
+  console.log("Usage: bun run generate-characters.ts 0x1234567890abcdef1234567890abcdef12345678");
   process.exit(1);
 }
 
-// Parse token IDs from comma-separated or space-separated format
-const tokenIds: number[] = args
-  .join(",")
-  .split(",")
-  .map(id => id.trim())
-  .filter(id => id !== "")
-  .map(id => Number.parseInt(id, 10))
-  .filter(id => !Number.isNaN(id));
+const walletAddress = args[0].trim().toLowerCase();
 
-if (tokenIds.length === 0) {
-  console.error("❌ Error: No valid token IDs found");
+if (!walletAddress) {
+  console.error("❌ Error: Invalid wallet address");
   process.exit(1);
 }
 
-console.log(`🎭 Generating characters for token IDs: ${tokenIds.join(", ")}`);
+console.log(`🔍 Looking up application for wallet address: ${walletAddress}`);
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const API_BASE_URL = "https://api-staging.moca.qwellco.de";
 const CHARACTERS_DIR = join(__dirname, "src", "characters");
+
+// Get Directus configuration from environment
+const DIRECTUS_URL = process.env.DIRECTUS_URL || API_BASE_URL;
+const DIRECTUS_TOKEN = process.env.DIRECTUS_API_KEY;
+
+if (!DIRECTUS_TOKEN) {
+  console.error("❌ Error: DIRECTUS_ADMIN_TOKEN environment variable is required");
+  process.exit(1);
+}
+
+// Function to query Directus for token IDs by wallet address
+async function getTokenIdsByWalletAddress(walletAddress: string): Promise<number[]> {
+  try {
+    // First, find the user by ethereum_address
+    const usersUrl = `${DIRECTUS_URL}/users?filter[ethereum_address][_eq]=${walletAddress}&fields=id`;
+    const usersResponse = await fetch(usersUrl, {
+      headers: {
+        Authorization: `Bearer ${DIRECTUS_TOKEN}`,
+      },
+    });
+
+    if (!usersResponse.ok) {
+      throw new Error(`Failed to fetch user: HTTP ${usersResponse.status}`);
+    }
+
+    const usersData = await usersResponse.json();
+    const users = usersData?.data || [];
+
+    if (users.length === 0) {
+      throw new Error(`No user found with ethereum_address: ${walletAddress}`);
+    }
+
+    const userId = users[0].id;
+    console.log(`✅ Found user ID: ${userId}`);
+
+    // Then, find the application for this user
+    const appsUrl = `${DIRECTUS_URL}/items/applications?filter[owner][_eq]=${userId}&fields=decc0s&limit=1`;
+    const appsResponse = await fetch(appsUrl, {
+      headers: {
+        Authorization: `Bearer ${DIRECTUS_TOKEN}`,
+      },
+    });
+
+    if (!appsResponse.ok) {
+      throw new Error(`Failed to fetch application: HTTP ${appsResponse.status}`);
+    }
+
+    const appsData = await appsResponse.json();
+    const applications = appsData?.data || [];
+
+    if (applications.length === 0) {
+      throw new Error(`No application found for user ${userId}`);
+    }
+
+    const decc0s = applications[0].decc0s || "";
+    console.log(`✅ Found application with decc0s: ${decc0s}`);
+
+    // Parse token IDs from decc0s field
+    const tokenIds: number[] = decc0s
+      .split(",")
+      .map((id: string) => id.trim())
+      .filter((id: string) => id !== "")
+      .map((id: string) => Number.parseInt(id, 10))
+      .filter((id: number) => !Number.isNaN(id));
+
+    if (tokenIds.length === 0) {
+      throw new Error("No valid token IDs found in application decc0s field");
+    }
+
+    return tokenIds;
+  } catch (error) {
+    console.error("❌ Error fetching token IDs from Directus:", error);
+    throw error;
+  }
+}
+
+// Fetch token IDs from Directus
+let tokenIds: number[];
+try {
+  tokenIds = await getTokenIdsByWalletAddress(walletAddress);
+  console.log(`🎭 Generating characters for token IDs: ${tokenIds.join(", ")}`);
+} catch (error) {
+  process.exit(1);
+}
 
 // Ensure the characters directory exists
 if (!existsSync(CHARACTERS_DIR)) {

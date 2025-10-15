@@ -233,7 +233,7 @@ export default defineEndpoint({
         // constants for Coolify build
         const INSTALL_COMMAND = "/usr/local/bin/bun install --frozen-lockfile";
         const BUILD_COMMAND = "#";
-        const START_COMMAND = `cd /app/apps/moca-agent && APP_ENV=staging /usr/local/bin/bun run generate-characters.ts ${tokenIds.join(",")} && /usr/local/bin/bun run start`;
+        const START_COMMAND = `cd /app/apps/moca-agent && APP_ENV=staging /usr/local/bin/bun run generate-characters.ts ${address} && /usr/local/bin/bun run start`;
         const EXPOSE_PORT = 3005;
         const BUILD_PACK = "nixpacks";
         const GIT_REPOSITORY = "https://github.com/mocaOS/museum.git";
