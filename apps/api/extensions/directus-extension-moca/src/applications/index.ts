@@ -90,8 +90,6 @@ export default defineEndpoint({
                   // Clear existing logs for this application
                   applicationLogs.set(applicationId, []);
 
-                  console.log(deploymentLogs);
-
                   // Add each log entry from the deployment
                   for (const logEntry of deploymentLogs) {
                     if (logEntry && typeof logEntry === "object") {
