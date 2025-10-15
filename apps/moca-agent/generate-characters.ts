@@ -273,6 +273,45 @@ function normalizeMessageExamples(examples: Array<Array<MessageExample> | { mess
   });
 }
 
+// Helper function to format avatar/thumbnail as data URI if needed
+function formatAvatar(thumbnail?: string): string {
+  if (!thumbnail) return "";
+
+  // If it already starts with data:, http:, or https:, return as-is
+  if (thumbnail.startsWith("data:") || thumbnail.startsWith("http:") || thumbnail.startsWith("https:")) {
+    return thumbnail;
+  }
+
+  // If it looks like base64 image data, add the appropriate data URI prefix
+  // JPEG images start with /9j/
+  if (thumbnail.startsWith("/9j/")) {
+    return `data:image/jpeg;base64,${thumbnail}`;
+  }
+
+  // PNG images start with iVBORw
+  if (thumbnail.startsWith("iVBORw")) {
+    return `data:image/png;base64,${thumbnail}`;
+  }
+
+  // GIF images start with R0lGOD
+  if (thumbnail.startsWith("R0lGOD")) {
+    return `data:image/gif;base64,${thumbnail}`;
+  }
+
+  // WebP images start with UklGR
+  if (thumbnail.startsWith("UklGR")) {
+    return `data:image/webp;base64,${thumbnail}`;
+  }
+
+  // Default to JPEG if we detect base64-like data (contains only base64 chars)
+  if (/^[A-Za-z0-9+/=]+$/.test(thumbnail)) {
+    return `data:image/jpeg;base64,${thumbnail}`;
+  }
+
+  // Otherwise return as-is (might be a URL path)
+  return thumbnail;
+}
+
 // Function to generate character file content
 function generateCharacterFile(data: CodexData, tokenId: number): string {
   const profile = getLatestProfile(data);
@@ -281,7 +320,7 @@ function generateCharacterFile(data: CodexData, tokenId: number): string {
   const bio = profile?.bio || generateCharacterBio(data);
   const system = generateSystemPrompt(data, tokenId);
   const topics = generateTopics(data);
-  const avatar = data.thumbnail || "";
+  const avatar = formatAvatar(data.thumbnail);
 
   // Use messageExamples from profile if available, otherwise use defaults
   let messageExamples: Array<Array<MessageExample>> = [
