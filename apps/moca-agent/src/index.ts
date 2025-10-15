@@ -10,10 +10,15 @@ import starterPlugin from "./plugin.ts";
 import coingeckoPlugin from "./plugins/coingecko.ts";
 import r2rRAGPlugin from "./plugins/r2r-rag.ts";
 
+// Import all DeCC0 characters statically
+import { character as decc0_1001 } from "./characters/decc0_1001.ts";
+
 /**
  * Array of all DeCC0 characters
  */
-const decc0Characters: Character[] = [];
+const decc0Characters: Character[] = [
+  decc0_1001,
+];
 
 /**
  * Creates a project agent for a given character

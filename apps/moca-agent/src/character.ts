@@ -13,43 +13,43 @@ export const character: Character = {
     "@elizaos/plugin-sql",
 
     // Venice plugin (for main text generation)
-    ...(process.env.VENICE_API_KEY?.trim() ? ["@elizaos/plugin-venice"] : []),
+    ...(process.env.VENICE_API_KEY?.trim() ? [ "@elizaos/plugin-venice" ] : []),
 
     // Text-only plugins (no embedding support)
     ...(process.env.ANTHROPIC_API_KEY?.trim()
-      ? ["@elizaos/plugin-anthropic"]
+      ? [ "@elizaos/plugin-anthropic" ]
       : []),
     ...(process.env.OPENROUTER_API_KEY?.trim()
-      ? ["@elizaos/plugin-openrouter"]
+      ? [ "@elizaos/plugin-openrouter" ]
       : []),
 
     // Embedding-capable plugins (optional, based on available credentials)
-    ...(process.env.OPENAI_API_KEY?.trim() ? ["@elizaos/plugin-openai"] : []),
+    ...(process.env.OPENAI_API_KEY?.trim() ? [ "@elizaos/plugin-openai" ] : []),
     ...(process.env.GOOGLE_GENERATIVE_AI_API_KEY?.trim()
-      ? ["@elizaos/plugin-google-genai"]
+      ? [ "@elizaos/plugin-google-genai" ]
       : []),
 
     // Ollama as fallback (only if no main LLM providers are configured)
     ...(process.env.OLLAMA_API_ENDPOINT?.trim()
-      ? ["@elizaos/plugin-ollama"]
+      ? [ "@elizaos/plugin-ollama" ]
       : []),
 
     // Platform plugins
     ...(process.env.DISCORD_API_TOKEN?.trim()
-      ? ["@elizaos/plugin-discord"]
+      ? [ "@elizaos/plugin-discord" ]
       : []),
-    ...(process.env.TWITTER_API_KEY?.trim() &&
-    process.env.TWITTER_API_SECRET_KEY?.trim() &&
-    process.env.TWITTER_ACCESS_TOKEN?.trim() &&
-    process.env.TWITTER_ACCESS_TOKEN_SECRET?.trim()
-      ? ["@elizaos/plugin-twitter"]
+    ...(process.env.TWITTER_API_KEY?.trim()
+    && process.env.TWITTER_API_SECRET_KEY?.trim()
+    && process.env.TWITTER_ACCESS_TOKEN?.trim()
+    && process.env.TWITTER_ACCESS_TOKEN_SECRET?.trim()
+      ? [ "@elizaos/plugin-twitter" ]
       : []),
     ...(process.env.TELEGRAM_BOT_TOKEN?.trim()
-      ? ["@elizaos/plugin-telegram"]
+      ? [ "@elizaos/plugin-telegram" ]
       : []),
 
     // Bootstrap plugin
-    ...(!process.env.IGNORE_BOOTSTRAP ? ["@elizaos/plugin-bootstrap"] : []),
+    ...(!process.env.IGNORE_BOOTSTRAP ? [ "@elizaos/plugin-bootstrap" ] : []),
   ],
   settings: {
     secrets: {},

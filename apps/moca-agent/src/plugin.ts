@@ -49,7 +49,7 @@ const configSchema = z.object({
  */
 const helloWorldAction: Action = {
   name: "HELLO_WORLD",
-  similes: ["GREET", "SAY_HELLO"],
+  similes: [ "GREET", "SAY_HELLO" ],
   description: "Responds with a simple hello world message",
 
   validate: async (
@@ -75,7 +75,7 @@ const helloWorldAction: Action = {
       // Simple response content
       const responseContent: Content = {
         text: "hello world!",
-        actions: ["HELLO_WORLD"],
+        actions: [ "HELLO_WORLD" ],
         source: message.content.source,
       };
 
@@ -126,7 +126,7 @@ const helloWorldAction: Action = {
         name: "{{name2}}",
         content: {
           text: "hello world!",
-          actions: ["HELLO_WORLD"],
+          actions: [ "HELLO_WORLD" ],
         },
       },
     ],
@@ -156,8 +156,8 @@ const helloWorldProvider: Provider = {
 
 export class StarterService extends Service {
   static serviceType = "starter";
-  capabilityDescription =
-    "This is a starter service which is attached to the agent through the starter plugin.";
+  capabilityDescription
+    = "This is a starter service which is attached to the agent through the starter plugin.";
 
   constructor(runtime: IAgentRuntime) {
     super(runtime);
@@ -198,13 +198,13 @@ const plugin: Plugin = {
       const validatedConfig = await configSchema.parseAsync(config);
 
       // Set all environment variables at once
-      for (const [key, value] of Object.entries(validatedConfig)) {
+      for (const [ key, value ] of Object.entries(validatedConfig)) {
         if (value) process.env[key] = value;
       }
     } catch (error) {
       if (error instanceof z.ZodError) {
         throw new TypeError(
-          `Invalid plugin configuration: ${error.errors.map((e) => e.message).join(", ")}`,
+          `Invalid plugin configuration: ${error.errors.map(e => e.message).join(", ")}`,
         );
       }
       throw error;
@@ -261,9 +261,9 @@ const plugin: Plugin = {
       },
     ],
   },
-  services: [StarterService],
-  actions: [helloWorldAction],
-  providers: [helloWorldProvider],
+  services: [ StarterService ],
+  actions: [ helloWorldAction ],
+  providers: [ helloWorldProvider ],
 };
 
 export default plugin;

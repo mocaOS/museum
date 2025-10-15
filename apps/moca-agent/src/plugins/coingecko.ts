@@ -113,8 +113,8 @@ class CoinGeckoService {
           // Check if it's an API key type mismatch error
           const errorMessage = clientError?.message || "";
           if (
-            errorMessage.includes("Demo API key") &&
-            errorMessage.includes("pro-api.coingecko.com")
+            errorMessage.includes("Demo API key")
+            && errorMessage.includes("pro-api.coingecko.com")
           ) {
             logger.info(
               "Detected Demo API key being used with Pro endpoint, switching to Demo API",
@@ -142,8 +142,8 @@ class CoinGeckoService {
               }
             }
           } else if (
-            errorMessage.includes("Pro API key") ||
-            (!this.triedPro && this.triedDemo)
+            errorMessage.includes("Pro API key")
+            || (!this.triedPro && this.triedDemo)
           ) {
             logger.info("Trying Pro API as fallback");
             this.initializeProClient();
@@ -240,8 +240,8 @@ class CoinGeckoService {
           // Check if it's an API key type mismatch error
           const errorMessage = clientError?.message || "";
           if (
-            errorMessage.includes("Demo API key") &&
-            errorMessage.includes("pro-api.coingecko.com")
+            errorMessage.includes("Demo API key")
+            && errorMessage.includes("pro-api.coingecko.com")
           ) {
             logger.info(
               "Detected Demo API key being used with Pro endpoint, switching to Demo API",
@@ -257,8 +257,8 @@ class CoinGeckoService {
               }
             }
           } else if (
-            errorMessage.includes("Pro API key") ||
-            (!this.triedPro && this.triedDemo)
+            errorMessage.includes("Pro API key")
+            || (!this.triedPro && this.triedDemo)
           ) {
             logger.info("Trying Pro API for search as fallback");
             this.initializeProClient();
@@ -350,8 +350,8 @@ const mocaTokenPriceProvider: Provider = {
       const lastUpdated = mocaData.last_updated ?? new Date().toISOString();
 
       const changeEmoji = change24h > 0 ? "📈" : change24h < 0 ? "📉" : "➡️";
-      const changeText =
-        change24h > 0
+      const changeText
+        = change24h > 0
           ? `+${change24h.toFixed(2)}%`
           : `${change24h.toFixed(2)}%`;
 
@@ -414,7 +414,7 @@ const coingeckoPlugin: Plugin = {
       const validatedConfig = await configSchema.parseAsync(config);
 
       // Set all environment variables at once
-      for (const [key, value] of Object.entries(validatedConfig)) {
+      for (const [ key, value ] of Object.entries(validatedConfig)) {
         if (value) process.env[key] = value;
       }
 
@@ -422,14 +422,14 @@ const coingeckoPlugin: Plugin = {
     } catch (error) {
       if (error instanceof z.ZodError) {
         throw new TypeError(
-          `Invalid CoinGecko plugin configuration: ${error.errors.map((e) => e.message).join(", ")}`,
+          `Invalid CoinGecko plugin configuration: ${error.errors.map(e => e.message).join(", ")}`,
         );
       }
       throw error;
     }
   },
 
-  providers: [mocaTokenPriceProvider],
+  providers: [ mocaTokenPriceProvider ],
 };
 
 export default coingeckoPlugin;

@@ -1,4 +1,3 @@
-import type { Router } from "express";
 import { json as expressJson } from "express";
 import { defineEndpoint } from "@directus/extensions-sdk";
 import type { Directus } from "@local/types";
@@ -6,7 +5,7 @@ import type { Directus } from "@local/types";
 export default defineEndpoint({
   id: "applications",
 
-  handler: (router: Router, { services, getSchema, env }) => {
+  handler: (router, { services, getSchema, env }) => {
     // Ensure JSON bodies are parsed for this endpoint
     router.use(expressJson());
 
@@ -263,6 +262,8 @@ export default defineEndpoint({
             try {
               const schema = await getSchema();
               const envMap = await getApplicationEnvFromDirectus(schema);
+              // Extend with CENTRAL_MESSAGE_SERVER_URL
+              envMap.CENTRAL_MESSAGE_SERVER_URL = (existingApp as any).url || "";
               const entries = Object.entries(envMap).map(([ key, value ]) => ({ key, value }));
               if (entries.length > 0) {
                 // Delete all existing environment variables first
@@ -341,6 +342,8 @@ export default defineEndpoint({
             try {
               const schema = await getSchema();
               const envMap = await getApplicationEnvFromDirectus(schema);
+              // Extend with CENTRAL_MESSAGE_SERVER_URL
+              envMap.CENTRAL_MESSAGE_SERVER_URL = domainUrl;
               const entries = Object.entries(envMap).map(([ key, value ]) => ({ key, value }));
               if (entries.length > 0) {
                 // Delete all existing environment variables first (in case any were created during setup)

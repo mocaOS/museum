@@ -62,16 +62,16 @@ interface R2RRAGResponse {
  */
 export class R2RService extends Service {
   static serviceType = "r2r-service";
-  capabilityDescription =
-    "Provides RAG (Retrieval-Augmented Generation) capabilities using R2R backend";
+  capabilityDescription
+    = "Provides RAG (Retrieval-Augmented Generation) capabilities using R2R backend";
 
   private client: R2RClient;
   private baseUrl: string;
   private apiKey: string;
   private isAuthenticated: boolean = false;
   private currentConversationId: string | null = null;
-  private static readonly LOG_FILE_PATH =
-    "/Volumes/WD_BLACK/PROJECTS/MOCA/moca-migration/apps/moca-agent/src/plugins/log.txt";
+  private static readonly LOG_FILE_PATH
+    = "/Volumes/WD_BLACK/PROJECTS/MOCA/moca-migration/apps/moca-agent/src/plugins/log.txt";
 
   constructor(runtime?: IAgentRuntime) {
     super(runtime);
@@ -92,7 +92,9 @@ export class R2RService extends Service {
       await service.initialize();
       runtime.logger?.info("R2R Service started successfully");
     } catch (error) {
-      runtime.logger?.error("Failed to start R2R Service", { error });
+      runtime.logger?.error(
+        `Failed to start R2R Service - Error: ${error instanceof Error ? error.message : String(error)}`,
+      );
       throw error;
     }
 
@@ -110,7 +112,7 @@ export class R2RService extends Service {
     try {
       // Test connection
       const isHealthy = await this.testConnection();
-      this.runtime?.logger?.info("R2R health check", { isHealthy });
+      this.runtime?.logger?.info(`R2R health check - IsHealthy: ${isHealthy}`);
 
       // Authenticate if API key is provided
       if (this.apiKey) {
@@ -122,9 +124,9 @@ export class R2RService extends Service {
         );
       }
     } catch (error) {
-      this.runtime?.logger?.error("Failed to initialize R2R service", {
-        error,
-      });
+      this.runtime?.logger?.error(
+        `Failed to initialize R2R service - Error: ${error instanceof Error ? error.message : String(error)}`,
+      );
       throw new Error(
         `R2R initialization failed: ${error instanceof Error ? error.message : String(error)}`,
       );
@@ -140,7 +142,9 @@ export class R2RService extends Service {
       const response = await fetch(`${this.baseUrl}/v3/health`);
       return response.ok;
     } catch (error) {
-      this.runtime?.logger?.error("R2R connection test failed", { error });
+      this.runtime?.logger?.error(
+        `R2R connection test failed - Error: ${error instanceof Error ? error.message : String(error)}`,
+      );
       return false;
     }
   }
@@ -150,8 +154,8 @@ export class R2RService extends Service {
    */
   async createConversation(title?: string): Promise<string> {
     try {
-      const conversationTitle =
-        title || `Chat Session ${new Date().toLocaleString()}`;
+      const conversationTitle
+        = title || `Chat Session ${new Date().toLocaleString()}`;
       const response = await this.client.conversations.create({
         name: conversationTitle,
       });
@@ -162,16 +166,15 @@ export class R2RService extends Service {
       }
 
       this.currentConversationId = conversationId;
-      this.runtime?.logger?.info("Created R2R conversation", {
-        id: conversationId,
-        title: conversationTitle,
-      });
+      this.runtime?.logger?.info(
+        `Created R2R conversation - ID: ${conversationId}, Title: ${conversationTitle}`,
+      );
 
       return conversationId;
     } catch (error) {
-      this.runtime?.logger?.error("Failed to create R2R conversation", {
-        error,
-      });
+      this.runtime?.logger?.error(
+        `Failed to create R2R conversation - Error: ${error instanceof Error ? error.message : String(error)}`,
+      );
       throw error;
     }
   }
@@ -206,35 +209,34 @@ export class R2RService extends Service {
         },
       };
 
-      this.runtime?.logger?.debug("R2R search request", {
-        config: searchConfig,
-      });
+      this.runtime?.logger?.debug(
+        `R2R search request - Config: ${JSON.stringify(searchConfig)}`,
+      );
 
       const response = await this.client.retrieval.search(searchConfig);
 
       // Extract results from the response
       const results = Array.isArray(response?.results?.chunkSearchResults)
         ? response.results.chunkSearchResults.map((result: any) => ({
-            id: result.id || `${Date.now()}-${Math.random()}`,
-            payload: {
-              text: result.metadata?.text || result.text || "",
-              document_id: result.document_id,
-              content: {
-                description: result.metadata?.text || result.text || "",
-                source: result.metadata?.source || "Unknown source",
-                name:
-                  result.metadata?.title ||
-                  result.metadata?.filename ||
-                  "Untitled",
-              },
+          id: result.id || `${Date.now()}-${Math.random()}`,
+          payload: {
+            text: result.metadata?.text || result.text || "",
+            document_id: result.document_id,
+            content: {
+              description: result.metadata?.text || result.text || "",
+              source: result.metadata?.source || "Unknown source",
+              name:
+                  result.metadata?.title
+                  || result.metadata?.filename
+                  || "Untitled",
             },
-          }))
+          },
+        }))
         : [];
 
-      this.runtime?.logger?.debug("R2R search response", {
-        resultCount: results.length,
-        query: options.query,
-      });
+      this.runtime?.logger?.debug(
+        `R2R search response - ResultCount: ${results.length}, Query: "${options.query}"`,
+      );
 
       await this.logR2REvent("search", {
         request: {
@@ -249,17 +251,19 @@ export class R2RService extends Service {
           topSources: results
             .slice(0, 3)
             .map(
-              (r) =>
-                r.payload.content?.name ||
-                r.payload.content?.source ||
-                "Unknown source",
+              r =>
+                r.payload.content?.name
+                || r.payload.content?.source
+                || "Unknown source",
             ),
         },
       });
 
       return results;
     } catch (error) {
-      this.runtime?.logger?.error("R2R search failed", { error, options });
+      this.runtime?.logger?.error(
+        `R2R search failed - Options: ${JSON.stringify(options)}, Error: ${error instanceof Error ? error.message : String(error)}`,
+      );
       await this.logR2REvent("search", {
         request: {
           query: options.query,
@@ -277,8 +281,8 @@ export class R2RService extends Service {
    */
   async rag(options: R2RRAGOptions): Promise<R2RRAGResponse> {
     try {
-      const conversationId =
-        options.conversationId || (await this.getOrCreateConversationId());
+      const conversationId
+        = options.conversationId || (await this.getOrCreateConversationId());
 
       const ragConfig = {
         query: options.query,
@@ -305,46 +309,42 @@ export class R2RService extends Service {
         },
       };
 
-      this.runtime?.logger?.debug("R2R RAG request", {
-        query: options.query,
-        conversationId,
-        config: ragConfig,
-      });
+      this.runtime?.logger?.debug(
+        `R2R RAG request - Query: "${options.query}", ConversationID: ${conversationId}, Config: ${JSON.stringify(ragConfig)}`,
+      );
 
       const response = await this.client.retrieval.rag(ragConfig);
 
       // Extract the completion and search results from response
-      const completion =
-        response?.results?.completion?.choices?.[0]?.message?.content ||
-        response?.results?.completion ||
-        "";
-      const rawSearchResults =
-        response?.results?.searchResults?.chunkSearchResults || [];
+      const completion
+        = response?.results?.completion?.choices?.[0]?.message?.content
+        || response?.results?.completion
+        || "";
+      const rawSearchResults
+        = response?.results?.searchResults?.chunkSearchResults || [];
 
       // Transform search results to match our interface
       const searchResults = Array.isArray(rawSearchResults)
         ? rawSearchResults.map((result: any) => ({
-            id: result.id || `${Date.now()}-${Math.random()}`,
-            payload: {
-              text: result.metadata?.text || result.text || "",
-              document_id: result.document_id,
-              content: {
-                description: result.metadata?.text || result.text || "",
-                source: result.metadata?.source || "Unknown source",
-                name:
-                  result.metadata?.title ||
-                  result.metadata?.filename ||
-                  "Untitled",
-              },
+          id: result.id || `${Date.now()}-${Math.random()}`,
+          payload: {
+            text: result.metadata?.text || result.text || "",
+            document_id: result.document_id,
+            content: {
+              description: result.metadata?.text || result.text || "",
+              source: result.metadata?.source || "Unknown source",
+              name:
+                  result.metadata?.title
+                  || result.metadata?.filename
+                  || "Untitled",
             },
-          }))
+          },
+        }))
         : [];
 
-      this.runtime?.logger?.debug("R2R RAG response", {
-        hasCompletion: !!completion,
-        searchResultCount: searchResults.length,
-        query: options.query,
-      });
+      this.runtime?.logger?.debug(
+        `R2R RAG response - HasCompletion: ${!!completion}, SearchResultCount: ${searchResults.length}, Query: "${options.query}"`,
+      );
 
       await this.logR2REvent("rag", {
         request: {
@@ -361,10 +361,10 @@ export class R2RService extends Service {
           topSources: searchResults
             .slice(0, 3)
             .map(
-              (r) =>
-                r.payload.content?.name ||
-                r.payload.content?.source ||
-                "Unknown source",
+              r =>
+                r.payload.content?.name
+                || r.payload.content?.source
+                || "Unknown source",
             ),
         },
       });
@@ -375,7 +375,9 @@ export class R2RService extends Service {
         citations: searchResults, // Use search results as citations for now
       };
     } catch (error) {
-      this.runtime?.logger?.error("R2R RAG failed", { error, options });
+      this.runtime?.logger?.error(
+        `R2R RAG failed - Options: ${JSON.stringify(options)}, Error: ${error instanceof Error ? error.message : String(error)}`,
+      );
       await this.logR2REvent("rag", {
         request: {
           query: options.query,
@@ -398,12 +400,12 @@ export class R2RService extends Service {
     return results
       .slice(0, 3)
       .map((result, index) => {
-        const text =
-          result.payload.text?.substring(0, 200) || "No content available";
-        const source =
-          result.payload.content?.source ||
-          result.payload.content?.name ||
-          "Unknown source";
+        const text
+          = result.payload.text?.substring(0, 200) || "No content available";
+        const source
+          = result.payload.content?.source
+          || result.payload.content?.name
+          || "Unknown source";
 
         return `${index + 1}. **${source}**\n${text}${text.length >= 200 ? "..." : ""}`;
       })
@@ -448,7 +450,9 @@ export class R2RService extends Service {
 
       return "I couldn't find relevant information to answer your question. Please try rephrasing or asking about a different topic.";
     } catch (error) {
-      this.runtime?.logger?.error("Error generating AI response", { error });
+      this.runtime?.logger?.error(
+        `Error generating AI response - Error: ${error instanceof Error ? error.message : String(error)}`,
+      );
 
       // Fallback to original completion or basic synthesis
       if (ragResponse.completion && ragResponse.completion.trim().length > 0) {
@@ -477,13 +481,13 @@ export class R2RService extends Service {
   ): Promise<string> {
     const contextSummary = this.createContextSummary(searchResults);
 
-    const prompt =
-      "You are an expert assistant specializing in MOCA and crypto art. Enhance the following response with additional context and details.\n\n" +
-      `Original Question: "${query}"\n\n` +
-      `Current Response: "${completion}"\n\n` +
-      `Additional Context: ${contextSummary}\n\n` +
-      "Instructions: Enhance the response by adding relevant details, improving clarity, and ensuring completeness. Keep the same tone and style. Do not mention that you're enhancing anything.\n\n" +
-      "Enhanced Response:";
+    const prompt
+      = "You are an expert assistant specializing in MOCA and crypto art. Enhance the following response with additional context and details.\n\n"
+      + `Original Question: "${query}"\n\n`
+      + `Current Response: "${completion}"\n\n`
+      + `Additional Context: ${contextSummary}\n\n`
+      + "Instructions: Enhance the response by adding relevant details, improving clarity, and ensuring completeness. Keep the same tone and style. Do not mention that you're enhancing anything.\n\n"
+      + "Enhanced Response:";
 
     const enhanced = await runtime.useModel(ModelType.TEXT_SMALL, {
       prompt,
@@ -504,12 +508,12 @@ export class R2RService extends Service {
   ): Promise<string> {
     const contextSummary = this.createContextSummary(searchResults);
 
-    const prompt =
-      "You are an expert assistant specializing in MOCA and crypto art. Answer the user's question using the provided context.\n\n" +
-      `Question: "${query}"\n\n` +
-      `Available Information: ${contextSummary}\n\n` +
-      "Instructions: Provide a comprehensive, helpful answer based on the available information. Be informative and conversational. If information is limited, be honest about what you can determine.\n\n" +
-      "Answer:";
+    const prompt
+      = "You are an expert assistant specializing in MOCA and crypto art. Answer the user's question using the provided context.\n\n"
+      + `Question: "${query}"\n\n`
+      + `Available Information: ${contextSummary}\n\n`
+      + "Instructions: Provide a comprehensive, helpful answer based on the available information. Be informative and conversational. If information is limited, be honest about what you can determine.\n\n"
+      + "Answer:";
 
     const response = await runtime.useModel(ModelType.TEXT_SMALL, {
       prompt,
@@ -529,10 +533,10 @@ export class R2RService extends Service {
     }
 
     const summaries = results.slice(0, 4).map((result, index) => {
-      const source =
-        result.payload.content?.name ||
-        result.payload.content?.source ||
-        "Unknown source";
+      const source
+        = result.payload.content?.name
+        || result.payload.content?.source
+        || "Unknown source";
       const text = result.payload.text || "No content available";
       const snippet = text.substring(0, 300).replace(/\n+/g, " ").trim();
 
@@ -556,10 +560,10 @@ export class R2RService extends Service {
     const citations = searchResults
       .slice(0, 3)
       .map((result, index) => {
-        const source =
-          result.payload.content?.name ||
-          result.payload.content?.source ||
-          "Unknown source";
+        const source
+          = result.payload.content?.name
+          || result.payload.content?.source
+          || "Unknown source";
         return `${index + 1}. ${source}`;
       })
       .join("\n");
@@ -582,12 +586,12 @@ export class R2RService extends Service {
 
       const contextSummary = this.createContextSummary(searchResults);
 
-      const prompt =
-        "You are an expert assistant helping users find information. Summarize what was found for the user's search.\n\n" +
-        `Search Query: "${query}"\n\n` +
-        `Found Information: ${contextSummary}\n\n` +
-        "Instructions: Provide a helpful summary of what was found. Highlight key findings and explain how they relate to the search query. Be conversational and informative.\n\n" +
-        "Summary:";
+      const prompt
+        = "You are an expert assistant helping users find information. Summarize what was found for the user's search.\n\n"
+        + `Search Query: "${query}"\n\n`
+        + `Found Information: ${contextSummary}\n\n`
+        + "Instructions: Provide a helpful summary of what was found. Highlight key findings and explain how they relate to the search query. Be conversational and informative.\n\n"
+        + "Summary:";
 
       const aiSummary = await runtime.useModel(ModelType.TEXT_LARGE, {
         prompt,
@@ -597,9 +601,9 @@ export class R2RService extends Service {
 
       return aiSummary.trim();
     } catch (error) {
-      this.runtime?.logger?.error("Error generating AI search summary", {
-        error,
-      });
+      this.runtime?.logger?.error(
+        `Error generating AI search summary - Error: ${error instanceof Error ? error.message : String(error)}`,
+      );
 
       // Fallback to traditional formatting
       const detailedResults = this.formatDetailedSources(searchResults);
@@ -624,26 +628,26 @@ export class R2RService extends Service {
 
     for (const result of results.slice(0, 3)) {
       const text = result.payload.text || "";
-      const source =
-        result.payload.content?.name ||
-        result.payload.content?.source ||
-        "Unknown source";
+      const source
+        = result.payload.content?.name
+        || result.payload.content?.source
+        || "Unknown source";
 
       if (text.length > 30) {
         // Extract the most relevant sentence or paragraph
         const sentences = text
           .split(/[.!?]+/)
-          .filter((s) => s.trim().length > 20);
-        const relevantSentence =
-          sentences.find(
-            (s) =>
-              s.toLowerCase().includes(query.toLowerCase().split(" ")[0]) ||
-              s.length > 50,
+          .filter(s => s.trim().length > 20);
+        const relevantSentence
+          = sentences.find(
+            s =>
+              s.toLowerCase().includes(query.toLowerCase().split(" ")[0])
+              || s.length > 50,
           ) || sentences[0];
 
         if (
-          relevantSentence &&
-          !keyPoints.some((point) => point.includes(relevantSentence.trim()))
+          relevantSentence
+          && !keyPoints.some(point => point.includes(relevantSentence.trim()))
         ) {
           keyPoints.push(relevantSentence.trim());
           sources.add(source);
@@ -661,8 +665,8 @@ export class R2RService extends Service {
       .join("\n\n");
 
     if (keyPoints.length === 0) {
-      synthesizedResponse +=
-        "\n\nI found relevant documents but need more specific information to provide a detailed answer.";
+      synthesizedResponse
+        += "\n\nI found relevant documents but need more specific information to provide a detailed answer.";
     }
 
     return synthesizedResponse;
@@ -679,14 +683,14 @@ export class R2RService extends Service {
     return results
       .slice(0, 4)
       .map((result, index) => {
-        const source =
-          result.payload.content?.name ||
-          result.payload.content?.source ||
-          "Unknown source";
-        const description =
-          result.payload.content?.description ||
-          result.payload.text?.substring(0, 150) ||
-          "";
+        const source
+          = result.payload.content?.name
+          || result.payload.content?.source
+          || "Unknown source";
+        const description
+          = result.payload.content?.description
+          || result.payload.text?.substring(0, 150)
+          || "";
         const documentId = result.payload.document_id;
 
         let citation = `${index + 1}. **${source}**`;
@@ -725,7 +729,9 @@ export class R2RService extends Service {
       };
       await appendFile(R2RService.LOG_FILE_PATH, `${JSON.stringify(entry)}\n`);
     } catch (err) {
-      this.runtime?.logger?.error("Failed to append to R2R log file", { err });
+      this.runtime?.logger?.error(
+        `Failed to append to R2R log file - Error: ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
   }
 }
@@ -845,12 +851,12 @@ export const askR2RAction: Action = {
       "librarian",
     ];
 
-    const hasQuestionWord = questionWords.some((word) => text.includes(word));
-    const hasActionWord = actionWords.some((word) => text.includes(word));
-    const hasInformationWord = informationWords.some((word) =>
+    const hasQuestionWord = questionWords.some(word => text.includes(word));
+    const hasActionWord = actionWords.some(word => text.includes(word));
+    const hasInformationWord = informationWords.some(word =>
       text.includes(word),
     );
-    const hasMocaKeyword = mocaKeywords.some((keyword) =>
+    const hasMocaKeyword = mocaKeywords.some(keyword =>
       text.includes(keyword),
     );
 
@@ -860,25 +866,16 @@ export const askR2RAction: Action = {
     const isMocaRelated = hasMocaKeyword;
 
     // Exclude very short queries or basic greetings
-    const greetings = ["hi", "hello", "hey", "thanks", "thank you"];
+    const greetings = [ "hi", "hello", "hey", "thanks", "thank you" ];
     const isSubstantive = text.length > 10 && !greetings.includes(text.trim());
 
-    const result =
-      ((isQuestion || isInformationRequest) && isSubstantive) ||
-      (isMocaRelated && isSubstantive);
+    const result
+      = ((isQuestion || isInformationRequest) && isSubstantive)
+      || (isMocaRelated && isSubstantive);
 
-    runtime.logger?.debug("R2R Action Validation", {
-      text,
-      hasQuestionWord,
-      hasActionWord,
-      hasInformationWord,
-      hasMocaKeyword,
-      isQuestion,
-      isInformationRequest,
-      isMocaRelated,
-      isSubstantive,
-      result,
-    });
+    runtime.logger?.debug(
+      `R2R Action Validation - Text: "${text}", HasQuestionWord: ${hasQuestionWord}, HasActionWord: ${hasActionWord}, HasInformationWord: ${hasInformationWord}, HasMocaKeyword: ${hasMocaKeyword}, IsQuestion: ${isQuestion}, IsInformationRequest: ${isInformationRequest}, IsMocaRelated: ${isMocaRelated}, IsSubstantive: ${isSubstantive}, Result: ${result}`,
+    );
 
     return result;
   },
@@ -894,8 +891,8 @@ export const askR2RAction: Action = {
       const r2rService = runtime.getService("r2r-service") as R2RService;
 
       if (!r2rService) {
-        const serviceErrorText =
-          "R2R service is not available. Please check the configuration.";
+        const serviceErrorText
+          = "R2R service is not available. Please check the configuration.";
 
         if (callback) {
           await callback({
@@ -914,8 +911,8 @@ export const askR2RAction: Action = {
       // Test connection first
       const connectionOk = await r2rService.testConnection();
       if (!connectionOk) {
-        const connectionErrorText =
-          "Unable to connect to the R2R service. Please check if the R2R server is running.";
+        const connectionErrorText
+          = "Unable to connect to the R2R service. Please check if the R2R server is running.";
 
         if (callback) {
           await callback({
@@ -936,10 +933,9 @@ export const askR2RAction: Action = {
       // Format the query to be more suitable for RAG
       const formattedQuery = query.trim();
 
-      runtime.logger?.debug("Processing R2R query", {
-        originalQuery: query,
-        formattedQuery,
-      });
+      runtime.logger?.debug(
+        `Processing R2R query - OriginalQuery: "${query}", FormattedQuery: "${formattedQuery}"`,
+      );
 
       // Provide immediate feedback to user
       if (callback) {
@@ -962,11 +958,11 @@ export const askR2RAction: Action = {
       });
 
       if (
-        !ragResponse.completion &&
-        (!ragResponse.search_results || ragResponse.search_results.length === 0)
+        !ragResponse.completion
+        && (!ragResponse.search_results || ragResponse.search_results.length === 0)
       ) {
-        const noResponseText =
-          "I couldn't find relevant information to answer your question. Please try rephrasing or asking about a different topic.";
+        const noResponseText
+          = "I couldn't find relevant information to answer your question. Please try rephrasing or asking about a different topic.";
 
         if (callback) {
           await callback({
@@ -1008,10 +1004,12 @@ export const askR2RAction: Action = {
         },
       };
     } catch (error) {
-      runtime.logger?.error("Error in askR2RAction", { error });
+      runtime.logger?.error(
+        `Error in askR2RAction - Error: ${error instanceof Error ? error.message : String(error)}`,
+      );
 
-      const errorText =
-        "I encountered an error while processing your question. Please try again later.";
+      const errorText
+        = "I encountered an error while processing your question. Please try again later.";
 
       if (callback) {
         await callback({
@@ -1132,38 +1130,31 @@ export const searchR2RAction: Action = {
       "librarian",
     ];
 
-    const hasSearchKeyword = searchKeywords.some((keyword) =>
+    const hasSearchKeyword = searchKeywords.some(keyword =>
       text.includes(keyword),
     );
-    const hasDocumentKeyword = documentKeywords.some((keyword) =>
+    const hasDocumentKeyword = documentKeywords.some(keyword =>
       text.includes(keyword),
     );
-    const hasMocaSearchTerm = mocaSearchTerms.some((term) =>
+    const hasMocaSearchTerm = mocaSearchTerms.some(term =>
       text.includes(term),
     );
 
     // Also check for explicit search commands
-    const isExplicitSearch =
-      text.startsWith("search") || text.includes("search for");
+    const isExplicitSearch
+      = text.startsWith("search") || text.includes("search for");
     const isMocaSearch = hasSearchKeyword && hasMocaSearchTerm;
     const isDecc0sQuery = text.includes("decc0s");
 
-    const result =
-      (hasSearchKeyword && hasDocumentKeyword) ||
-      isExplicitSearch ||
-      isMocaSearch ||
-      isDecc0sQuery;
+    const result
+      = (hasSearchKeyword && hasDocumentKeyword)
+      || isExplicitSearch
+      || isMocaSearch
+      || isDecc0sQuery;
 
-    runtime.logger?.debug("R2R Search Action Validation", {
-      text,
-      hasSearchKeyword,
-      hasDocumentKeyword,
-      hasMocaSearchTerm,
-      isExplicitSearch,
-      isMocaSearch,
-      isDecc0sQuery,
-      result,
-    });
+    runtime.logger?.debug(
+      `R2R Search Action Validation - Text: "${text}", HasSearchKeyword: ${hasSearchKeyword}, HasDocumentKeyword: ${hasDocumentKeyword}, HasMocaSearchTerm: ${hasMocaSearchTerm}, IsExplicitSearch: ${isExplicitSearch}, IsMocaSearch: ${isMocaSearch}, IsDecc0sQuery: ${isDecc0sQuery}, Result: ${result}`,
+    );
 
     return result;
   },
@@ -1179,8 +1170,8 @@ export const searchR2RAction: Action = {
       const r2rService = runtime.getService("r2r-service") as R2RService;
 
       if (!r2rService) {
-        const serviceErrorText =
-          "R2R service is not available. Please check the configuration.";
+        const serviceErrorText
+          = "R2R service is not available. Please check the configuration.";
 
         if (callback) {
           await callback({
@@ -1199,8 +1190,8 @@ export const searchR2RAction: Action = {
       // Test connection first
       const connectionOk = await r2rService.testConnection();
       if (!connectionOk) {
-        const connectionErrorText =
-          "Unable to connect to the R2R service. Please check if the R2R server is running.";
+        const connectionErrorText
+          = "Unable to connect to the R2R service. Please check if the R2R server is running.";
 
         if (callback) {
           await callback({
@@ -1238,8 +1229,8 @@ export const searchR2RAction: Action = {
       }
 
       if (!searchQuery) {
-        const noQueryText =
-          "Please provide a search query. For example: 'search for information about AI'";
+        const noQueryText
+          = "Please provide a search query. For example: 'search for information about AI'";
 
         if (callback) {
           await callback({
@@ -1255,10 +1246,9 @@ export const searchR2RAction: Action = {
         };
       }
 
-      runtime.logger?.debug("Processing R2R search", {
-        originalText: fullText,
-        searchQuery,
-      });
+      runtime.logger?.debug(
+        `Processing R2R search - OriginalText: "${fullText}", SearchQuery: "${searchQuery}"`,
+      );
 
       // Provide immediate feedback
       if (callback) {
@@ -1317,10 +1307,12 @@ export const searchR2RAction: Action = {
         },
       };
     } catch (error) {
-      runtime.logger?.error("Error in searchR2RAction", { error });
+      runtime.logger?.error(
+        `Error in searchR2RAction - Error: ${error instanceof Error ? error.message : String(error)}`,
+      );
 
-      const errorText =
-        "I encountered an error while searching documents. Please try again later.";
+      const errorText
+        = "I encountered an error while searching documents. Please try again later.";
 
       if (callback) {
         await callback({
@@ -1388,7 +1380,9 @@ export const r2rContextProvider: Provider = {
         data: { hasR2RService: true },
       };
     } catch (error) {
-      runtime.logger?.error("Error in r2rContextProvider", { error });
+      runtime.logger?.error(
+        `Error in r2rContextProvider - Error: ${error instanceof Error ? error.message : String(error)}`,
+      );
       return {
         text: "R2R information capabilities are temporarily unavailable.",
         data: { hasR2RService: false },
@@ -1404,13 +1398,13 @@ export const r2rRAGPlugin: Plugin = {
     "Provides retrieval-augmented generation capabilities using R2R backend with AI-powered response generation",
 
   // Register service
-  services: [R2RService],
+  services: [ R2RService ],
 
   // Register actions
-  actions: [askR2RAction, searchR2RAction],
+  actions: [ askR2RAction, searchR2RAction ],
 
   // Register providers
-  providers: [r2rContextProvider],
+  providers: [ r2rContextProvider ],
 
   // Configuration
   config: {
@@ -1421,11 +1415,7 @@ export const r2rRAGPlugin: Plugin = {
   // Lifecycle hooks
   async init(config: Record<string, string>, runtime: IAgentRuntime) {
     runtime.logger?.info(
-      "R2R RAG plugin initialized with AI-powered response generation",
-      {
-        r2rUrl: config.r2rUrl || "http://localhost:7272",
-        hasApiKey: !!(config.r2rApiKey || process.env.R2R_API_KEY),
-      },
+      `R2R RAG plugin initialized with AI-powered response generation - R2RUrl: ${config.r2rUrl || "http://localhost:7272"}, HasApiKey: ${!!(config.r2rApiKey || process.env.R2R_API_KEY)}`,
     );
   },
 };
