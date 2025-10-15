@@ -29,7 +29,7 @@
   "scripts": {
     "start": "elizaos start -p 3005",
     "dev": "elizaos dev -p 3005",
-    "build": "tsc --noEmit && vite build && tsup",
+    "build": "tsc --project tsconfig.build.json --noEmit && vite build && tsup",
     "lint": "prettier --write ./src",
     "type-check": "tsc --noEmit",
     "type-check:watch": "tsc --noEmit --watch",
@@ -75,10 +75,12 @@
   "devDependencies": {
     "@types/react": "^18.3.25",
     "@types/react-dom": "^18.3.0",
+    "@types/uuid": "^10.0.0",
     "@vitejs/plugin-react": "^4.3.1",
     "prettier": "3.6.2",
     "tsup": "8.5.0",
     "typescript": "^5.9.3",
+    "uuid": "^11.0.3",
     "vite": "^6.0.1"
   },
   "publishConfig": {
