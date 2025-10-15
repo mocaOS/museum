@@ -1,27 +1,76 @@
 import { defineHook } from "@directus/extensions-sdk";
 import axios from "axios";
-import type { OpenSeaListingsResponse } from "./types";
+import type { OpenSeaListing, OpenSeaListingsResponse } from "./types";
 
 export default defineHook(({ schedule }, { env, services, getSchema }) => {
   schedule("* * * * *", async () => {
     try {
       console.log("[OpenSea Listings Sync] Fetching listings...");
 
-      const { data } = await axios.get<OpenSeaListingsResponse>(
-        "https://api.opensea.io/api/v2/listings/collection/art-decc0s/best?include_private_listings=false&limit=10",
-        {
-          headers: {
-            "X-API-KEY": env.OPENSEA_API_KEY,
+      const TARGET_COUNT = 10;
+      const uniqueListings = new Map<string, OpenSeaListing>();
+      let cursor: string | undefined;
+      let totalFetched = 0;
+      const maxAttempts = 5; // Prevent infinite loops
+      let attempts = 0;
+
+      // Fetch listings until we have 10 unique token IDs
+      while (uniqueListings.size < TARGET_COUNT && attempts < maxAttempts) {
+        attempts++;
+
+        const url = new URL(
+          "https://api.opensea.io/api/v2/listings/collection/art-decc0s/best",
+        );
+        url.searchParams.set("include_private_listings", "false");
+        url.searchParams.set("limit", "10");
+        if (cursor) {
+          url.searchParams.set("next", cursor);
+        }
+
+        const { data } = await axios.get<OpenSeaListingsResponse>(
+          url.toString(),
+          {
+            headers: {
+              "X-API-KEY": env.OPENSEA_API_KEY,
+            },
           },
-        },
-      );
+        );
 
+        totalFetched += data.listings.length;
+        console.log(
+          `[OpenSea Listings Sync] Attempt ${attempts}: Found ${data.listings.length} listings (total fetched: ${totalFetched})`,
+        );
+
+        // Add unique listings to our map
+        for (const listing of data.listings) {
+          const tokenId = listing.protocol_data.parameters.offer[0]?.identifierOrCriteria;
+          if (tokenId && !uniqueListings.has(tokenId)) {
+            uniqueListings.set(tokenId, listing);
+            console.log(
+              `[OpenSea Listings Sync] Added unique token ID: ${tokenId} (${uniqueListings.size}/${TARGET_COUNT})`,
+            );
+          } else if (tokenId) {
+            console.log(
+              `[OpenSea Listings Sync] Skipped duplicate token ID: ${tokenId}`,
+            );
+          }
+        }
+
+        // If we have enough unique listings or no more pages, stop
+        if (uniqueListings.size >= TARGET_COUNT || !data.next) {
+          break;
+        }
+
+        cursor = data.next;
+      }
+
+      const listings = Array.from(uniqueListings.values());
       console.log(
-        `[OpenSea Listings Sync] Found ${data.listings.length} listings`,
+        `[OpenSea Listings Sync] Collected ${uniqueListings.size} unique listings after ${attempts} attempt(s)`,
       );
 
-      // Extract token IDs from listings
-      const tokenIds = data.listings
+      // Extract token IDs from unique listings
+      const tokenIds = listings
         .map(listing => listing.protocol_data.parameters.offer[0]?.identifierOrCriteria)
         .filter(id => id !== undefined)
         .join(",");
@@ -54,7 +103,7 @@ export default defineHook(({ schedule }, { env, services, getSchema }) => {
         console.log("[OpenSea Listings Sync] Created 'adoption' setting");
       }
 
-      data.listings.forEach((listing) => {
+      listings.forEach((listing) => {
         console.log(`[OpenSea Listings Sync] Token ID: ${listing.protocol_data.parameters.offer[0]?.identifierOrCriteria}`);
       });
     } catch (error) {
