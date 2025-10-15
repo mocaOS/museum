@@ -8,66 +8,94 @@ export default defineHook(({ schedule }, { env, services, getSchema }) => {
       console.log("[OpenSea Listings Sync] Fetching listings...");
 
       const TARGET_COUNT = 10;
+      const MAX_ATTEMPTS = 5;
       const uniqueListings = new Map<string, OpenSeaListing>();
       let cursor: string | undefined;
       let totalFetched = 0;
-      const maxAttempts = 5; // Prevent infinite loops
       let attempts = 0;
 
-      // Fetch listings until we have 10 unique token IDs
-      while (uniqueListings.size < TARGET_COUNT && attempts < maxAttempts) {
+      // Fetch listings until we have 10 unique token IDs or reach max attempts
+      while (uniqueListings.size < TARGET_COUNT && attempts < MAX_ATTEMPTS) {
         attempts++;
 
-        const url = new URL(
-          "https://api.opensea.io/api/v2/listings/collection/art-decc0s/best",
-        );
-        url.searchParams.set("include_private_listings", "false");
-        url.searchParams.set("limit", "10");
-        if (cursor) {
-          url.searchParams.set("next", cursor);
-        }
-
-        const { data } = await axios.get<OpenSeaListingsResponse>(
-          url.toString(),
-          {
-            headers: {
-              "X-API-KEY": env.OPENSEA_API_KEY,
-            },
-          },
-        );
-
-        totalFetched += data.listings.length;
-        console.log(
-          `[OpenSea Listings Sync] Attempt ${attempts}: Found ${data.listings.length} listings (total fetched: ${totalFetched})`,
-        );
-
-        // Add unique listings to our map
-        for (const listing of data.listings) {
-          const tokenId = listing.protocol_data.parameters.offer[0]?.identifierOrCriteria;
-          if (tokenId && !uniqueListings.has(tokenId)) {
-            uniqueListings.set(tokenId, listing);
-            console.log(
-              `[OpenSea Listings Sync] Added unique token ID: ${tokenId} (${uniqueListings.size}/${TARGET_COUNT})`,
-            );
-          } else if (tokenId) {
-            console.log(
-              `[OpenSea Listings Sync] Skipped duplicate token ID: ${tokenId}`,
-            );
+        try {
+          const url = new URL(
+            "https://api.opensea.io/api/v2/listings/collection/art-decc0s/best",
+          );
+          url.searchParams.set("include_private_listings", "false");
+          url.searchParams.set("limit", "10");
+          if (cursor) {
+            url.searchParams.set("next", cursor);
           }
+
+          const { data } = await axios.get<OpenSeaListingsResponse>(
+            url.toString(),
+            {
+              headers: {
+                "X-API-KEY": env.OPENSEA_API_KEY,
+              },
+            },
+          );
+
+          totalFetched += data.listings.length;
+          console.log(
+            `[OpenSea Listings Sync] Attempt ${attempts}: Found ${data.listings.length} listings (total fetched: ${totalFetched})`,
+          );
+
+          // Add unique listings to our map
+          for (const listing of data.listings) {
+            const tokenId = listing.protocol_data.parameters.offer[0]?.identifierOrCriteria;
+            if (tokenId && !uniqueListings.has(tokenId)) {
+              uniqueListings.set(tokenId, listing);
+              console.log(
+                `[OpenSea Listings Sync] Added unique token ID: ${tokenId} (${uniqueListings.size}/${TARGET_COUNT})`,
+              );
+            } else if (tokenId) {
+              console.log(
+                `[OpenSea Listings Sync] Skipped duplicate token ID: ${tokenId}`,
+              );
+            }
+          }
+
+          // If we have enough unique listings or no more pages, stop
+          if (uniqueListings.size >= TARGET_COUNT || !data.next) {
+            break;
+          }
+
+          cursor = data.next;
+        } catch (error) {
+          console.error(
+            `[OpenSea Listings Sync] ⚠️  Attempt ${attempts} failed:`,
+            error instanceof Error ? error.message : error,
+          );
+          // Continue to next attempt
         }
 
-        // If we have enough unique listings or no more pages, stop
-        if (uniqueListings.size >= TARGET_COUNT || !data.next) {
-          break;
-        }
-
-        cursor = data.next;
+        await new Promise(resolve => setTimeout(resolve, 5000));
       }
 
       const listings = Array.from(uniqueListings.values());
-      console.log(
-        `[OpenSea Listings Sync] Collected ${uniqueListings.size} unique listings after ${attempts} attempt(s)`,
-      );
+
+      // Log results and handle max attempts reached
+      if (uniqueListings.size < TARGET_COUNT && attempts >= MAX_ATTEMPTS) {
+        console.log(
+          `[OpenSea Listings Sync] ⚠️  Reached max attempts (${MAX_ATTEMPTS}). Proceeding with ${uniqueListings.size} unique listings (target was ${TARGET_COUNT})`,
+        );
+      } else if (uniqueListings.size >= TARGET_COUNT) {
+        console.log(
+          `[OpenSea Listings Sync] ✓ Successfully collected ${uniqueListings.size} unique listings after ${attempts} attempt(s)`,
+        );
+      } else {
+        console.log(
+          `[OpenSea Listings Sync] Collected ${uniqueListings.size} unique listings (no more pages available)`,
+        );
+      }
+
+      // Check if we have any listings to process
+      if (listings.length === 0) {
+        console.error("[OpenSea Listings Sync] No unique listings found. Skipping update.");
+        return;
+      }
 
       // Extract token IDs from unique listings
       const tokenIds = listings
