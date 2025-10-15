@@ -266,7 +266,6 @@ type Subscription {
   directus_revisions_mutated(event: EventEnum): directus_revisions_mutated
   directus_files_mutated(event: EventEnum): directus_files_mutated
   collections_mutated(event: EventEnum): collections_mutated
-  agents_mutated(event: EventEnum): agents_mutated
   rooms_mutated(event: EventEnum): rooms_mutated
   applications_mutated(event: EventEnum): applications_mutated
   settings_mutated(event: EventEnum): settings_mutated
@@ -332,20 +331,6 @@ enum EventEnum {
 enum graphql_sdl_scope {
   items
   system
-}
-
-type agents {
-  id: ID!
-  token_id: String
-  status: String
-  url: String
-  application_id: String
-}
-
-type agents_mutated {
-  key: ID!
-  event: EventEnum
-  data: agents
 }
 
 type applications {

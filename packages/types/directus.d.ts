@@ -1,11 +1,3 @@
-export type Agents = {
-  application_id?: string | null;
-  id: number;
-  status?: string | null;
-  token_id?: string | null;
-  url?: string | null;
-};
-
 export type Applications = {
   application_id?: string | null;
   decc0s?: string | null;
@@ -500,7 +492,6 @@ export type Settings = {
 };
 
 export type CustomDirectusTypes = {
-  agents: Agents[];
   applications: Applications[];
   collections: Collections[];
   contracts: Contracts[];

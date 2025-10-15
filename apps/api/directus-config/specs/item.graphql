@@ -15,10 +15,6 @@ type Query {
   collections_by_id(id: ID!, version: String): collections
   collections_aggregated(groupBy: [String], filter: collections_filter, limit: Int, offset: Int, page: Int, search: String, sort: [String]): [collections_aggregated!]!
   collections_by_version(version: String!, id: ID!): version_collections
-  agents(filter: agents_filter, sort: [String], limit: Int, offset: Int, page: Int, search: String): [agents!]!
-  agents_by_id(id: ID!, version: String): agents
-  agents_aggregated(groupBy: [String], filter: agents_filter, limit: Int, offset: Int, page: Int, search: String, sort: [String]): [agents_aggregated!]!
-  agents_by_version(version: String!, id: ID!): version_agents
   rooms(filter: rooms_filter, sort: [String], limit: Int, offset: Int, page: Int, search: String): [rooms!]!
   rooms_by_id(id: ID!, version: String): rooms
   rooms_aggregated(groupBy: [String], filter: rooms_filter, limit: Int, offset: Int, page: Int, search: String, sort: [String]): [rooms_aggregated!]!
@@ -42,8 +38,6 @@ type Mutation {
   create_nfts_item(data: create_nfts_input!): nfts
   create_collections_items(filter: collections_filter, sort: [String], limit: Int, offset: Int, page: Int, search: String, data: [create_collections_input!]): [collections!]!
   create_collections_item(data: create_collections_input!): collections
-  create_agents_items(filter: agents_filter, sort: [String], limit: Int, offset: Int, page: Int, search: String, data: [create_agents_input!]): [agents!]!
-  create_agents_item(data: create_agents_input!): agents
   create_rooms_items(filter: rooms_filter, sort: [String], limit: Int, offset: Int, page: Int, search: String, data: [create_rooms_input!]): [rooms!]!
   create_rooms_item(data: create_rooms_input!): rooms
   create_applications_items(filter: applications_filter, sort: [String], limit: Int, offset: Int, page: Int, search: String, data: [create_applications_input!]): [applications!]!
@@ -62,9 +56,6 @@ type Mutation {
   update_collections_items(filter: collections_filter, sort: [String], limit: Int, offset: Int, page: Int, search: String, ids: [ID]!, data: update_collections_input!): [collections!]!
   update_collections_batch(filter: collections_filter, sort: [String], limit: Int, offset: Int, page: Int, search: String, data: [update_collections_input!]): [collections!]!
   update_collections_item(id: ID!, data: update_collections_input!): collections
-  update_agents_items(filter: agents_filter, sort: [String], limit: Int, offset: Int, page: Int, search: String, ids: [ID]!, data: update_agents_input!): [agents!]!
-  update_agents_batch(filter: agents_filter, sort: [String], limit: Int, offset: Int, page: Int, search: String, data: [update_agents_input!]): [agents!]!
-  update_agents_item(id: ID!, data: update_agents_input!): agents
   update_rooms_items(filter: rooms_filter, sort: [String], limit: Int, offset: Int, page: Int, search: String, ids: [ID]!, data: update_rooms_input!): [rooms!]!
   update_rooms_batch(filter: rooms_filter, sort: [String], limit: Int, offset: Int, page: Int, search: String, data: [update_rooms_input!]): [rooms!]!
   update_rooms_item(id: ID!, data: update_rooms_input!): rooms
@@ -82,8 +73,6 @@ type Mutation {
   delete_nfts_item(id: ID!): delete_one
   delete_collections_items(ids: [ID]!): delete_many
   delete_collections_item(id: ID!): delete_one
-  delete_agents_items(ids: [ID]!): delete_many
-  delete_agents_item(id: ID!): delete_one
   delete_rooms_items(ids: [ID]!): delete_many
   delete_rooms_item(id: ID!): delete_one
   delete_applications_items(ids: [ID]!): delete_many
@@ -118,7 +107,6 @@ type Subscription {
   directus_revisions_mutated(event: EventEnum): directus_revisions_mutated
   directus_files_mutated(event: EventEnum): directus_files_mutated
   collections_mutated(event: EventEnum): collections_mutated
-  agents_mutated(event: EventEnum): agents_mutated
   rooms_mutated(event: EventEnum): rooms_mutated
   applications_mutated(event: EventEnum): applications_mutated
   settings_mutated(event: EventEnum): settings_mutated
@@ -168,45 +156,6 @@ enum EventEnum {
   create
   update
   delete
-}
-
-type agents {
-  id: ID!
-  token_id: String
-  status: String
-  url: String
-  application_id: String
-}
-
-type agents_aggregated {
-  group: JSON
-  countAll: Int
-  count: agents_aggregated_count
-  countDistinct: agents_aggregated_count
-  avg: agents_aggregated_fields
-  sum: agents_aggregated_fields
-  avgDistinct: agents_aggregated_fields
-  sumDistinct: agents_aggregated_fields
-  min: agents_aggregated_fields
-  max: agents_aggregated_fields
-}
-
-type agents_aggregated_count {
-  id: Int
-  token_id: Int
-  status: Int
-  url: Int
-  application_id: Int
-}
-
-type agents_aggregated_fields {
-  id: Float
-}
-
-type agents_mutated {
-  key: ID!
-  event: EventEnum
-  data: agents
 }
 
 type applications {
@@ -1083,15 +1032,6 @@ type settings_mutated {
 }
 
 """"""
-type version_agents {
-  id: ID
-  token_id: String
-  status: String
-  url: String
-  application_id: String
-}
-
-""""""
 type version_applications {
   id: ID
   status: String
@@ -1178,16 +1118,6 @@ type version_rooms {
 type version_settings {
   key: ID
   value: String
-}
-
-input agents_filter {
-  id: number_filter_operators
-  token_id: string_filter_operators
-  status: string_filter_operators
-  url: string_filter_operators
-  application_id: string_filter_operators
-  _and: [agents_filter]
-  _or: [agents_filter]
 }
 
 input applications_filter {
@@ -1304,14 +1234,6 @@ input contracts_filter {
 
 input count_function_filter_operators {
   count: number_filter_operators
-}
-
-input create_agents_input {
-  id: ID
-  token_id: String
-  status: String
-  url: String
-  application_id: String
 }
 
 input create_applications_input {
@@ -2135,14 +2057,6 @@ input string_filter_operators {
   _nnull: Boolean
   _empty: Boolean
   _nempty: Boolean
-}
-
-input update_agents_input {
-  id: ID
-  token_id: String
-  status: String
-  url: String
-  application_id: String
 }
 
 input update_applications_input {
