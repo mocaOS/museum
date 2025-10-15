@@ -246,45 +246,123 @@ export default defineEndpoint({
           const applicationUuid = String((existingApp as any).application_id);
 
           try {
-            try {
-              const updateUrl = `${COOLIFY_API}/applications/${applicationUuid}`;
-              const updatePayload: Record<string, unknown> = {
-                git_branch: GIT_BRANCH,
-                install_command: INSTALL_COMMAND,
-                build_command: BUILD_COMMAND,
-                start_command: START_COMMAND,
-                ports_exposes: String(EXPOSE_PORT),
-              };
-              await httpJson("PATCH", updateUrl, updatePayload);
-            } catch {}
+            let hasConfigChanges = false;
+            let hasEnvChanges = false;
 
-            // update env vars best-effort
+            // Check if configuration has changed
+            try {
+              const currentApp = await httpJson("GET", `${COOLIFY_API}/applications/${applicationUuid}`) as any;
+
+              if (
+                currentApp?.git_branch !== GIT_BRANCH
+                || currentApp?.install_command !== INSTALL_COMMAND
+                || currentApp?.build_command !== BUILD_COMMAND
+                || currentApp?.start_command !== START_COMMAND
+                || String(currentApp?.ports_exposes || "") !== String(EXPOSE_PORT)
+              ) {
+                hasConfigChanges = true;
+              }
+            } catch (e: any) {
+              // If we can't fetch current config, assume changes exist
+              hasConfigChanges = true;
+            }
+
+            // Check if environment variables have changed
             try {
               const schema = await getSchema();
-              const envMap = await getApplicationEnvFromDirectus(schema);
+              const desiredEnvMap = await getApplicationEnvFromDirectus(schema);
               // Extend with CENTRAL_MESSAGE_SERVER_URL
-              envMap.CENTRAL_MESSAGE_SERVER_URL = (existingApp as any).url || "";
-              const entries = Object.entries(envMap).map(([ key, value ]) => ({ key, value }));
-              if (entries.length > 0) {
-                // Delete all existing environment variables first
-                await deleteAllCoolifyEnvVars(applicationUuid);
+              desiredEnvMap.CENTRAL_MESSAGE_SERVER_URL = (existingApp as any).url || "";
 
-                // Add new environment variables
-                const bulkUrl = `${COOLIFY_API}/applications/${applicationUuid}/envs/bulk`;
-                const bulkBody = {
-                  data: entries.map(({ key, value }) => ({ key, value, is_preview: false, is_build_time: false, is_literal: true, is_multiline: false, is_shown_once: false })),
-                } as Record<string, unknown>;
-                await httpJson("PATCH", bulkUrl, bulkBody);
+              const currentEnvVars = await httpJson("GET", `${COOLIFY_API}/applications/${applicationUuid}/envs`) as any[] | undefined;
+              const currentEnvMap: Record<string, string> = {};
+
+              if (Array.isArray(currentEnvVars)) {
+                for (const envVar of currentEnvVars) {
+                  if (envVar?.key && envVar?.value !== undefined) {
+                    currentEnvMap[envVar.key] = String(envVar.value);
+                  }
+                }
               }
-            } catch {}
 
-            // start existing application
-            const startUrl = `${COOLIFY_API}/applications/${applicationUuid}/start?instant_deploy=true&force=true`;
-            await httpJson("GET", startUrl);
-            await applicationsService.updateOne((existingApp as any).id as any, { status: "starting", decc0s: tokenIds.join(",") } as Partial<Directus.Applications>);
+              // Compare env vars
+              const desiredKeys = Object.keys(desiredEnvMap).sort();
+              const currentKeys = Object.keys(currentEnvMap).sort();
+
+              if (desiredKeys.length !== currentKeys.length || desiredKeys.some((k, i) => k !== currentKeys[i])) {
+                hasEnvChanges = true;
+              } else {
+                for (const key of desiredKeys) {
+                  if (desiredEnvMap[key] !== currentEnvMap[key]) {
+                    hasEnvChanges = true;
+                    break;
+                  }
+                }
+              }
+            } catch (e: any) {
+              // If we can't fetch current env vars, assume changes exist
+              hasEnvChanges = true;
+            }
+
+            // Update configuration if changes detected
+            if (hasConfigChanges) {
+              try {
+                const updateUrl = `${COOLIFY_API}/applications/${applicationUuid}`;
+                const updatePayload: Record<string, unknown> = {
+                  git_branch: GIT_BRANCH,
+                  install_command: INSTALL_COMMAND,
+                  build_command: BUILD_COMMAND,
+                  start_command: START_COMMAND,
+                  ports_exposes: String(EXPOSE_PORT),
+                };
+                await httpJson("PATCH", updateUrl, updatePayload);
+              } catch {}
+            }
+
+            // Update env vars if changes detected
+            if (hasEnvChanges) {
+              try {
+                const schema = await getSchema();
+                const envMap = await getApplicationEnvFromDirectus(schema);
+                // Extend with CENTRAL_MESSAGE_SERVER_URL
+                envMap.CENTRAL_MESSAGE_SERVER_URL = (existingApp as any).url || "";
+                const entries = Object.entries(envMap).map(([ key, value ]) => ({ key, value }));
+                if (entries.length > 0) {
+                  // Delete all existing environment variables first
+                  await deleteAllCoolifyEnvVars(applicationUuid);
+
+                  // Add new environment variables
+                  const bulkUrl = `${COOLIFY_API}/applications/${applicationUuid}/envs/bulk`;
+                  const bulkBody = {
+                    data: entries.map(({ key, value }) => ({ key, value, is_preview: false, is_build_time: false, is_literal: true, is_multiline: false, is_shown_once: false })),
+                  } as Record<string, unknown>;
+                  await httpJson("PATCH", bulkUrl, bulkBody);
+                }
+              } catch {}
+            }
+
+            // Update decc0s token selection regardless
+            await applicationsService.updateOne((existingApp as any).id as any, { decc0s: tokenIds.join(",") } as Partial<Directus.Applications>);
+
+            // Use restart if no changes, otherwise use start
+            let actionUrl: string;
+            let actionType: string;
+
+            if (!hasConfigChanges && !hasEnvChanges) {
+              // No changes detected, just restart
+              actionUrl = `${COOLIFY_API}/applications/${applicationUuid}/restart`;
+              actionType = "restarted";
+            } else {
+              // Changes detected, do full start with deployment
+              actionUrl = `${COOLIFY_API}/applications/${applicationUuid}/start?instant_deploy=true&force=true`;
+              actionType = "started";
+            }
+
+            await httpJson("GET", actionUrl);
+            await applicationsService.updateOne((existingApp as any).id as any, { status: "starting" } as Partial<Directus.Applications>);
             scheduleStatusPoll(applicationUuid, applicationsService, (existingApp as any).id as any);
             const updated = await applicationsService.readOne((existingApp as any).id as any, { fields: [ "id", "status", "url", "application_id", "decc0s", "owner.id" ] as any });
-            return res.json({ success: true, created: false, started: true, application: updated });
+            return res.json({ success: true, created: false, started: true, action: actionType, hasConfigChanges, hasEnvChanges, application: updated });
           } catch (e: any) {
             return res.status(502).json({ success: false, error: e?.message ?? "Failed to start application" });
           }
