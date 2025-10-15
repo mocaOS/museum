@@ -8,9 +8,9 @@
     <!-- Loader -->
     <div
       v-if="!loaded && props.showLoader && !isUnsupportedMediaType && canShowLoader && !isIFrame"
-      class="z-1 absolute inset-0 flex items-center justify-center"
+      class="absolute inset-0 z-1 flex items-center justify-center"
     >
-      <div class="loader" />
+      <div data-loader />
     </div>
 
     <div class="absolute inset-0 flex items-center justify-center" :class="{ 'z-2': isVideo }">
@@ -37,7 +37,7 @@
           :src="mediaInfo.url"
           frameBorder="0"
           scrolling="no"
-          class="absolute inset-0 z-0 size-full pointer-events-none"
+          class="pointer-events-none absolute inset-0 z-0 size-full"
         />
         <img
           @load="handleImageLoaded"
@@ -69,7 +69,7 @@
         loop
         :controls="videoControls"
         :controlsList="videoControls ? 'nodownload' : undefined"
-        class="max-h-full pointer-events-none"
+        class="pointer-events-none max-h-full"
         :style="videoStyles"
       />
 
@@ -78,7 +78,7 @@
         @load="handleImageLoaded"
         @error="handleImageError"
         v-else-if="isImage"
-        provider="mediaproxy"
+        provider="transform-in"
         :src="mediaInfo.url"
         :alt="mediaInfo.alt || 'Image'"
         :width="finalWidth"
@@ -94,7 +94,10 @@
       <!-- Fallback -->
       <div
         v-else
-        class="flex size-full items-center justify-center bg-gray-100 object-cover text-gray-600"
+        class="
+          flex size-full items-center justify-center bg-gray-100 object-cover
+          text-gray-600
+        "
       >
         Unsupported media type: {{ mediaInfo.type }}
       </div>
@@ -105,7 +108,7 @@
 <script setup>
 import config from "@local/config";
 import { twMerge } from "tailwind-merge";
-import { getImage } from "@/providers/mediaproxy";
+import { getImage } from "@/providers/transform-in";
 import MOCAModel from "@/components/MOCAModel.vue";
 
 const props = defineProps({
@@ -359,7 +362,7 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.loader {
+[data-loader] {
   transform: scale(0.5);
   width: 80px;
   aspect-ratio: 1;

@@ -102,7 +102,14 @@ if (!walletAddress) {
   process.exit(1);
 }
 
-console.log(`🔍 Looking up application for wallet address: ${walletAddress}`);
+const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
+const isAdoptionMode = walletAddress === ZERO_ADDRESS;
+
+if (isAdoptionMode) {
+  console.log("🔓 Adoption mode detected - will use settings.adoption for token IDs");
+} else {
+  console.log(`🔍 Looking up application for wallet address: ${walletAddress}`);
+}
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const API_BASE_URL = "https://api-staging.moca.qwellco.de";
@@ -115,6 +122,51 @@ const DIRECTUS_TOKEN = process.env.DIRECTUS_API_KEY;
 if (!DIRECTUS_TOKEN) {
   console.error("❌ Error: DIRECTUS_API_KEY environment variable is required");
   process.exit(1);
+}
+
+// Function to fetch token IDs from settings table (for adoption mode)
+async function getTokenIdsFromSettings(): Promise<number[]> {
+  try {
+    console.log("🔓 Zero address detected - fetching adoption token IDs from settings...");
+
+    const settingsUrl = `${DIRECTUS_URL}/items/settings?filter[key][_eq]=adoption&fields=value&limit=1`;
+    const settingsResponse = await fetch(settingsUrl, {
+      headers: {
+        Authorization: `Bearer ${DIRECTUS_TOKEN}`,
+      },
+    });
+
+    if (!settingsResponse.ok) {
+      throw new Error(`Failed to fetch settings: HTTP ${settingsResponse.status}`);
+    }
+
+    const settingsData = await settingsResponse.json();
+    const settings = settingsData?.data || [];
+
+    if (settings.length === 0) {
+      throw new Error("No 'adoption' setting found in settings table");
+    }
+
+    const adoptionValue = settings[0].value || "";
+    console.log(`✅ Found adoption setting: ${adoptionValue}`);
+
+    // Parse token IDs from adoption value (comma-separated)
+    const tokenIds: number[] = adoptionValue
+      .split(",")
+      .map((id: string) => id.trim())
+      .filter((id: string) => id !== "")
+      .map((id: string) => Number.parseInt(id, 10))
+      .filter((id: number) => !Number.isNaN(id));
+
+    if (tokenIds.length === 0) {
+      throw new Error("No valid token IDs found in adoption setting");
+    }
+
+    return tokenIds;
+  } catch (error) {
+    console.error("❌ Error fetching token IDs from settings:", error);
+    throw error;
+  }
 }
 
 // Function to query Directus for token IDs by wallet address
@@ -186,8 +238,14 @@ async function getTokenIdsByWalletAddress(walletAddress: string): Promise<number
 // Fetch token IDs from Directus
 let tokenIds: number[];
 try {
-  tokenIds = await getTokenIdsByWalletAddress(walletAddress);
-  console.log(`🎭 Generating characters for token IDs: ${tokenIds.join(", ")}`);
+  // Check if this is the zero address (adoption mode)
+  if (walletAddress === ZERO_ADDRESS) {
+    tokenIds = await getTokenIdsFromSettings();
+    console.log(`🎭 Generating characters for adoption token IDs (no owner check): ${tokenIds.join(", ")}`);
+  } else {
+    tokenIds = await getTokenIdsByWalletAddress(walletAddress);
+    console.log(`🎭 Generating characters for token IDs: ${tokenIds.join(", ")}`);
+  }
 } catch (error) {
   process.exit(1);
 }
