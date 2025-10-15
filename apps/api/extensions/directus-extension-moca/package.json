@@ -36,11 +36,6 @@
       },
       {
         "type": "endpoint",
-        "name": "agents",
-        "source": "src/agents/index.ts"
-      },
-      {
-        "type": "endpoint",
         "name": "applications",
         "source": "src/applications/index.ts"
       },
@@ -68,7 +63,7 @@
   },
   "devDependencies": {
     "@directus/extensions-sdk": "^16.0.2",
-    "@types/node": "^22.18.8",
+    "@types/node": "^22.18.10",
     "typescript": "^5.9.3"
   }
 }
