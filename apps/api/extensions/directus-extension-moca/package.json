@@ -48,6 +48,11 @@
         "type": "endpoint",
         "name": "codex",
         "source": "src/codex/index.ts"
+      },
+      {
+        "type": "endpoint",
+        "name": "listings",
+        "source": "src/listings/index.ts"
       }
     ],
     "host": "^10.10.0"

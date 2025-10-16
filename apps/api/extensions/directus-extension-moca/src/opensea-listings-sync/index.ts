@@ -142,20 +142,32 @@ export default defineHook(({ schedule }, { env, services, getSchema }) => {
 
       console.log(`[OpenSea Listings Sync] Token IDs: ${tokenIds}`);
 
+      // Prepare adoption details with tokenId and price
+      const adoptionDetails = listings.map(listing => ({
+        tokenId: listing.protocol_data.parameters.offer[0]?.identifierOrCriteria,
+        price: {
+          value: listing.price.current.value,
+          currency: listing.price.current.currency,
+          decimals: listing.price.current.decimals,
+        },
+      }));
+
+      console.log(`[OpenSea Listings Sync] Adoption details: ${JSON.stringify(adoptionDetails, null, 2)}`);
+
       // Update or create settings record
       const schema = await getSchema();
       const { ItemsService } = services;
       const settingsService = new ItemsService("settings", { schema });
 
       // Check if 'adoption' setting exists
-      const existingSettings = await settingsService.readByQuery({
+      const existingAdoptionSettings = await settingsService.readByQuery({
         filter: { key: { _eq: "adoption" } },
         limit: 1,
       });
 
-      if (existingSettings.length > 0 && existingSettings[0]) {
+      if (existingAdoptionSettings.length > 0 && existingAdoptionSettings[0]) {
         // Update existing record
-        await settingsService.updateOne(existingSettings[0].key, {
+        await settingsService.updateOne(existingAdoptionSettings[0].key, {
           value: tokenIds,
         });
         console.log("[OpenSea Listings Sync] Updated 'adoption' setting");
@@ -166,6 +178,27 @@ export default defineHook(({ schedule }, { env, services, getSchema }) => {
           value: tokenIds,
         });
         console.log("[OpenSea Listings Sync] Created 'adoption' setting");
+      }
+
+      // Check if 'adoption_details' setting exists
+      const existingAdoptionDetailsSettings = await settingsService.readByQuery({
+        filter: { key: { _eq: "adoption_details" } },
+        limit: 1,
+      });
+
+      if (existingAdoptionDetailsSettings.length > 0 && existingAdoptionDetailsSettings[0]) {
+        // Update existing record
+        await settingsService.updateOne(existingAdoptionDetailsSettings[0].key, {
+          value: JSON.stringify(adoptionDetails),
+        });
+        console.log("[OpenSea Listings Sync] Updated 'adoption_details' setting");
+      } else {
+        // Create new record
+        await settingsService.createOne({
+          key: "adoption_details",
+          value: JSON.stringify(adoptionDetails),
+        });
+        console.log("[OpenSea Listings Sync] Created 'adoption_details' setting");
       }
 
       listings.forEach((listing) => {
