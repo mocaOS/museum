@@ -546,7 +546,7 @@ export default defineEndpoint({
               "Preparing AI modules",
               "Agent is learning your style",
               "Almost ready to chat!",
-              "Spinning up your virtual assistant",
+              "Finalizing your elizaOS instance",
             ];
 
             // Pick a random loading message
