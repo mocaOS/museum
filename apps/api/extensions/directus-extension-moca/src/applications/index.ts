@@ -517,7 +517,7 @@ export default defineEndpoint({
           if (!ok) return res.status(403).json({ success: false, error: "Ownership not verified" });
         }
 
-        // Generate loading message from logs using LiteLLM
+        // Display a random loading message during deployment
         let info = "";
         const applicationId = (application as any).id;
 
@@ -525,57 +525,32 @@ export default defineEndpoint({
           const logs = applicationLogs.get(applicationId)!;
 
           if (logs.length > 0) {
-            try {
-              // Remove timestamps from logs (format: 2025-10-07 08:34:18.183404 or similar ISO timestamps)
-              const cleanedLogs = logs.map((log) => {
-                return log.replace(/^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}(?:\.\d+)?\s+/, "");
-              }).join("\n");
+            // Array of loading messages to display randomly
+            const loadingMessages = [
+              "Waking up your Decc0 agent...",
+              "Teaching your agent to chat",
+              "Loading personality modules",
+              "Syncing with the museum network",
+              "Building agent intelligence",
+              "Brewing some digital consciousness",
+              "Configuring agent memory banks",
+              "Connecting neural pathways",
+              "Unpacking character traits",
+              "Initializing conversation engine",
+              "Setting up agent workspace",
+              "Loading crypto art knowledge",
+              "Calibrating agent responses",
+              "Deploying to Coolify servers",
+              "Your Decc0 is getting ready to talk!",
+              "Installing agent personality",
+              "Preparing AI modules",
+              "Agent is learning your style",
+              "Almost ready to chat!",
+              "Spinning up your virtual assistant",
+            ];
 
-              // Get LiteLLM configuration from environment
-              const litellmUrl = (env as any).LITELLM_URL;
-              const litellmApiKey = (env as any).LITELLM_API_KEY;
-              const litellmModel = (env as any).LITELLM_MODEL;
-
-              if (litellmUrl && litellmApiKey && litellmModel) {
-                const prompt = `You are generating a status message for a user who is deploying their Decc0 AI agent on Coolify infrastructure. Based on the following deployment logs, generate a single short and friendly loading message (maximum 65 characters) that tells the user what's currently happening with their Decc0 agent deployment. Be concise, encouraging, and contextual to Decc0/Coolify.
-
-Logs:
-${cleanedLogs}
-
-Respond with ONLY the loading message, nothing else.`;
-
-                const chatEndpoint = `${litellmUrl.endsWith("/") ? litellmUrl : `${litellmUrl}/`}chat/completions`;
-
-                const response = await fetch(chatEndpoint, {
-                  method: "POST",
-                  headers: {
-                    "Content-Type": "application/json",
-                    "Authorization": `Bearer ${litellmApiKey}`,
-                  },
-                  body: JSON.stringify({
-                    model: litellmModel,
-                    messages: [
-                      {
-                        role: "user",
-                        content: prompt,
-                      },
-                    ],
-                    temperature: 0.7,
-                    max_tokens: 100,
-                  }),
-                });
-
-                if (response.ok) {
-                  const data = await response.json();
-                  const generatedMessage = data.choices?.[0]?.message?.content || "";
-                  // Clean up the message (remove quotes if present)
-                  info = generatedMessage.trim().replace(/^["']|["']$/g, "");
-                }
-              }
-            } catch (e: any) {
-              // If LLM call fails, silently ignore and return no info
-              console.error("Failed to generate loading message:", e?.message);
-            }
+            // Pick a random loading message
+            info = loadingMessages[Math.floor(Math.random() * loadingMessages.length)] || "Preparing your agent...";
           }
         }
 
