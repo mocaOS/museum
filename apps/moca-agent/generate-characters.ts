@@ -454,6 +454,7 @@ function generateCharacterFile(data: CodexData, tokenId: number): string {
 
   const name = getCharacterName(data, tokenId);
   const bio = profile?.bio || generateCharacterBio(data);
+  const knowledge = profile?.knowledge || [ "You are a DeCC0 NFT character from the Museum of Crypto Art (M○C△)." ];
   const system = generateSystemPrompt(data, tokenId);
   const topics = generateTopics(data);
   const avatar = formatAvatar(data.thumbnail);
@@ -557,6 +558,7 @@ export const character: Character = {
   system:
     "${escapeForTypeScript(system)}",
   bio: ${formatStringArray(bio, 4)},
+  knowledge: ${formatStringArray(knowledge, 4)},
   topics: ${formatStringArray(topics, 4)},
   messageExamples: ${formatMessageExamples(messageExamples, 4)},
   style: {
