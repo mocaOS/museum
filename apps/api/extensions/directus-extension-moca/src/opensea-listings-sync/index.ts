@@ -111,7 +111,7 @@ export default defineHook(({ schedule }, { env, services, getSchema }) => {
         await new Promise(resolve => setTimeout(resolve, 5000));
       }
 
-      const listings = Array.from(uniqueListings.values());
+      const listings = Array.from(uniqueListings.values()).slice(0, 10);
 
       // Log results and handle max attempts reached
       if (uniqueListings.size < TARGET_COUNT && attempts >= MAX_ATTEMPTS) {
