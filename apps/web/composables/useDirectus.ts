@@ -37,7 +37,7 @@ function getOrCreateClient(directusUrl: string) {
       const requestOptions = {
         ...(options || {}),
         headers: {
-          "Content-Type": "application/json",
+          ...(command().headers?.["Content-Type"]?.includes("multipart/form-data") ? {} : { "Content-Type": "application/json" }),
           ...(options?.headers || {}),
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
@@ -91,7 +91,7 @@ function getOrCreateClient(directusUrl: string) {
               const retryOptions = {
                 ...(options || {}),
                 headers: {
-                  "Content-Type": "application/json",
+                  ...(command().headers?.["Content-Type"]?.includes("multipart/form-data") ? {} : { "Content-Type": "application/json" }),
                   ...(options?.headers || {}),
                   ...(retryToken ? { Authorization: `Bearer ${retryToken}` } : {}),
                 },
