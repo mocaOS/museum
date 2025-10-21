@@ -37,6 +37,7 @@ function getOrCreateClient(directusUrl: string) {
       const requestOptions = {
         ...(options || {}),
         headers: {
+          "Content-Type": "application/json",
           ...(options?.headers || {}),
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
@@ -72,12 +73,12 @@ function getOrCreateClient(directusUrl: string) {
                 }
                 return null;
               });
-              
+
               // If refresh failed, don't retry the request
               if (!refreshResult) {
                 throw error;
               }
-              
+
               const { fetch: refreshSession } = useUserSession();
               await refreshSession().catch(() => {});
               // Wait briefly for token state to update after refresh
@@ -90,6 +91,7 @@ function getOrCreateClient(directusUrl: string) {
               const retryOptions = {
                 ...(options || {}),
                 headers: {
+                  "Content-Type": "application/json",
                   ...(options?.headers || {}),
                   ...(retryToken ? { Authorization: `Bearer ${retryToken}` } : {}),
                 },

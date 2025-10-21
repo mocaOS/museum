@@ -182,7 +182,7 @@ interface OwnedToken {
 
 type AgentStatus = "online" | "offline" | "starting";
 
-const SUBGRAPH_URL = "https://mainnet-graph.deploy.qwellco.de/subgraphs/name/moca/decc0s";
+const SUBGRAPH_URL = "https://api.studio.thegraph.com/query/1095/decc-0-s/version/latest";
 
 const queryDocument = `
   query OwnedTokens($owner: Bytes!) {
@@ -310,7 +310,10 @@ watch(applicationTokenIds, (newTokenIds) => {
 async function fetchOwnedTokens(owner: string): Promise<OwnedToken[]> {
   const res = await fetch(SUBGRAPH_URL, {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: {
+      "content-type": "application/json",
+      "Authorization": "Bearer f594925caf0ceeb766c3ee890d478808",
+    },
     body: JSON.stringify({ query: queryDocument, variables: { owner } }),
   });
   if (!res.ok) throw new Error(`Graph request failed (${res.status})`);

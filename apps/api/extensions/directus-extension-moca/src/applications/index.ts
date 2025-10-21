@@ -25,12 +25,15 @@ export default defineEndpoint({
     }
 
     async function verifyOwnership(tokenId: string, ownerAddress: string): Promise<boolean> {
-      const graphqlEndpoint = "https://mainnet-graph.deploy.qwellco.de/subgraphs/name/moca/decc0s";
+      const graphqlEndpoint = "https://api.studio.thegraph.com/query/1095/decc-0-s/version/latest";
       const query = "query GetTokenByIdAndOwner($tokenId: String!, $owner: String!) { tokens(where: { tokenId: $tokenId, owner: $owner }) { tokenId owner id } }";
       const body = JSON.stringify({ query, variables: { tokenId, owner: ownerAddress } });
       const response = await fetch(graphqlEndpoint, {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: {
+          "content-type": "application/json",
+          "Authorization": "Bearer f594925caf0ceeb766c3ee890d478808",
+        },
         body,
       });
       if (!response.ok) throw new Error(`Subgraph error: ${response.statusText}`);
