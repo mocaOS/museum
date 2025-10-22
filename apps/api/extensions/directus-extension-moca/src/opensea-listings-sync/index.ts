@@ -42,8 +42,6 @@ export default defineHook(({ schedule }, { env, services, getSchema }) => {
 
   schedule("* * * * *", async () => {
     try {
-      console.log("[OpenSea Listings Sync] Fetching listings...");
-
       const TARGET_COUNT = 10;
       const MAX_ATTEMPTS = 5;
       const uniqueListings = new Map<string, OpenSeaListing>();
@@ -75,22 +73,12 @@ export default defineHook(({ schedule }, { env, services, getSchema }) => {
           );
 
           totalFetched += data.listings.length;
-          console.log(
-            `[OpenSea Listings Sync] Attempt ${attempts}: Found ${data.listings.length} listings (total fetched: ${totalFetched})`,
-          );
 
           // Add unique listings to our map
           for (const listing of data.listings) {
             const tokenId = listing.protocol_data.parameters.offer[0]?.identifierOrCriteria;
             if (tokenId && !uniqueListings.has(tokenId)) {
               uniqueListings.set(tokenId, listing);
-              console.log(
-                `[OpenSea Listings Sync] Added unique token ID: ${tokenId} (${uniqueListings.size}/${TARGET_COUNT})`,
-              );
-            } else if (tokenId) {
-              console.log(
-                `[OpenSea Listings Sync] Skipped duplicate token ID: ${tokenId}`,
-              );
             }
           }
 
@@ -112,21 +100,6 @@ export default defineHook(({ schedule }, { env, services, getSchema }) => {
       }
 
       const listings = Array.from(uniqueListings.values()).slice(0, 10);
-
-      // Log results and handle max attempts reached
-      if (uniqueListings.size < TARGET_COUNT && attempts >= MAX_ATTEMPTS) {
-        console.log(
-          `[OpenSea Listings Sync] ⚠️  Reached max attempts (${MAX_ATTEMPTS}). Proceeding with ${uniqueListings.size} unique listings (target was ${TARGET_COUNT})`,
-        );
-      } else if (uniqueListings.size >= TARGET_COUNT) {
-        console.log(
-          `[OpenSea Listings Sync] ✓ Successfully collected ${uniqueListings.size} unique listings after ${attempts} attempt(s)`,
-        );
-      } else {
-        console.log(
-          `[OpenSea Listings Sync] Collected ${uniqueListings.size} unique listings (no more pages available)`,
-        );
-      }
 
       // Check if we have any listings to process
       if (listings.length === 0) {
@@ -152,8 +125,6 @@ export default defineHook(({ schedule }, { env, services, getSchema }) => {
         },
       }));
 
-      console.log(`[OpenSea Listings Sync] Adoption details: ${JSON.stringify(adoptionDetails, null, 2)}`);
-
       // Update or create settings record
       const schema = await getSchema();
       const { ItemsService } = services;
@@ -170,14 +141,12 @@ export default defineHook(({ schedule }, { env, services, getSchema }) => {
         await settingsService.updateOne(existingAdoptionSettings[0].key, {
           value: tokenIds,
         });
-        console.log("[OpenSea Listings Sync] Updated 'adoption' setting");
       } else {
         // Create new record
         await settingsService.createOne({
           key: "adoption",
           value: tokenIds,
         });
-        console.log("[OpenSea Listings Sync] Created 'adoption' setting");
       }
 
       // Check if 'adoption_details' setting exists
@@ -191,19 +160,13 @@ export default defineHook(({ schedule }, { env, services, getSchema }) => {
         await settingsService.updateOne(existingAdoptionDetailsSettings[0].key, {
           value: JSON.stringify(adoptionDetails),
         });
-        console.log("[OpenSea Listings Sync] Updated 'adoption_details' setting");
       } else {
         // Create new record
         await settingsService.createOne({
           key: "adoption_details",
           value: JSON.stringify(adoptionDetails),
         });
-        console.log("[OpenSea Listings Sync] Created 'adoption_details' setting");
       }
-
-      listings.forEach((listing) => {
-        console.log(`[OpenSea Listings Sync] Token ID: ${listing.protocol_data.parameters.offer[0]?.identifierOrCriteria}`);
-      });
     } catch (error) {
       console.error("[OpenSea Listings Sync] Error fetching listings:", error);
     }
