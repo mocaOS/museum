@@ -16,7 +16,6 @@ export default defineHook(({ schedule }, { env, logger, services, getSchema }) =
 
   // Schedule a task to fetch logs from all Coolify applications every minute
   schedule("0 * * * * *", async () => {
-    return;
     try {
       logger.info("Starting Coolify logs sync task");
 
