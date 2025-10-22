@@ -40,6 +40,11 @@
         "source": "src/opensea-listings-sync/index.ts"
       },
       {
+        "type": "hook",
+        "name": "coolify-logs-sync",
+        "source": "src/coolify-logs-sync/index.ts"
+      },
+      {
         "type": "endpoint",
         "name": "applications",
         "source": "src/applications/index.ts"
