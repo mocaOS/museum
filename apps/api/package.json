@@ -20,6 +20,7 @@
     "sharp": "^0.34.4"
   },
   "devDependencies": {
-    "directus-extension-moca": "workspace:*"
+    "directus-extension-moca": "workspace:*",
+    "directus-extension-raw-query": "workspace:*"
   }
 }
