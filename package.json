@@ -8,20 +8,21 @@
   "scripts": {
     "build": "FORCE_COLOR=1 turbo build",
     "dev": "FORCE_COLOR=1 turbo dev",
-    "dev:web": "FORCE_COLOR=1 turbo dev --filter=@local/config --filter=directus-extension-moca --filter=api --filter=web",
-    "dev:agents": "FORCE_COLOR=1 infisical run --env=dev --path=/moca-agent -- turbo dev --filter=@local/config --filter=moca-agent",
-    "postinstall": "# patch-package",
+    "dev:web": "FORCE_COLOR=1 turbo dev --filter=@local/config --filter=directus-extension-moca --filter=directus-extension-raw-query --filter=api --filter=web",
+    "dev:agents_old": "FORCE_COLOR=1 infisical run --env=dev --path=/moca-agent -- turbo dev --filter=@local/config --filter=moca-agent",
+    "dev:agents": "FORCE_COLOR=1 turbo dev --filter=@local/config --filter=moca-agent",
     "deploy": "node deploy.js"
   },
   "dependencies": {
-    "dotenv": "^17.2.2",
+    "@reown/appkit": "^1.8.10",
+    "@reown/appkit-adapter-ethers": "^1.8.10",
+    "@reown/appkit-adapter-wagmi": "^1.8.10",
+    "dotenv": "^17.2.3",
     "eslint": "^8.57.1"
   },
   "devDependencies": {
-    "patch-package": "^7.0.2",
-    "postinstall-postinstall": "^2.1.0",
-    "turbo": "^2.5.6",
-    "typescript": "5.9.2"
+    "turbo": "^2.5.8",
+    "typescript": "5.9.3"
   },
   "workspaces": [
     "apps/api",
@@ -33,9 +34,14 @@
   "overrides": {
     "borsh": "0.7.0",
     "onnxruntime-node": "1.20.0",
-    "zod": "4.0.14"
+    "prebuild-install": "^7.1.2",
+    "tar-fs": "^3.0.6",
+    "tar": "^6.2.1",
+    "chownr": "^2.0.0",
+    "ipx": "^3.1.1",
+    "zod": "^3.23.8"
   },
   "patchedDependencies": {
-    "@directus/api@30.0.0": "patches/@directus%2Fapi@30.0.0.patch"
+    "@directus/api@31.0.0": "patches/@directus%2Fapi@31.0.0.patch"
   }
 }

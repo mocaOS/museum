@@ -12,7 +12,6 @@ export default defineNuxtConfig({
 
   runtimeConfig: {
     // Server-side only config - not exposed to client
-    authSecret: process.env.NUXT_AUTH_SECRET || (process.env.NODE_ENV !== "production" ? "dev-moca-auth-secret" : undefined),
     r2r: {
       // Get R2R credentials from environment variables
       url: process.env.R2R_URL || config.r2r?.url,
@@ -23,6 +22,19 @@ export default defineNuxtConfig({
       url: process.env.LITELLM_URL,
       apiKey: process.env.LITELLM_API_KEY,
       model: process.env.LITELLM_MODEL,
+    },
+    session: {
+      // Session password for encrypting cookies (min 32 characters)
+      password: process.env.NUXT_SESSION_PASSWORD || "",
+      // Cookie name
+      name: "moca-session",
+      // Session duration: 7 days
+      maxAge: 60 * 60 * 24 * 7,
+      cookie: {
+        sameSite: "lax" as const,
+        secure: process.env.NODE_ENV === "production",
+        httpOnly: true,
+      },
     },
     public: {
       ...config,
@@ -43,8 +55,8 @@ export default defineNuxtConfig({
     "@vueuse/nuxt",
     "@nuxtjs/strapi",
     "@nuxt/icon",
-    "@sidebase/nuxt-auth",
     "nuxt-mcp",
+    "nuxt-auth-utils",
   ],
 
   css: [
@@ -56,47 +68,6 @@ export default defineNuxtConfig({
       tailwindcss(),
     ],
   },
-
-  // vite: {
-  //   optimizeDeps: {
-  //     exclude: [
-  //       "@reown/appkit",
-  //       "@reown/appkit-adapter-ethers",
-  //       "@reown/appkit-adapter-wagmi",
-  //       "@reown/appkit/vue",
-  //       "@reown/appkit/networks",
-  //       "@solana/web3.js",
-  //       "@solana/web3.js/lib/index.esm",
-  //       "@solana/wallet-adapter-base",
-  //       "@wagmi/core",
-  //       "@wagmi/vue",
-  //       "ethers",
-  //       "viem",
-  //     ],
-  //     include: [
-  //       "vue",
-  //       "vue-router",
-  //       "@vueuse/core",
-  //     ],
-  //   },
-  //   build: {
-  //     commonjsOptions: {
-  //       transformMixedEsModules: true,
-  //     },
-  //   },
-  // },
-
-  auth: {
-    baseURL: process.env.NODE_ENV === "production" ? "https://v2.museumofcryptoart.com/api/auth" : "http://localhost:3000/api/auth",
-    provider: {
-      type: "authjs",
-      trustHost: true,
-      defaultProvider: "credentials",
-      addDefaultCallbackUrl: true,
-    },
-    globalAppMiddleware: false,
-  },
-
   strapi: {
     url: "https://api.museumofcryptoart.com",
     prefix: "/api",
@@ -129,8 +100,6 @@ export default defineNuxtConfig({
     provider: "ipx",
   },
 
-  // Auth module configuration is provided by @sidebase/nuxt-auth when installed.
-
   icon: {
     provider: "server",
     mode: "svg",
@@ -141,6 +110,13 @@ export default defineNuxtConfig({
       },
     ],
   },
+
+  components: [
+    {
+      path: "~/components",
+      pathPrefix: false,
+    },
+  ],
 
   shadcn: {
     /**
@@ -155,12 +131,12 @@ export default defineNuxtConfig({
   },
 
   site: {
-    url: "https://v2.museumofcryptoart.com/",
+    url: config.website.baseUrl,
     name: "MOCA. Museum of Crypto Art",
     description: "The community-driven digital cryptoart museum. Our mission is to preserve the truth.",
     titleSeparator: "·",
     indexable: process.env.NODE_ENV === "production",
-    trailingslash: true,
+    trailingslash: false,
   },
 
   robots: {
@@ -176,8 +152,8 @@ export default defineNuxtConfig({
     identity: {
       type: "Organization",
       name: "MOCA. Museum of Crypto Art",
-      url: "https://v2.museumofcryptoart.com/",
-      logo: "https://v2.museumofcryptoart.com/social.jpg",
+      url: config.website.baseUrl,
+      logo: `${config.website.baseUrl}/social.jpg`,
       sameAs: [
         "https://x.com/MuseumofCrypto",
         "https://www.instagram.com/museumofcryptoart/",

@@ -29,7 +29,7 @@
   "scripts": {
     "start": "elizaos start -p 3005",
     "dev": "elizaos dev -p 3005",
-    "build": "tsc --noEmit && vite build && tsup",
+    "build": "tsc --project tsconfig.build.json --noEmit && vite build && tsup",
     "lint": "prettier --write ./src",
     "type-check": "tsc --noEmit",
     "type-check:watch": "tsc --noEmit --watch",
@@ -50,35 +50,44 @@
     "cypress:open": "bun run test:install && cypress open"
   },
   "dependencies": {
-    "@coingecko/coingecko-typescript": "^1.12.0",
-    "@elizaos/cli": "^1.5.5",
-    "@elizaos/core": "^1.5.5",
-    "@elizaos/plugin-bootstrap": "^1.5.5",
-    "@elizaos/plugin-ollama": "^1.2.4",
-    "@elizaos/plugin-openai": "^1.0.11",
-    "@elizaos/plugin-sql": "^1.5.5",
-    "@elizaos/plugin-venice": "^1.0.13",
+    "@coingecko/coingecko-typescript": "1.13.0",
+    "@elizaos/cli": "1.5.7",
+    "@elizaos/client": "1.5.7",
+    "@elizaos/core": "1.5.7",
+    "@elizaos/plugin-bootstrap": "1.5.7",
+    "@elizaos/plugin-knowledge": "1.5.10",
+    "@elizaos/plugin-ollama": "1.2.4",
+    "@elizaos/plugin-openai": "1.0.11",
+    "@elizaos/plugin-sql": "1.5.7",
+    "@elizaos/plugin-venice": "1.0.13",
+    "@elizaos/server": "1.5.7",
+    "@local/config": "workspace:*",
     "@local/types": "workspace:*",
-    "@tanstack/react-query": "^5.85.9",
-    "r2r-js": "^0.4.43",
+    "@tanstack/react-query": "^5.90.2",
     "clsx": "^2.1.1",
+    "r2r-js": "^0.4.43",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "tailwind-merge": "^2.6.0",
-    "tailwindcss": "^4.1.12",
-    "zod": "3.24.2"
+    "tailwindcss": "^4.1.14",
+    "zod": "^3.23.8"
   },
   "devDependencies": {
-    "@types/react": "^18.3.24",
+    "@types/react": "^18.3.25",
     "@types/react-dom": "^18.3.0",
+    "@types/uuid": "^10.0.0",
     "@vitejs/plugin-react": "^4.3.1",
     "prettier": "3.6.2",
     "tsup": "8.5.0",
-    "typescript": "^5.6.3",
+    "typescript": "^5.9.3",
+    "uuid": "^11.0.3",
     "vite": "^6.0.1"
   },
   "publishConfig": {
     "access": "public"
+  },
+  "overrides": {
+    "zod": "^3.23.8"
   },
   "gitHead": "b165ad83e5f7a21bc1edbd83374ca087e3cd6b33"
 }

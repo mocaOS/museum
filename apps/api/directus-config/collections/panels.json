@@ -1,42 +1,5 @@
 [
   {
-    "dashboard": "fb9db9cd-dbb8-4350-928d-7407a502c40a",
-    "name": null,
-    "icon": null,
-    "color": null,
-    "show_header": false,
-    "note": null,
-    "type": "label",
-    "position_x": 1,
-    "position_y": 23,
-    "width": 27,
-    "height": 3,
-    "options": {
-      "text": "NFTs with Animation Media Data"
-    },
-    "_syncId": "041093cc-bd9a-4efd-928b-28b07ea43fdb"
-  },
-  {
-    "dashboard": "fb9db9cd-dbb8-4350-928d-7407a502c40a",
-    "name": null,
-    "icon": null,
-    "color": null,
-    "show_header": false,
-    "note": null,
-    "type": "metric",
-    "position_x": 1,
-    "position_y": 4,
-    "width": 27,
-    "height": 7,
-    "options": {
-      "collection": "nfts",
-      "function": "count",
-      "field": "id",
-      "prefix": null
-    },
-    "_syncId": "471381c4-09db-446e-8167-ab4951f6f2aa"
-  },
-  {
     "dashboard": "bdadbdbe-afe1-48d8-91d4-b008b2f48606",
     "name": "Latest NFT Updates",
     "icon": null,
@@ -74,52 +37,6 @@
     "_syncId": "4da291d9-8c85-4030-8cdc-589a23ff222c"
   },
   {
-    "dashboard": "fb9db9cd-dbb8-4350-928d-7407a502c40a",
-    "name": null,
-    "icon": null,
-    "color": null,
-    "show_header": false,
-    "note": null,
-    "type": "metric",
-    "position_x": 1,
-    "position_y": 15,
-    "width": 27,
-    "height": 7,
-    "options": {
-      "collection": "nfts",
-      "function": "count",
-      "field": "id",
-      "prefix": null,
-      "filter": {
-        "_and": [
-          {
-            "display_media_info": {
-              "_nnull": true
-            }
-          }
-        ]
-      }
-    },
-    "_syncId": "547a6fee-edd8-4dee-a10c-d8c35eedddf5"
-  },
-  {
-    "dashboard": "fb9db9cd-dbb8-4350-928d-7407a502c40a",
-    "name": null,
-    "icon": null,
-    "color": null,
-    "show_header": false,
-    "note": null,
-    "type": "label",
-    "position_x": 1,
-    "position_y": 12,
-    "width": 27,
-    "height": 3,
-    "options": {
-      "text": "NFTs with Display Media Data"
-    },
-    "_syncId": "641b2a86-0c0f-449b-b31b-a3b8ca99214b"
-  },
-  {
     "dashboard": "bdadbdbe-afe1-48d8-91d4-b008b2f48606",
     "name": null,
     "icon": null,
@@ -147,26 +64,6 @@
       }
     },
     "_syncId": "65ef5a26-1843-40ee-a566-aa5a1cdb749d"
-  },
-  {
-    "dashboard": "fb9db9cd-dbb8-4350-928d-7407a502c40a",
-    "name": "Latest NFT Updates",
-    "icon": null,
-    "color": null,
-    "show_header": true,
-    "note": null,
-    "type": "list",
-    "position_x": 29,
-    "position_y": 1,
-    "width": 37,
-    "height": 32,
-    "options": {
-      "collection": "nfts",
-      "sortField": "date_updated",
-      "displayTemplate": "{{id}} | {{name}} - {{contract.name}}",
-      "limit": 12
-    },
-    "_syncId": "7c05a6ba-cf64-4b89-991c-825355ccebe8"
   },
   {
     "dashboard": "bdadbdbe-afe1-48d8-91d4-b008b2f48606",
@@ -235,35 +132,6 @@
     "_syncId": "b401d92c-ad55-4cdc-a47f-44aba97e2255"
   },
   {
-    "dashboard": "fb9db9cd-dbb8-4350-928d-7407a502c40a",
-    "name": null,
-    "icon": null,
-    "color": null,
-    "show_header": false,
-    "note": null,
-    "type": "metric",
-    "position_x": 1,
-    "position_y": 26,
-    "width": 27,
-    "height": 7,
-    "options": {
-      "collection": "nfts",
-      "function": "count",
-      "field": "id",
-      "prefix": null,
-      "filter": {
-        "_and": [
-          {
-            "display_animation_info": {
-              "_nnull": true
-            }
-          }
-        ]
-      }
-    },
-    "_syncId": "bb9b0199-9e7a-4ad9-90dd-ba2150d4ec08"
-  },
-  {
     "dashboard": "bdadbdbe-afe1-48d8-91d4-b008b2f48606",
     "name": null,
     "icon": null,
@@ -325,22 +193,5 @@
       }
     },
     "_syncId": "ed22dab0-a730-4bf2-9e67-056d6e3dd38e"
-  },
-  {
-    "dashboard": "fb9db9cd-dbb8-4350-928d-7407a502c40a",
-    "name": null,
-    "icon": null,
-    "color": null,
-    "show_header": false,
-    "note": null,
-    "type": "label",
-    "position_x": 1,
-    "position_y": 1,
-    "width": 27,
-    "height": 3,
-    "options": {
-      "text": "Activated NFTs"
-    },
-    "_syncId": "f77c93e0-0f7d-421f-bd15-761c0673f730"
   }
 ]

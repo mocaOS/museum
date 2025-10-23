@@ -3,14 +3,17 @@
     <div
       @click="handleToggleColorMode"
       :key="colorMode.value"
-      class="cursor-pointer transition-opacity hover:opacity-50"
+      class="
+        cursor-pointer transition-opacity
+        hover:opacity-50
+      "
     >
-      <Icon v-show="colorMode.value === 'dark'" name="mi:moon" class="text-2xl" />
-      <Icon v-show="colorMode.value === 'light'" name="mi:sun" class="text-2xl" />
+      <Icon v-show="colorMode.value === 'dark'" icon="mi:moon" class="text-2xl" />
+      <Icon v-show="colorMode.value === 'light'" icon="mi:sun" class="text-2xl" />
     </div>
     <template #fallback>
       <div>
-        <Icon name="mi:moon" class="text-2xl" />
+        <Icon icon="mi:moon" class="text-2xl" />
       </div>
     </template>
   </ClientOnly>

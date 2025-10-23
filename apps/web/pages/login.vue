@@ -12,8 +12,8 @@
       </h1>
 
       <div>
-        <p class="mt-1 text-sm text-white/50">
-          Connect your wallet and sign once to authenticate with Directus.
+        <p class="mt-1 text-sm text-muted-foreground">
+          Connect your wallet and sign once to authenticate.
         </p>
         <Button
           @click="handleConnectAndLogin"
@@ -33,18 +33,24 @@
         >
           <Icon
             v-if="responseMessage.type === 'success'"
-            name="iconamoon:check-circle-1"
-            class="mr-1"
+            icon="iconamoon:check-circle-1"
+            class="mr-1 h-5 w-5 shrink-0"
           />
-          <Icon v-else name="iconamoon:sign-times-circle" class="mr-1" />
+          <Icon
+            v-else
+            icon="iconamoon:sign-times-circle"
+            class="mr-1 h-5 w-5 shrink-0"
+          />
           {{ responseMessage.message }}
         </div>
       </div>
     </div>
   </div>
-  <footer class="container mt-12 pb-10 text-center text-sm text-white/50">
+  <footer
+    class="container mt-12 pb-10 text-center text-sm text-muted-foreground"
+  >
     <div class="mx-auto max-w-[610px] leading-6">
-      <p class="mb-8 underline decoration-white/20">
+      <p class="mb-8 underline decoration-foreground/20">
         <a href="https://museumofcryptoart.com/" target="_blank">
           © {{ new Date().getFullYear() }}, Museum of Crypto Art
         </a>
@@ -58,6 +64,7 @@ import { BrowserProvider } from "ethers";
 import { useAppKit, useAppKitAccount, useAppKitProvider, useAppKitState } from "@reown/appkit/vue";
 import { readUsers, registerUser } from "@directus/sdk";
 import { cn } from "~/lib/utils";
+import { normalizeWalletError, walletErrorToMessage } from "~/lib/wallet-error";
 
 interface ResponseMessage {
   type: "success" | "error";
@@ -68,7 +75,7 @@ const isMounted = useMounted();
 const modal = useAppKit();
 const appKitState = useAppKitState();
 const wallet = useAppKitAccount();
-const { signIn, signOut } = useAuth();
+const { clear: clearSession } = useUserSession();
 const { directus } = useDirectus();
 
 const loading = ref(false);
@@ -129,8 +136,10 @@ async function handleConnectAndLogin() {
       signature = await handleSignMessage();
     } catch (err: any) {
       // Signature cancelled or failed
-      await signOut({ redirect: false });
-      throw err;
+      try { await $fetch("/api/auth/logout", { method: "POST" }); } catch {}
+      const norm = normalizeWalletError(err);
+      const msg = walletErrorToMessage(norm);
+      throw new Error(msg);
     }
 
     // Store signature for auto-login on future visits
@@ -161,23 +170,21 @@ async function handleConnectAndLogin() {
       ));
     }
 
-    // Sign in via Nuxt Auth Credentials provider (handled server-side)
-    const res: any = await signIn("credentials", {
-      redirect: false,
-      email: `no-email@${addressLower}.com`,
-      password: signature as string,
-    } as any);
-
-    if (res && res.error) {
-      throw new Error(res.error);
-    }
+    // Sign in via Sidebase Credentials provider (Directus login under the hood)
+    await $fetch("/api/auth/login", {
+      method: "POST",
+      body: {
+        email: `no-email@${addressLower}.com`,
+        password: signature as string,
+      },
+    });
     responseMessage.type = "success";
     responseMessage.message = "Logged in successfully!";
     navigateTo("/decc0s");
   } catch (e: any) {
     console.error(e);
     try {
-      await signOut({ redirect: false });
+      await $fetch("/api/auth/logout", { method: "POST" });
     } catch {}
     try {
       if (typeof window !== "undefined") {

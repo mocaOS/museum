@@ -16,8 +16,10 @@ import { readUsers, registerUser } from "@directus/sdk";
 const colorMode = useColorMode();
 const wallet = useAppKitAccount();
 const { disconnect } = useDisconnect();
-const { status, signIn, signOut } = useAuth();
+const { loggedIn, clear: clearSession } = useUserSession();
 const { directus } = useDirectus();
+
+const config = useRuntimeConfig();
 
 // 1. Get projectId from https://cloud.reown.com
 const projectId = "dc0c59e751982135a3cb4379d346842f";
@@ -26,8 +28,8 @@ const projectId = "dc0c59e751982135a3cb4379d346842f";
 const metadata = {
   name: "MOCA. Museum of Crypto Art",
   description: "The community-driven digital cryptoart museum. Our mission is to preserve the truth.",
-  url: "https://v2.museumofcryptoart.com/", // url must match your domain & subdomain
-  icons: [ "https://v2.museumofcryptoart.com/fav/favicon-32x32.png" ],
+  url: config.public.website.baseUrl, // url must match your domain & subdomain
+  icons: [ `${config.public.website.baseUrl}/fav/favicon-32x32.png` ],
 };
 
 // 5. Create the modal
@@ -65,8 +67,8 @@ async function attemptAutoLogin() {
   try {
     if (typeof window === "undefined") return;
 
-    // If already authenticated via Nuxt Auth, skip wallet auto-login
-    if (status.value === "authenticated") return;
+    // If already authenticated, skip wallet auto-login
+    if (loggedIn.value) return;
 
     const storedSignature = localStorage.getItem("moca_signature");
     const storedAddress = localStorage.getItem("moca_signature_address");
@@ -108,16 +110,17 @@ async function attemptAutoLogin() {
       ));
     }
 
-    // Sign in via Nuxt Auth Credentials provider (handled server-side)
-    const res: any = await signIn("credentials", {
-      redirect: false,
-      email: `no-email@${addressLower}.com`,
-      password: storedSignature,
-    } as any);
-    if (res && res.error) throw new Error(res.error);
+    // Sign in via our API which sets nuxt-auth-utils session
+    await $fetch("/api/auth/login", {
+      method: "POST",
+      body: {
+        email: `no-email@${addressLower}.com`,
+        password: storedSignature,
+      },
+    });
   } catch (e) {
     try {
-      await signOut({ redirect: false });
+      await $fetch("/api/auth/logout", { method: "POST" });
     } catch {}
     try {
       await disconnect();

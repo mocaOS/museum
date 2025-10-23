@@ -1,0 +1,90 @@
+version: '3.8'
+
+services:
+  moca-agent:
+    # Build using Nixpacks in Coolify (no Dockerfile needed)
+    build:
+      context: .
+    environment:
+      - NODE_ENV=production
+      # Coolify magic FQDN for reverse proxy; routes to internal port 3005
+      - SERVICE_FQDN_MOCA_AGENT
+      - SERVICE_FQDN_MOCA_AGENT_3005
+      # Optional: expose a path prefix (uncomment to use)
+      # - SERVICE_FQDN_MOCA_AGENT=/
+
+      # elizaOS / provider keys (they will appear in Coolify UI for editing)
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - OLLAMA_API_ENDPOINT=${OLLAMA_API_ENDPOINT}
+      - OLLAMA_MODEL=${OLLAMA_MODEL}
+
+      # Venice provider (optional)
+      - VENICE_API_KEY=${VENICE_API_KEY}
+      - SMALL_VENICE_MODEL=${SMALL_VENICE_MODEL}
+      - LARGE_VENICE_MODEL=${LARGE_VENICE_MODEL}
+      - IMAGE_VENICE_MODEL=${IMAGE_VENICE_MODEL}
+
+      # Embedding / model extras (optional)
+      - OPENAI_EMBEDDING_MODEL=${OPENAI_EMBEDDING_MODEL}
+
+      # Logging / Sentry
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - SENTRY_LOGGING=${SENTRY_LOGGING:-false}
+      - SENTRY_DSN=${SENTRY_DSN}
+      - SENTRY_ENVIRONMENT=${SENTRY_ENVIRONMENT:-production}
+      - SENTRY_TRACES_SAMPLE_RATE=${SENTRY_TRACES_SAMPLE_RATE:-0}
+      - SENTRY_SEND_DEFAULT_PII=${SENTRY_SEND_DEFAULT_PII:-false}
+
+      # R2R / Directus backends (optional)
+      - R2R_URL=${R2R_URL}
+      - R2R_API_KEY=${R2R_API_KEY}
+      - DIRECTUS_URL=${DIRECTUS_URL}
+
+      # Discord / Telegram (optional)
+      - DISCORD_APPLICATION_ID=${DISCORD_APPLICATION_ID}
+      - DISCORD_API_TOKEN=${DISCORD_API_TOKEN}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+
+      # EVM / Solana (optional)
+      - EVM_PRIVATE_KEY=${EVM_PRIVATE_KEY}
+      - EVM_CHAINS=${EVM_CHAINS}
+      - EVM_PROVIDER_URL=${EVM_PROVIDER_URL}
+      - SOLANA_PUBLIC_KEY=${SOLANA_PUBLIC_KEY}
+      - SOLANA_PRIVATE_KEY=${SOLANA_PRIVATE_KEY}
+
+      # Other APIs (optional)
+      - BIRDEYE_API_KEY=${BIRDEYE_API_KEY}
+      - JUPITER_API_KEY=${JUPITER_API_KEY}
+      - HELIUS_API_KEY=${HELIUS_API_KEY}
+      - COINMARKETCAP_API_KEY=${COINMARKETCAP_API_KEY}
+      - ZEROEX_API_KEY=${ZEROEX_API_KEY}
+      - COINGECKO_API_KEY=${COINGECKO_API_KEY}
+
+      # App secrets
+      - SECRET_SALT=${SECRET_SALT}
+
+    # Persist any local data if used by runtime (adjust target if needed)
+    volumes:
+      - type: bind
+        source: ./data
+        target: /app/data
+        # Coolify can auto-create directories via special extension, but it's optional
+
+    # Healthcheck hits the starter plugin route defined in src/plugin.ts
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:3005/helloworld"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+
+    # Traefik labels are auto-managed by Coolify when using SERVICE_FQDN_* envs.
+    # You can add custom labels if needed.
+    labels:
+      - coolify.managed=true
+      - coolify.type=application
+
+    # Coolify connects the service to its proxy network automatically.
+    # No explicit ports are required when using SERVICE_FQDN_* variables.
+
+

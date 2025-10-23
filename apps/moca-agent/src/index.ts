@@ -1,23 +1,47 @@
-import { type IAgentRuntime, type Project, type ProjectAgent, logger } from "@elizaos/core";
-import { character } from "./character.ts";
+import {
+  type Character,
+  type IAgentRuntime,
+  type Project,
+  type ProjectAgent,
+  logger,
+} from "@elizaos/core";
+
 import starterPlugin from "./plugin.ts";
 import coingeckoPlugin from "./plugins/coingecko.ts";
 import r2rRAGPlugin from "./plugins/r2r-rag.ts";
 
-function initCharacter({ runtime: _runtime }: { runtime: IAgentRuntime }) {
-  logger.info("Initializing character");
-  logger.info("Name: ", character.name);
-  logger.warn("OPENAI_API_KEY: ", process.env.OPENAI_API_KEY);
+/**
+ * Array of all DeCC0 characters
+ */
+const decc0Characters: Character[] = [];
+
+/**
+ * Creates a project agent for a given character
+ */
+function createProjectAgent(character: Character): ProjectAgent {
+  return {
+    character,
+    init: async (_runtime: IAgentRuntime) => {
+      logger.info("Initializing character");
+      logger.info("Name: ", character.name);
+    },
+    plugins: [ starterPlugin, coingeckoPlugin, r2rRAGPlugin ],
+  };
 }
 
-export const projectAgent: ProjectAgent = {
-  character,
-  init: async (runtime: IAgentRuntime) => await initCharacter({ runtime }),
-  plugins: [ starterPlugin, coingeckoPlugin, r2rRAGPlugin ], // <-- Import custom plugins here
-};
+// Create project with all agents
 const project: Project = {
-  agents: [ projectAgent ],
+  agents: [
+    // Include the main MOCA Curator agent
+    // createProjectAgent(mocaCuratorCharacter),
+    // Include all DeCC0 character agents
+    ...decc0Characters.map(createProjectAgent),
+  ],
 };
+
+logger.info(
+  `🎭 Total agents loaded: ${project.agents.length} (1 MOCA Curator + ${decc0Characters.length} DeCC0)`,
+);
 
 // Export test suites for the test runner
 export { testSuites } from "./__tests__/e2e";

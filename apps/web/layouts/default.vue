@@ -14,7 +14,7 @@
                 "
               >
                 <div class="group/50 cursor-pointer transition-all">
-                  <Icon name="moca:menu" />
+                  <Icon icon="moca:menu" />
                 </div>
               </PopoverTrigger>
               <PopoverContent
@@ -217,7 +217,7 @@
         </div>
         <div class="flex items-center justify-center">
           <NuxtLink to="/library" class="focus-visible:outline-hidden">
-            <Icon name="moca:logo" class="text-4xl" :class="[{ invert: $colorMode.value === 'light' }]" />
+            <Icon icon="moca:logo" class="text-4xl" :class="[{ invert: $colorMode.value === 'light' }]" />
           </NuxtLink>
         </div>
         <div class="flex items-center justify-end gap-2">
@@ -298,8 +298,8 @@ import {
 } from "~/components/ui/navigation-menu";
 
 const { directus } = useDirectus();
-const { data: authSession, status, signOut } = useAuth();
-const directusUser = computed(() => authSession.value?.user || null);
+const { session, loggedIn, clear } = useUserSession();
+const directusUser = computed(() => (session.value as any)?.user || null);
 const { disconnect } = useDisconnect();
 
 const isOpen = ref(false);
@@ -307,7 +307,7 @@ const isOpen = ref(false);
 const { data: collections, suspense: suspenseCollections } = useQuery<Collections[]>({
   queryKey: [ "collections" ],
   queryFn: async () => {
-    const response = await directus.request(readItems("collections", {
+    const response = await directus.request((readItems as any)("collections", {
       fields: [
         "id",
         "name",
@@ -342,10 +342,17 @@ const filteredCollections = computed(() => {
 
 async function handleLogout() {
   try {
-    await signOut({ redirect: false });
+    await $fetch("/api/auth/logout", { method: "POST" });
+  } catch {}
+  try {
+    await clear();
   } catch {}
   try {
     await disconnect();
+  } catch {}
+
+  try {
+    await navigateTo("/");
   } catch {}
 }
 </script>

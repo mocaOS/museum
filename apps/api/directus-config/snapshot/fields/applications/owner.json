@@ -1,0 +1,49 @@
+{
+  "collection": "applications",
+  "field": "owner",
+  "type": "uuid",
+  "meta": {
+    "collection": "applications",
+    "conditions": null,
+    "display": null,
+    "display_options": null,
+    "field": "owner",
+    "group": null,
+    "hidden": false,
+    "interface": "select-dropdown-m2o",
+    "note": null,
+    "options": {
+      "enableCreate": false,
+      "enableLink": true,
+      "template": "{{ethereum_address}}"
+    },
+    "readonly": false,
+    "required": true,
+    "sort": 2,
+    "special": [
+      "m2o"
+    ],
+    "translations": null,
+    "validation": null,
+    "validation_message": null,
+    "width": "full"
+  },
+  "schema": {
+    "name": "owner",
+    "table": "applications",
+    "data_type": "uuid",
+    "default_value": null,
+    "max_length": null,
+    "numeric_precision": null,
+    "numeric_scale": null,
+    "is_nullable": true,
+    "is_unique": true,
+    "is_indexed": false,
+    "is_primary_key": false,
+    "is_generated": false,
+    "generation_expression": null,
+    "has_auto_increment": false,
+    "foreign_key_table": "directus_users",
+    "foreign_key_column": "id"
+  }
+}

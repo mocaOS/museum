@@ -33,6 +33,31 @@
         "type": "hook",
         "name": "r2r-graph-pull",
         "source": "src/r2r-graph-pull/index.ts"
+      },
+      {
+        "type": "hook",
+        "name": "opensea-listings-sync",
+        "source": "src/opensea-listings-sync/index.ts"
+      },
+      {
+        "type": "hook",
+        "name": "coolify-logs-sync",
+        "source": "src/coolify-logs-sync/index.ts"
+      },
+      {
+        "type": "endpoint",
+        "name": "applications",
+        "source": "src/applications/index.ts"
+      },
+      {
+        "type": "endpoint",
+        "name": "codex",
+        "source": "src/codex/index.ts"
+      },
+      {
+        "type": "endpoint",
+        "name": "listings",
+        "source": "src/listings/index.ts"
       }
     ],
     "host": "^10.10.0"
@@ -45,13 +70,15 @@
   },
   "dependencies": {
     "@local/config": "workspace:*",
-    "axios": "^1.7.9",
+    "@local/types": "workspace:*",
+    "axios": "^1.12.2",
     "js-base64": "^3.7.8",
-    "r2r-js": "^0.4.43"
+    "r2r-js": "^0.4.43",
+    "express": "^5.1.0"
   },
   "devDependencies": {
-    "@directus/extensions-sdk": "^16.0.1",
-    "@types/node": "^22.18.0",
-    "typescript": "^5.7.3"
+    "@directus/extensions-sdk": "^16.0.2",
+    "@types/node": "^22.18.10",
+    "typescript": "^5.9.3"
   }
 }

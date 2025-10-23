@@ -1,3 +1,12 @@
+export type Applications = {
+  application_id?: string | null;
+  decc0s?: string | null;
+  id: number;
+  owner?: string | DirectusUsers | null;
+  status?: string | null;
+  url?: string | null;
+};
+
 export type Collections = {
   child_collections: any[] | Collections[];
   date_created?: string | null;
@@ -317,6 +326,7 @@ export type DirectusSessions = {
 };
 
 export type DirectusSettings = {
+  ai_group: string;
   auth_login_attempts?: number | null;
   auth_password_policy?: string | null;
   basemaps?: unknown | null;
@@ -328,6 +338,7 @@ export type DirectusSettings = {
   default_theme_light?: string | null;
   id: number;
   mapbox_key?: string | null;
+  mcp_prompts_collection_validation: string;
   module_bar?: unknown | null;
   project_color: string;
   project_descriptor?: string | null;
@@ -385,6 +396,7 @@ export type DirectusTranslations = {
 
 export type DirectusUsers = {
   appearance?: string | null;
+  applications: any[] | Applications[];
   auth_data?: unknown | null;
   avatar?: string | DirectusFiles | null;
   description?: string | null;
@@ -474,7 +486,13 @@ export type Rooms = {
   token_id?: string | null;
 };
 
+export type Settings = {
+  key: string;
+  value?: string | null;
+};
+
 export type CustomDirectusTypes = {
+  applications: Applications[];
   collections: Collections[];
   contracts: Contracts[];
   directus_access: DirectusAccess[];
@@ -507,4 +525,5 @@ export type CustomDirectusTypes = {
   directus_webhooks: DirectusWebhooks[];
   nfts: Nfts[];
   rooms: Rooms[];
+  settings: Settings[];
 };

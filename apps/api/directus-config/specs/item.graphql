@@ -19,6 +19,14 @@ type Query {
   rooms_by_id(id: ID!, version: String): rooms
   rooms_aggregated(groupBy: [String], filter: rooms_filter, limit: Int, offset: Int, page: Int, search: String, sort: [String]): [rooms_aggregated!]!
   rooms_by_version(version: String!, id: ID!): version_rooms
+  applications(filter: applications_filter, sort: [String], limit: Int, offset: Int, page: Int, search: String): [applications!]!
+  applications_by_id(id: ID!, version: String): applications
+  applications_aggregated(groupBy: [String], filter: applications_filter, limit: Int, offset: Int, page: Int, search: String, sort: [String]): [applications_aggregated!]!
+  applications_by_version(version: String!, id: ID!): version_applications
+  settings(filter: settings_filter, sort: [String], limit: Int, offset: Int, page: Int, search: String): [settings!]!
+  settings_by_id(id: ID!, version: String): settings
+  settings_aggregated(groupBy: [String], filter: settings_filter, limit: Int, offset: Int, page: Int, search: String, sort: [String]): [settings_aggregated!]!
+  settings_by_version(version: String!, id: ID!): version_settings
 }
 
 type Mutation {
@@ -32,6 +40,10 @@ type Mutation {
   create_collections_item(data: create_collections_input!): collections
   create_rooms_items(filter: rooms_filter, sort: [String], limit: Int, offset: Int, page: Int, search: String, data: [create_rooms_input!]): [rooms!]!
   create_rooms_item(data: create_rooms_input!): rooms
+  create_applications_items(filter: applications_filter, sort: [String], limit: Int, offset: Int, page: Int, search: String, data: [create_applications_input!]): [applications!]!
+  create_applications_item(data: create_applications_input!): applications
+  create_settings_items(filter: settings_filter, sort: [String], limit: Int, offset: Int, page: Int, search: String, data: [create_settings_input!]): [settings!]!
+  create_settings_item(data: create_settings_input!): settings
   update_contracts_items(filter: contracts_filter, sort: [String], limit: Int, offset: Int, page: Int, search: String, ids: [ID]!, data: update_contracts_input!): [contracts!]!
   update_contracts_batch(filter: contracts_filter, sort: [String], limit: Int, offset: Int, page: Int, search: String, data: [update_contracts_input!]): [contracts!]!
   update_contracts_item(id: ID!, data: update_contracts_input!): contracts
@@ -47,6 +59,12 @@ type Mutation {
   update_rooms_items(filter: rooms_filter, sort: [String], limit: Int, offset: Int, page: Int, search: String, ids: [ID]!, data: update_rooms_input!): [rooms!]!
   update_rooms_batch(filter: rooms_filter, sort: [String], limit: Int, offset: Int, page: Int, search: String, data: [update_rooms_input!]): [rooms!]!
   update_rooms_item(id: ID!, data: update_rooms_input!): rooms
+  update_applications_items(filter: applications_filter, sort: [String], limit: Int, offset: Int, page: Int, search: String, ids: [ID]!, data: update_applications_input!): [applications!]!
+  update_applications_batch(filter: applications_filter, sort: [String], limit: Int, offset: Int, page: Int, search: String, data: [update_applications_input!]): [applications!]!
+  update_applications_item(id: ID!, data: update_applications_input!): applications
+  update_settings_items(filter: settings_filter, sort: [String], limit: Int, offset: Int, page: Int, search: String, ids: [ID]!, data: update_settings_input!): [settings!]!
+  update_settings_batch(filter: settings_filter, sort: [String], limit: Int, offset: Int, page: Int, search: String, data: [update_settings_input!]): [settings!]!
+  update_settings_item(id: ID!, data: update_settings_input!): settings
   delete_contracts_items(ids: [ID]!): delete_many
   delete_contracts_item(id: ID!): delete_one
   delete_directus_sync_id_map_items(ids: [ID]!): delete_many
@@ -57,6 +75,10 @@ type Mutation {
   delete_collections_item(id: ID!): delete_one
   delete_rooms_items(ids: [ID]!): delete_many
   delete_rooms_item(id: ID!): delete_one
+  delete_applications_items(ids: [ID]!): delete_many
+  delete_applications_item(id: ID!): delete_one
+  delete_settings_items(ids: [ID]!): delete_many
+  delete_settings_item(id: ID!): delete_one
 }
 
 type Subscription {
@@ -86,6 +108,8 @@ type Subscription {
   directus_files_mutated(event: EventEnum): directus_files_mutated
   collections_mutated(event: EventEnum): collections_mutated
   rooms_mutated(event: EventEnum): rooms_mutated
+  applications_mutated(event: EventEnum): applications_mutated
+  settings_mutated(event: EventEnum): settings_mutated
 }
 
 """The `Boolean` scalar type represents `true` or `false`."""
@@ -132,6 +156,47 @@ enum EventEnum {
   create
   update
   delete
+}
+
+type applications {
+  id: ID!
+  status: String
+  url: String
+  application_id: String
+  decc0s: String
+  owner(filter: directus_users_filter, sort: [String], limit: Int, offset: Int, page: Int, search: String): directus_users
+}
+
+type applications_aggregated {
+  group: JSON
+  countAll: Int
+  count: applications_aggregated_count
+  countDistinct: applications_aggregated_count
+  avg: applications_aggregated_fields
+  sum: applications_aggregated_fields
+  avgDistinct: applications_aggregated_fields
+  sumDistinct: applications_aggregated_fields
+  min: applications_aggregated_fields
+  max: applications_aggregated_fields
+}
+
+type applications_aggregated_count {
+  id: Int
+  status: Int
+  url: Int
+  application_id: Int
+  decc0s: Int
+  owner: Int
+}
+
+type applications_aggregated_fields {
+  id: Float
+}
+
+type applications_mutated {
+  key: ID!
+  event: EventEnum
+  data: applications
 }
 
 type collections {
@@ -766,6 +831,8 @@ type directus_users {
   theme_dark_overrides: JSON
   theme_dark_overrides_func: count_functions
   ethereum_address: String
+  applications(filter: applications_filter, sort: [String], limit: Int, offset: Int, page: Int, search: String): [applications]
+  applications_func: count_functions
   policies(filter: directus_access_filter, sort: [String], limit: Int, offset: Int, page: Int, search: String): [directus_access]
   policies_func: count_functions
 }
@@ -941,6 +1008,39 @@ type rooms_mutated {
   data: rooms
 }
 
+type settings {
+  key: ID!
+  value: String
+}
+
+type settings_aggregated {
+  group: JSON
+  countAll: Int
+  count: settings_aggregated_count
+  countDistinct: settings_aggregated_count
+}
+
+type settings_aggregated_count {
+  key: Int
+  value: Int
+}
+
+type settings_mutated {
+  key: ID!
+  event: EventEnum
+  data: settings
+}
+
+""""""
+type version_applications {
+  id: ID
+  status: String
+  url: String
+  application_id: String
+  decc0s: String
+  owner: JSON
+}
+
 """"""
 type version_collections {
   id: ID
@@ -1012,6 +1112,37 @@ type version_rooms {
   image: JSON
   model: JSON
   token_id: String
+}
+
+""""""
+type version_settings {
+  key: ID
+  value: String
+}
+
+input applications_filter {
+  id: number_filter_operators
+  status: string_filter_operators
+  url: string_filter_operators
+  application_id: string_filter_operators
+  decc0s: string_filter_operators
+  owner: directus_users_filter
+  _and: [applications_filter]
+  _or: [applications_filter]
+}
+
+""""""
+input applications_quantifier_filter {
+  id: number_filter_operators
+  status: string_filter_operators
+  url: string_filter_operators
+  application_id: string_filter_operators
+  decc0s: string_filter_operators
+  owner: directus_users_filter
+  _and: [applications_filter]
+  _or: [applications_filter]
+  _some: applications_filter
+  _none: applications_filter
 }
 
 input big_int_filter_operators {
@@ -1103,6 +1234,15 @@ input contracts_filter {
 
 input count_function_filter_operators {
   count: number_filter_operators
+}
+
+input create_applications_input {
+  id: ID
+  status: String
+  url: String
+  application_id: String
+  decc0s: String
+  owner: create_directus_users_input
 }
 
 input create_collections_input {
@@ -1254,6 +1394,7 @@ input create_directus_users_input {
   theme_light_overrides: JSON
   theme_dark_overrides: JSON
   ethereum_address: String
+  applications: [create_applications_input]
   policies: [create_directus_access_input]
 }
 
@@ -1287,6 +1428,11 @@ input create_rooms_input {
   image: create_directus_files_input
   model: create_directus_files_input
   token_id: String
+}
+
+input create_settings_input {
+  key: ID!
+  value: String
 }
 
 input date_filter_operators {
@@ -1694,6 +1840,8 @@ input directus_users_filter {
   theme_dark_overrides: string_filter_operators
   theme_dark_overrides_func: count_function_filter_operators
   ethereum_address: string_filter_operators
+  applications: applications_quantifier_filter
+  applications_func: count_function_filter_operators
   policies: directus_access_quantifier_filter
   policies_func: count_function_filter_operators
   _and: [directus_users_filter]
@@ -1734,6 +1882,8 @@ input directus_users_quantifier_filter {
   theme_dark_overrides: string_filter_operators
   theme_dark_overrides_func: count_function_filter_operators
   ethereum_address: string_filter_operators
+  applications: applications_quantifier_filter
+  applications_func: count_function_filter_operators
   policies: directus_access_quantifier_filter
   policies_func: count_function_filter_operators
   _and: [directus_users_filter]
@@ -1880,6 +2030,13 @@ input rooms_filter {
   _or: [rooms_filter]
 }
 
+input settings_filter {
+  key: string_filter_operators
+  value: string_filter_operators
+  _and: [settings_filter]
+  _or: [settings_filter]
+}
+
 input string_filter_operators {
   _eq: String
   _neq: String
@@ -1900,6 +2057,15 @@ input string_filter_operators {
   _nnull: Boolean
   _empty: Boolean
   _nempty: Boolean
+}
+
+input update_applications_input {
+  id: ID
+  status: String
+  url: String
+  application_id: String
+  decc0s: String
+  owner: update_directus_users_input
 }
 
 input update_collections_input {
@@ -2051,6 +2217,7 @@ input update_directus_users_input {
   theme_light_overrides: JSON
   theme_dark_overrides: JSON
   ethereum_address: String
+  applications: [update_applications_input]
   policies: [update_directus_access_input]
 }
 
@@ -2084,4 +2251,9 @@ input update_rooms_input {
   image: update_directus_files_input
   model: update_directus_files_input
   token_id: String
+}
+
+input update_settings_input {
+  key: ID
+  value: String
 }

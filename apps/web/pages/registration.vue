@@ -92,10 +92,10 @@
           >
             <Icon
               v-if="responseMessage.type === 'success'"
-              name="iconamoon:check-circle-1"
+              icon="iconamoon:check-circle-1"
               class="mr-1"
             />
-            <Icon v-else name="iconamoon:sign-times-circle" class="mr-1" />
+            <Icon v-else icon="iconamoon:sign-times-circle" class="mr-1" />
             {{ responseMessage.message }}
           </div>
         </div>

@@ -1,109 +1,155 @@
-import { createDirectus, rest, staticToken } from "@directus/sdk";
+import { createDirectus, rest, withOptions } from "@directus/sdk";
 import type { Directus } from "@local/types";
 import { useRuntimeConfig } from "#imports";
 
 const connectionHealth = ref<"healthy" | "degraded" | "unhealthy">("healthy");
 const lastHealthCheck = ref<number>(0);
 const retryAttempts = ref<Map<string, number>>(new Map());
+const currentAccessToken = ref<string | null>(null);
+let directusSingleton: any = null;
 
-export function useDirectus() {
-  const { status, data: session, getSession } = useAuth();
-  const config = useRuntimeConfig();
+function shouldRetry(operationId: string): boolean {
+  const attempts = retryAttempts.value.get(operationId) || 0;
+  return attempts < 3;
+}
 
-  const shouldRetry = (operationId: string): boolean => {
-    const attempts = retryAttempts.value.get(operationId) || 0;
-    return attempts < 3;
-  };
+function incrementRetry(operationId: string): void {
+  const current = retryAttempts.value.get(operationId) || 0;
+  retryAttempts.value.set(operationId, current + 1);
+  setTimeout(() => {
+    retryAttempts.value.delete(operationId);
+  }, 5 * 60 * 1000);
+}
 
-  const incrementRetry = (operationId: string): void => {
-    const current = retryAttempts.value.get(operationId) || 0;
-    retryAttempts.value.set(operationId, current + 1);
-    setTimeout(() => {
-      retryAttempts.value.delete(operationId);
-    }, 5 * 60 * 1000);
-  };
+function getOrCreateClient(directusUrl: string) {
+  if (directusSingleton) return directusSingleton;
 
-  const createClient = () => {
-    const directusUrl = String(config.public?.api.baseUrl || "http://localhost:8055");
+  try {
+    const client = createDirectus<Directus.CustomDirectusTypes>(directusUrl)
+      .with(rest());
 
-    if (status.value === "authenticated" && session.value) {
-      const accessToken = (session.value as any).access_token;
-      const error = (session.value as any).error;
+    const originalRequest = client.request.bind(client);
 
-      if (accessToken && !error) {
-        try {
-          const client = createDirectus<Directus.CustomDirectusTypes>(directusUrl)
-            .with(staticToken(accessToken))
-            .with(rest());
+    client.request = async (command: any, options?: any) => {
+      const operationId = `${command?.constructor?.name || "unknown"}_${Date.now()}`;
 
-          if (process.client) {
-            const originalRequest = client.request.bind(client);
-            client.request = async (...args: any[]) => {
-              const operationId = `${args[0]?.constructor?.name || "unknown"}_${Date.now()}`;
-              try {
-                const result = await originalRequest(...args);
-                retryAttempts.value.delete(operationId);
-                connectionHealth.value = "healthy";
-                lastHealthCheck.value = Date.now();
-                return result;
-              } catch (error: any) {
-                if (error?.response?.status === 401) {
-                  if (error?.response?.data?.message === "Token expired.") {
-                    if (shouldRetry(operationId)) {
-                      incrementRetry(operationId);
-                      try {
-                        await getSession();
-                        await new Promise(resolve => setTimeout(resolve, 1000));
-                        return await originalRequest(...args);
-                      } catch {
-                        connectionHealth.value = "unhealthy";
-                      }
-                    }
-                  } else {
+      const token = currentAccessToken.value;
+      const requestOptions = {
+        ...(options || {}),
+        headers: {
+          ...(command().headers?.["Content-Type"]?.includes("multipart/form-data") ? {} : { "Content-Type": "application/json" }),
+          ...(options?.headers || {}),
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      } as any;
+
+      try {
+        const result = await originalRequest(withOptions(command, requestOptions));
+
+        retryAttempts.value.delete(operationId);
+        connectionHealth.value = "healthy";
+        lastHealthCheck.value = Date.now();
+        return result;
+      } catch (error: any) {
+        const tokenExpired = Boolean(
+          error?.errors?.[0]?.extensions?.code === "TOKEN_EXPIRED"
+          || (typeof error?.message === "string" && error.message.toLowerCase().includes("token expired")),
+        );
+
+        if (error?.response?.status === 401 || tokenExpired) {
+          if (shouldRetry(operationId)) {
+            incrementRetry(operationId);
+            try {
+              const previousToken = currentAccessToken.value;
+              // Attempt to refresh access token via our API, then refetch session
+              const refreshResult = await $fetch("/api/auth/refresh", { method: "POST" }).catch((e): { ok: boolean } | null => {
+                // If refresh fails with 401, session is cleared - redirect to login
+                if (e?.statusCode === 401) {
+                  if (process.client) {
                     connectionHealth.value = "unhealthy";
-                    if (process.client) {
-                      await navigateTo("/login");
-                    }
+                    navigateTo("/login");
                   }
-                } else if (error?.response?.status >= 500) {
-                  connectionHealth.value = "degraded";
-                } else if (error?.code === "NETWORK_ERROR" || !navigator.onLine) {
-                  connectionHealth.value = "unhealthy";
+                  return null;
                 }
+                return null;
+              });
+
+              // If refresh failed, don't retry the request
+              if (!refreshResult) {
                 throw error;
               }
-            };
+
+              const { fetch: refreshSession } = useUserSession();
+              await refreshSession().catch(() => {});
+              // Wait briefly for token state to update after refresh
+              const startedAt = Date.now();
+              while (currentAccessToken.value === previousToken || !currentAccessToken.value) {
+                if (Date.now() - startedAt > 2000) break;
+                await new Promise(resolve => setTimeout(resolve, 50));
+              }
+              const retryToken = currentAccessToken.value;
+              const retryOptions = {
+                ...(options || {}),
+                headers: {
+                  ...(command().headers?.["Content-Type"]?.includes("multipart/form-data") ? {} : { "Content-Type": "application/json" }),
+                  ...(options?.headers || {}),
+                  ...(retryToken ? { Authorization: `Bearer ${retryToken}` } : {}),
+                },
+              } as any;
+              return await originalRequest(withOptions(command, retryOptions));
+            } catch {
+              connectionHealth.value = "unhealthy";
+              if (process.client) {
+                await navigateTo("/login");
+              }
+            }
+          } else if (process.client) {
+            connectionHealth.value = "unhealthy";
+            await navigateTo("/login");
           }
-
-          return client;
-        } catch (error) {
+        } else if (error?.response?.status >= 500) {
           connectionHealth.value = "degraded";
+        } else if (error?.code === "NETWORK_ERROR" || (typeof navigator !== "undefined" && !navigator.onLine)) {
+          connectionHealth.value = "unhealthy";
         }
+        throw error;
       }
-    }
+    };
 
-    return createDirectus<Directus.CustomDirectusTypes>(String(directusUrl))
-      .with(rest());
-  };
+    directusSingleton = client;
+    return client;
+  } catch (error) {
+    connectionHealth.value = "degraded";
+  }
 
-  const directus = createClient();
+  directusSingleton = createDirectus<Directus.CustomDirectusTypes>(String(directusUrl)).with(rest());
+  return directusSingleton;
+}
+
+export function useDirectus() {
+  const { loggedIn, session, fetch } = useUserSession();
+  const accessTokenRef = computed<string | null>(() => (session.value as any)?.access_token ?? null);
+
+  const config = useRuntimeConfig();
+
+  // Keep the singleton client's auth header in sync with the current session token
+  watch(accessTokenRef, (token) => {
+    currentAccessToken.value = token;
+  }, { immediate: true });
+
+  const directusUrl = String(config.public?.api.baseUrl || "http://localhost:8055");
+  const directus = getOrCreateClient(directusUrl);
 
   return {
     directus,
     isAuthenticated: computed(() =>
-      status.value === "authenticated"
-      && session.value
-      && !!(session.value as any).access_token
-      && !(session.value as any).error,
+      loggedIn.value && !!accessTokenRef.value,
     ),
     connectionHealth: readonly(connectionHealth),
     lastHealthCheck: readonly(lastHealthCheck),
     async healthCheck(): Promise<boolean> {
       try {
-        const client = createDirectus<Directus.CustomDirectusTypes>(
-          String(config.public?.api.baseUrl || "http://localhost:8055"),
-        ).with(rest());
-        await client.request({ method: "GET", path: "/server/ping" } as any);
+        await directus.request({ method: "GET", path: "/server/ping" } as any);
         connectionHealth.value = "healthy";
         lastHealthCheck.value = Date.now();
         return true;

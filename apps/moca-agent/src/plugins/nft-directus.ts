@@ -1,4 +1,12 @@
-import { Action, IAgentRuntime, Memory, Plugin, Provider, Service, State } from "@elizaos/core";
+import {
+  Action,
+  IAgentRuntime,
+  Memory,
+  Plugin,
+  Provider,
+  Service,
+  State,
+} from "@elizaos/core";
 import type { Directus } from "@local/types";
 
 interface NFTSearchOptions {
@@ -70,19 +78,31 @@ export class DirectusNFTService extends Service {
       let filterIndex = 0;
 
       if (options.artist) {
-        searchParams.append(`filter[_and][${filterIndex}][artist_name][_contains]`, options.artist);
+        searchParams.append(
+          `filter[_and][${filterIndex}][artist_name][_contains]`,
+          options.artist,
+        );
         filterIndex++;
       }
 
       if (options.name) {
-        searchParams.append(`filter[_and][${filterIndex}][name][_contains]`, options.name);
+        searchParams.append(
+          `filter[_and][${filterIndex}][name][_contains]`,
+          options.name,
+        );
         filterIndex++;
       }
 
       if (options.collection) {
         // Use _or for collection search (collection field OR collection_type.name)
-        searchParams.append(`filter[_and][${filterIndex}][_or][0][collection][_contains]`, options.collection);
-        searchParams.append(`filter[_and][${filterIndex}][_or][1][collection_type][name][_contains]`, options.collection);
+        searchParams.append(
+          `filter[_and][${filterIndex}][_or][0][collection][_contains]`,
+          options.collection,
+        );
+        searchParams.append(
+          `filter[_and][${filterIndex}][_or][1][collection_type][name][_contains]`,
+          options.collection,
+        );
         filterIndex++;
       }
 
@@ -98,16 +118,18 @@ export class DirectusNFTService extends Service {
       }
 
       // Include related data - collection_type is the relationship to Collections
-      searchParams.append("fields", "*,collection_type.name,collection_type.title,collection_type.description,contract.address,contract.name");
+      searchParams.append(
+        "fields",
+        "*,collection_type.name,collection_type.title,collection_type.description,contract.address,contract.name",
+      );
 
       const url = `${this.baseUrl}/items/nfts?${searchParams.toString()}`;
       console.log("🔍 NFT Search URL:", url);
       console.log("📋 Search Options:", options);
 
-      this.runtime?.logger?.debug("Fetching NFTs from Directus", {
-        url,
-        options,
-      });
+      this.runtime?.logger?.debug(
+        `Fetching NFTs from Directus - URL: ${url}, Options: ${JSON.stringify(options)}`,
+      );
 
       console.log("Making API request to:", url);
       // Add timeout and better error handling
@@ -125,21 +147,23 @@ export class DirectusNFTService extends Service {
         clearTimeout(timeout);
 
         console.log("Response status:", response.status);
-        console.log("Response headers:", Object.fromEntries(response.headers.entries()));
+        console.log(
+          "Response headers:",
+          Object.fromEntries(response.headers.entries()),
+        );
 
         if (!response.ok) {
           const errorText = await response.text();
           console.log("Error response body:", errorText);
-          this.runtime?.logger?.error("Directus API error details", {
-            status: response.status,
-            statusText: response.statusText,
-            errorBody: errorText,
-            url,
-          });
-          throw new Error(`Directus API error: ${response.status} ${response.statusText}`);
+          this.runtime?.logger?.error(
+            `Directus API error details - Status: ${response.status}, StatusText: ${response.statusText}, URL: ${url}, ErrorBody: ${errorText}`,
+          );
+          throw new Error(
+            `Directus API error: ${response.status} ${response.statusText}`,
+          );
         }
 
-        const data = await response.json() as { data: Directus.Nfts[] };
+        const data = (await response.json()) as { data: Directus.Nfts[] };
         console.log("API response data:", JSON.stringify(data, null, 2));
         return data.data || [];
       } catch (fetchError) {
@@ -153,10 +177,18 @@ export class DirectusNFTService extends Service {
     } catch (error) {
       console.log("Detailed error:", error);
       console.log("Error type:", typeof error);
-      console.log("Error message:", error instanceof Error ? error.message : String(error));
-      console.log("Error stack:", error instanceof Error ? error.stack : "No stack trace");
+      console.log(
+        "Error message:",
+        error instanceof Error ? error.message : String(error),
+      );
+      console.log(
+        "Error stack:",
+        error instanceof Error ? error.stack : "No stack trace",
+      );
 
-      this.runtime?.logger?.error("Error fetching NFTs from Directus", { error, options });
+      this.runtime?.logger?.error(
+        `Error fetching NFTs from Directus - Options: ${JSON.stringify(options)}, Error: ${error instanceof Error ? error.message : String(error)}`,
+      );
 
       throw error;
     }
@@ -175,13 +207,17 @@ export class DirectusNFTService extends Service {
         if (response.status === 404) {
           return null;
         }
-        throw new Error(`Directus API error: ${response.status} ${response.statusText}`);
+        throw new Error(
+          `Directus API error: ${response.status} ${response.statusText}`,
+        );
       }
 
-      const data = await response.json() as { data: Directus.Nfts };
+      const data = (await response.json()) as { data: Directus.Nfts };
       return data.data;
     } catch (error) {
-      this.runtime?.logger?.error("Error fetching NFT by ID from Directus", { error, id });
+      this.runtime?.logger?.error(
+        `Error fetching NFT by ID from Directus - ID: ${id}, Error: ${error instanceof Error ? error.message : String(error)}`,
+      );
       throw error;
     }
   }
@@ -196,13 +232,17 @@ export class DirectusNFTService extends Service {
       const response = await fetch(url);
 
       if (!response.ok) {
-        throw new Error(`Directus API error: ${response.status} ${response.statusText}`);
+        throw new Error(
+          `Directus API error: ${response.status} ${response.statusText}`,
+        );
       }
 
-      const data = await response.json() as { data: Directus.Collections[] };
+      const data = (await response.json()) as { data: Directus.Collections[] };
       return data.data || [];
     } catch (error) {
-      this.runtime?.logger?.error("Error fetching collections from Directus", { error });
+      this.runtime?.logger?.error(
+        `Error fetching collections from Directus - Error: ${error instanceof Error ? error.message : String(error)}`,
+      );
       throw error;
     }
   }
@@ -210,7 +250,12 @@ export class DirectusNFTService extends Service {
   /**
    * Count NFTs based on various criteria
    */
-  async countNFTs(options: NFTCountOptions): Promise<{ count: number; breakdown?: Array<{ key: string; count: number }> }> {
+  async countNFTs(
+    options: NFTCountOptions,
+  ): Promise<{
+    count: number;
+    breakdown?: Array<{ key: string; count: number }>;
+  }> {
     try {
       if (options.groupBy) {
         // Get grouped counts
@@ -220,7 +265,9 @@ export class DirectusNFTService extends Service {
         return await this.getSimpleNFTCount(options);
       }
     } catch (error) {
-      this.runtime?.logger?.error("Error counting NFTs from Directus", { error, options });
+      this.runtime?.logger?.error(
+        `Error counting NFTs from Directus - Options: ${JSON.stringify(options)}, Error: ${error instanceof Error ? error.message : String(error)}`,
+      );
       throw error;
     }
   }
@@ -228,18 +275,29 @@ export class DirectusNFTService extends Service {
   /**
    * Get simple count of NFTs with filters
    */
-  private async getSimpleNFTCount(options: NFTCountOptions): Promise<{ count: number }> {
+  private async getSimpleNFTCount(
+    options: NFTCountOptions,
+  ): Promise<{ count: number }> {
     const searchParams = new URLSearchParams();
     let filterIndex = 0;
 
     if (options.artist) {
-      searchParams.append(`filter[_and][${filterIndex}][artist_name][_contains]`, options.artist);
+      searchParams.append(
+        `filter[_and][${filterIndex}][artist_name][_contains]`,
+        options.artist,
+      );
       filterIndex++;
     }
 
     if (options.collection) {
-      searchParams.append(`filter[_and][${filterIndex}][_or][0][collection][_contains]`, options.collection);
-      searchParams.append(`filter[_and][${filterIndex}][_or][1][collection_type][name][_contains]`, options.collection);
+      searchParams.append(
+        `filter[_and][${filterIndex}][_or][0][collection][_contains]`,
+        options.collection,
+      );
+      searchParams.append(
+        `filter[_and][${filterIndex}][_or][1][collection_type][name][_contains]`,
+        options.collection,
+      );
       filterIndex++;
     }
 
@@ -256,29 +314,46 @@ export class DirectusNFTService extends Service {
     });
 
     if (!response.ok) {
-      throw new Error(`Directus API error: ${response.status} ${response.statusText}`);
+      throw new Error(
+        `Directus API error: ${response.status} ${response.statusText}`,
+      );
     }
 
-    const data = await response.json() as { data: Array<{ count: number }> };
+    const data = (await response.json()) as { data: Array<{ count: number }> };
     return { count: data.data?.[0]?.count || 0 };
   }
 
   /**
    * Get grouped counts of NFTs
    */
-  private async getGroupedNFTCount(groupBy: "artist" | "collection", options: NFTCountOptions): Promise<{ count: number; breakdown: Array<{ key: string; count: number }> }> {
+  private async getGroupedNFTCount(
+    groupBy: "artist" | "collection",
+    options: NFTCountOptions,
+  ): Promise<{
+    count: number;
+    breakdown: Array<{ key: string; count: number }>;
+  }> {
     const searchParams = new URLSearchParams();
     let filterIndex = 0;
 
     // Apply filters
     if (options.artist && groupBy !== "artist") {
-      searchParams.append(`filter[_and][${filterIndex}][artist_name][_contains]`, options.artist);
+      searchParams.append(
+        `filter[_and][${filterIndex}][artist_name][_contains]`,
+        options.artist,
+      );
       filterIndex++;
     }
 
     if (options.collection && groupBy !== "collection") {
-      searchParams.append(`filter[_and][${filterIndex}][_or][0][collection][_contains]`, options.collection);
-      searchParams.append(`filter[_and][${filterIndex}][_or][1][collection_type][name][_contains]`, options.collection);
+      searchParams.append(
+        `filter[_and][${filterIndex}][_or][0][collection][_contains]`,
+        options.collection,
+      );
+      searchParams.append(
+        `filter[_and][${filterIndex}][_or][1][collection_type][name][_contains]`,
+        options.collection,
+      );
       filterIndex++;
     }
 
@@ -297,10 +372,14 @@ export class DirectusNFTService extends Service {
     });
 
     if (!response.ok) {
-      throw new Error(`Directus API error: ${response.status} ${response.statusText}`);
+      throw new Error(
+        `Directus API error: ${response.status} ${response.statusText}`,
+      );
     }
 
-    const data = await response.json() as { data: Array<{ [key: string]: string | number; count: number }> };
+    const data = (await response.json()) as {
+      data: Array<{ [key: string]: string | number; count: number }>;
+    };
 
     const breakdown = (data.data || []).map(item => ({
       key: String(item[groupField] || "Unknown"),
@@ -329,14 +408,22 @@ export class DirectusNFTService extends Service {
     // Check both collection (string field) and collection_type (relationship)
     if (nft.collection && typeof nft.collection === "string") {
       parts.push(`Collection: ${nft.collection}`);
-    } else if (nft.collection_type && typeof nft.collection_type === "object" && "name" in nft.collection_type) {
+    } else if (
+      nft.collection_type
+      && typeof nft.collection_type === "object"
+      && "name" in nft.collection_type
+    ) {
       const collection = nft.collection_type as Directus.Collections;
       if (collection.name) {
         parts.push(`Collection: ${collection.name}`);
       }
     }
 
-    if (nft.contract && typeof nft.contract === "object" && "address" in nft.contract) {
+    if (
+      nft.contract
+      && typeof nft.contract === "object"
+      && "address" in nft.contract
+    ) {
       const contract = nft.contract as Directus.Contracts;
       if (contract.address) {
         parts.push(`Contract: ${contract.address}`);
@@ -378,34 +465,56 @@ export const searchNFTsAction: Action = {
 
     // Look for NFT-related keywords
     const nftKeywords = [ "nft", "nfts", "artwork", "art", "token", "piece" ];
-    const actionKeywords = [ "find", "search", "show", "get", "look for", "display", "info", "information" ];
+    const actionKeywords = [
+      "find",
+      "search",
+      "show",
+      "get",
+      "look for",
+      "display",
+      "info",
+      "information",
+    ];
 
     const hasNFTKeyword = nftKeywords.some(keyword => text.includes(keyword));
-    const hasActionKeyword = actionKeywords.some(keyword => text.includes(keyword));
+    const hasActionKeyword = actionKeywords.some(keyword =>
+      text.includes(keyword),
+    );
 
     // Also check for artist/collection specific queries
     const hasArtistQuery = text.includes("artist") || text.includes("by ");
-    const hasCollectionQuery = text.includes("collection") || text.includes("from ");
+    const hasCollectionQuery
+      = text.includes("collection") || text.includes("from ");
 
     // Debug logging to understand validation
-    runtime.logger?.debug("NFT Action Validation", {
-      text,
-      hasNFTKeyword,
-      hasActionKeyword,
-      hasArtistQuery,
-      hasCollectionQuery,
-      result: hasNFTKeyword && (hasActionKeyword || hasArtistQuery || hasCollectionQuery),
-    });
+    const validationResult
+      = hasNFTKeyword
+      && (hasActionKeyword || hasArtistQuery || hasCollectionQuery);
+    runtime.logger?.debug(
+      `NFT Action Validation - Text: "${text}", HasNFTKeyword: ${hasNFTKeyword}, HasActionKeyword: ${hasActionKeyword}, HasArtistQuery: ${hasArtistQuery}, HasCollectionQuery: ${hasCollectionQuery}, Result: ${validationResult}`,
+    );
 
-    return hasNFTKeyword && (hasActionKeyword || hasArtistQuery || hasCollectionQuery);
+    return (
+      hasNFTKeyword
+      && (hasActionKeyword || hasArtistQuery || hasCollectionQuery)
+    );
   },
 
-  handler: async (runtime: IAgentRuntime, message: Memory, _state?: State, _options?: any, callback?: any) => {
+  handler: async (
+    runtime: IAgentRuntime,
+    message: Memory,
+    _state?: State,
+    _options?: any,
+    callback?: any,
+  ) => {
     try {
-      const nftService = runtime.getService("directus-nft-service") as DirectusNFTService;
+      const nftService = runtime.getService(
+        "directus-nft-service",
+      ) as DirectusNFTService;
 
       if (!nftService) {
-        const serviceErrorText = "NFT service is not available. Please check the configuration.";
+        const serviceErrorText
+          = "NFT service is not available. Please check the configuration.";
 
         // Use callback to send service error to user
         if (callback) {
@@ -431,44 +540,52 @@ export const searchNFTsAction: Action = {
       // Look for artist name
       const artistMatch = text.match(/(?:artist|by)\s+([^,\n]+)/i);
       if (artistMatch) {
-        searchOptions.artist = artistMatch[1].trim().replace(/^["']|["']$/g, ""); // Remove surrounding quotes
+        searchOptions.artist = artistMatch[1]
+          .trim()
+          .replace(/^["']|["']$/g, ""); // Remove surrounding quotes
       }
 
       // Look for collection name with more flexible patterns
-      const collectionMatch = text.match(/(?:collection|from)\s+([^,\n.!?]+)/i)
-                             || text.match(/(?:in|of)\s+(.+?)\s+collection/i)
-                             || text.match(/(.+?)\s+collection/i);
+      const collectionMatch
+        = text.match(/(?:collection|from)\s+([^,\n.!?]+)/i)
+        || text.match(/(?:in|of)\s+(.+?)\s+collection/i)
+        || text.match(/(.+?)\s+collection/i);
       if (collectionMatch) {
-        searchOptions.collection = collectionMatch[1].trim().replace(/^["']|["']$/g, ""); // Remove surrounding quotes
+        searchOptions.collection = collectionMatch[1]
+          .trim()
+          .replace(/^["']|["']$/g, ""); // Remove surrounding quotes
       }
 
       // Debug logging
-      runtime.logger?.debug("NFT Search Parameters", {
-        originalText,
-        text,
-        searchOptions,
-        artistMatch: artistMatch?.[1],
-        collectionMatch: collectionMatch?.[1],
-      });
+      runtime.logger?.debug(
+        `NFT Search Parameters - OriginalText: "${originalText}", SearchOptions: ${JSON.stringify(searchOptions)}, ArtistMatch: ${artistMatch?.[1] || "none"}, CollectionMatch: ${collectionMatch?.[1] || "none"}`,
+      );
 
       // Look for NFT name
-      const nameMatch = text.match(/(?:nft|artwork|art|piece|token)(?:\s+(?:named|called))?\s+([^,\n]+)/i);
+      const nameMatch = text.match(
+        /(?:nft|artwork|art|piece|token)(?:\s+(?:named|called))?\s+([^,\n]+)/i,
+      );
       if (nameMatch && !artistMatch && !collectionMatch) {
         searchOptions.name = nameMatch[1].trim().replace(/^["']|["']$/g, ""); // Remove surrounding quotes
       }
 
       // If no specific search criteria found, extract any quoted strings or capitalized words
-      if (!searchOptions.artist && !searchOptions.collection && !searchOptions.name) {
+      if (
+        !searchOptions.artist
+        && !searchOptions.collection
+        && !searchOptions.name
+      ) {
         const quotedMatch = text.match(/"([^"]+)"/);
         if (quotedMatch) {
           searchOptions.name = quotedMatch[1];
         } else {
           // Look for capitalized words that might be names
           const words = (message.content.text || "").split(" ");
-          const capitalizedWords = words.filter(word =>
-            word.length > 2
-            && word[0] === word[0].toUpperCase()
-            && word.slice(1) === word.slice(1).toLowerCase(),
+          const capitalizedWords = words.filter(
+            word =>
+              word.length > 2
+              && word[0] === word[0].toUpperCase()
+              && word.slice(1) === word.slice(1).toLowerCase(),
           );
           if (capitalizedWords.length > 0) {
             searchOptions.name = capitalizedWords.join(" ");
@@ -480,7 +597,8 @@ export const searchNFTsAction: Action = {
       console.log("Testing Directus connection before search...");
       const connectionOk = await nftService.testConnection();
       if (!connectionOk) {
-        const connectionErrorText = "Unable to connect to the NFT database. Please check if the Directus service is running.";
+        const connectionErrorText
+          = "Unable to connect to the NFT database. Please check if the Directus service is running.";
 
         // Use callback to send connection error to user
         if (callback) {
@@ -503,9 +621,12 @@ export const searchNFTsAction: Action = {
       if (nfts.length === 0) {
         const searchTerms = [
           searchOptions.artist && `artist "${searchOptions.artist}"`,
-          searchOptions.collection && `collection "${searchOptions.collection}"`,
+          searchOptions.collection
+            && `collection "${searchOptions.collection}"`,
           searchOptions.name && `name "${searchOptions.name}"`,
-        ].filter(Boolean).join(", ");
+        ]
+          .filter(Boolean)
+          .join(", ");
 
         const noResultsText = `I couldn't find any NFTs matching your search${searchTerms ? ` for ${searchTerms}` : ""}. Try a different search term or check the spelling.`;
 
@@ -527,13 +648,18 @@ export const searchNFTsAction: Action = {
       console.log(`Found ${nfts.length} NFTs`);
 
       // Format results
-      const formattedNFTs = nfts.slice(0, 5).map((nft, index) =>
-        `${index + 1}. ${nftService.formatNFTForDisplay(nft)}`,
-      ).join("\n\n");
+      const formattedNFTs = nfts
+        .slice(0, 5)
+        .map(
+          (nft, index) =>
+            `${index + 1}. ${nftService.formatNFTForDisplay(nft)}`,
+        )
+        .join("\n\n");
 
-      const resultText = nfts.length === 1
-        ? `I found 1 NFT:\n\n${formattedNFTs}`
-        : `I found ${nfts.length} NFTs${nfts.length > 5 ? " (showing first 5)" : ""}:\n\n${formattedNFTs}`;
+      const resultText
+        = nfts.length === 1
+          ? `I found 1 NFT:\n\n${formattedNFTs}`
+          : `I found ${nfts.length} NFTs${nfts.length > 5 ? " (showing first 5)" : ""}:\n\n${formattedNFTs}`;
 
       // Use callback to send response to user
       if (callback) {
@@ -550,9 +676,12 @@ export const searchNFTsAction: Action = {
         data: { nfts: nfts.slice(0, 5), total: nfts.length },
       };
     } catch (error) {
-      runtime.logger?.error("Error in searchNFTsAction", { error });
+      runtime.logger?.error(
+        `Error in searchNFTsAction - Error: ${error instanceof Error ? error.message : String(error)}`,
+      );
 
-      const errorText = "I encountered an error while searching for NFTs. Please try again later.";
+      const errorText
+        = "I encountered an error while searching for NFTs. Please try again later.";
 
       // Use callback to send error response to user
       if (callback) {
@@ -606,7 +735,8 @@ export const searchNFTsAction: Action = {
  */
 export const countNFTsAction: Action = {
   name: "COUNT_NFTS",
-  description: "Count NFTs by collection, artist, or get total counts with optional breakdowns",
+  description:
+    "Count NFTs by collection, artist, or get total counts with optional breakdowns",
   similes: [
     "count nft",
     "count nfts",
@@ -637,33 +767,62 @@ export const countNFTsAction: Action = {
     const text = message.content.text?.toLowerCase() || "";
 
     // Look for count-related keywords
-    const countKeywords = [ "count", "how many", "number of", "total", "statistics", "stats", "breakdown" ];
-    const nftKeywords = [ "nft", "nfts", "artwork", "artworks", "art", "token", "tokens", "piece", "pieces" ];
+    const countKeywords = [
+      "count",
+      "how many",
+      "number of",
+      "total",
+      "statistics",
+      "stats",
+      "breakdown",
+    ];
+    const nftKeywords = [
+      "nft",
+      "nfts",
+      "artwork",
+      "artworks",
+      "art",
+      "token",
+      "tokens",
+      "piece",
+      "pieces",
+    ];
 
-    const hasCountKeyword = countKeywords.some(keyword => text.includes(keyword));
+    const hasCountKeyword = countKeywords.some(keyword =>
+      text.includes(keyword),
+    );
     const hasNFTKeyword = nftKeywords.some(keyword => text.includes(keyword));
 
     // Also check for specific phrases
-    const hasCountPhrase = text.includes("how many") || text.includes("count of") || text.includes("number of");
+    const hasCountPhrase
+      = text.includes("how many")
+      || text.includes("count of")
+      || text.includes("number of");
 
     // Debug logging
-    runtime.logger?.debug("Count NFT Action Validation", {
-      text,
-      hasCountKeyword,
-      hasNFTKeyword,
-      hasCountPhrase,
-      result: (hasCountKeyword || hasCountPhrase) && hasNFTKeyword,
-    });
+    const validationResult = (hasCountKeyword || hasCountPhrase) && hasNFTKeyword;
+    runtime.logger?.debug(
+      `Count NFT Action Validation - Text: "${text}", HasCountKeyword: ${hasCountKeyword}, HasNFTKeyword: ${hasNFTKeyword}, HasCountPhrase: ${hasCountPhrase}, Result: ${validationResult}`,
+    );
 
     return (hasCountKeyword || hasCountPhrase) && hasNFTKeyword;
   },
 
-  handler: async (runtime: IAgentRuntime, message: Memory, _state?: State, _options?: any, callback?: any) => {
+  handler: async (
+    runtime: IAgentRuntime,
+    message: Memory,
+    _state?: State,
+    _options?: any,
+    callback?: any,
+  ) => {
     try {
-      const nftService = runtime.getService("directus-nft-service") as DirectusNFTService;
+      const nftService = runtime.getService(
+        "directus-nft-service",
+      ) as DirectusNFTService;
 
       if (!nftService) {
-        const serviceErrorText = "NFT service is not available. Please check the configuration.";
+        const serviceErrorText
+          = "NFT service is not available. Please check the configuration.";
 
         if (callback) {
           await callback({
@@ -685,9 +844,17 @@ export const countNFTsAction: Action = {
       const countOptions: NFTCountOptions = {};
 
       // Check for groupBy request
-      if (text.includes("by artist") || text.includes("per artist") || text.includes("each artist")) {
+      if (
+        text.includes("by artist")
+        || text.includes("per artist")
+        || text.includes("each artist")
+      ) {
         countOptions.groupBy = "artist";
-      } else if (text.includes("by collection") || text.includes("per collection") || text.includes("each collection")) {
+      } else if (
+        text.includes("by collection")
+        || text.includes("per collection")
+        || text.includes("each collection")
+      ) {
         countOptions.groupBy = "collection";
       }
 
@@ -698,16 +865,20 @@ export const countNFTsAction: Action = {
       }
 
       // Look for specific collection
-      const collectionMatch = text.match(/(?:collection|from|in)\s+([^,\n.!?]+)/i)
-                             || text.match(/(.+?)\s+collection/i);
+      const collectionMatch
+        = text.match(/(?:collection|from|in)\s+([^,\n.!?]+)/i)
+        || text.match(/(.+?)\s+collection/i);
       if (collectionMatch && !countOptions.groupBy) {
-        countOptions.collection = collectionMatch[1].trim().replace(/^["']|["']$/g, "");
+        countOptions.collection = collectionMatch[1]
+          .trim()
+          .replace(/^["']|["']$/g, "");
       }
 
       // Test connection first
       const connectionOk = await nftService.testConnection();
       if (!connectionOk) {
-        const connectionErrorText = "Unable to connect to the NFT database. Please check if the Directus service is running.";
+        const connectionErrorText
+          = "Unable to connect to the NFT database. Please check if the Directus service is running.";
 
         if (callback) {
           await callback({
@@ -729,11 +900,15 @@ export const countNFTsAction: Action = {
 
       if (result.breakdown && result.breakdown.length > 0) {
         // Format grouped results
-        const groupType = countOptions.groupBy === "artist" ? "artist" : "collection";
+        const groupType
+          = countOptions.groupBy === "artist" ? "artist" : "collection";
         const breakdown = result.breakdown
           .sort((a, b) => b.count - a.count) // Sort by count descending
           .slice(0, 10) // Show top 10
-          .map((item, index) => `${index + 1}. ${item.key}: ${item.count} NFT${item.count !== 1 ? "s" : ""}`)
+          .map(
+            (item, index) =>
+              `${index + 1}. ${item.key}: ${item.count} NFT${item.count !== 1 ? "s" : ""}`,
+          )
           .join("\n");
 
         resultText = `I found a total of ${result.count} NFT${result.count !== 1 ? "s" : ""} grouped by ${groupType}:\n\n${breakdown}`;
@@ -744,10 +919,15 @@ export const countNFTsAction: Action = {
       } else {
         // Format simple count result
         const filters: string[] = [];
-        if (countOptions.artist) filters.push(`artist "${countOptions.artist}"`);
-        if (countOptions.collection) filters.push(`collection "${countOptions.collection}"`);
+        if (countOptions.artist) {
+          filters.push(`artist "${countOptions.artist}"`);
+        }
+        if (countOptions.collection) {
+          filters.push(`collection "${countOptions.collection}"`);
+        }
 
-        const filterText = filters.length > 0 ? ` for ${filters.join(" and ")}` : "";
+        const filterText
+          = filters.length > 0 ? ` for ${filters.join(" and ")}` : "";
         resultText = `I found ${result.count} NFT${result.count !== 1 ? "s" : ""}${filterText}.`;
       }
 
@@ -765,9 +945,12 @@ export const countNFTsAction: Action = {
         data: result,
       };
     } catch (error) {
-      runtime.logger?.error("Error in countNFTsAction", { error });
+      runtime.logger?.error(
+        `Error in countNFTsAction - Error: ${error instanceof Error ? error.message : String(error)}`,
+      );
 
-      const errorText = "I encountered an error while counting NFTs. Please try again later.";
+      const errorText
+        = "I encountered an error while counting NFTs. Please try again later.";
 
       if (callback) {
         await callback({
@@ -848,7 +1031,9 @@ export const nftContextProvider: Provider = {
   name: "NFT_CONTEXT_PROVIDER",
   get: async (runtime: IAgentRuntime, _message: Memory, _state: State) => {
     try {
-      const nftService = runtime.getService("directus-nft-service") as DirectusNFTService;
+      const nftService = runtime.getService(
+        "directus-nft-service",
+      ) as DirectusNFTService;
 
       if (!nftService) {
         return {
@@ -862,7 +1047,9 @@ export const nftContextProvider: Provider = {
 
       const contextInfo = [
         "Available NFT Collections:",
-        ...collections.slice(0, 5).map(col => `- ${col.name}${col.title ? ` (${col.title})` : ""}`),
+        ...collections
+          .slice(0, 5)
+          .map(col => `- ${col.name}${col.title ? ` (${col.title})` : ""}`),
         "",
         "You can search for NFTs by:",
         "- Artist name (e.g., \"Find NFTs by Pak\")",
@@ -881,7 +1068,9 @@ export const nftContextProvider: Provider = {
         data: { collections: collections.slice(0, 5) },
       };
     } catch (error) {
-      runtime.logger?.error("Error in nftContextProvider", { error });
+      runtime.logger?.error(
+        `Error in nftContextProvider - Error: ${error instanceof Error ? error.message : String(error)}`,
+      );
       return {
         text: "NFT information is temporarily unavailable.",
         data: {},
@@ -913,9 +1102,9 @@ export const nftDirectusPlugin: Plugin = {
 
   // Lifecycle hooks
   async init(config: Record<string, string>, runtime: IAgentRuntime) {
-    runtime.logger?.info("NFT Directus plugin initialized", {
-      directusUrl: config.directusUrl || "http://localhost:8055",
-    });
+    runtime.logger?.info(
+      `NFT Directus plugin initialized - DirectusUrl: ${config.directusUrl || "http://localhost:8055"}`,
+    );
   },
 };
 

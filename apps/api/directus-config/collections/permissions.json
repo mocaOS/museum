@@ -24,6 +24,22 @@
     "_syncId": "9f7f81a8-852e-4487-9ec0-0c7a616e6832"
   },
   {
+    "collection": "applications",
+    "action": "read",
+    "permissions": null,
+    "validation": null,
+    "presets": null,
+    "fields": [
+      "status",
+      "url",
+      "decc0s",
+      "id",
+      "owner"
+    ],
+    "policy": "b5d43d0f-0d4f-4de9-8214-cca0d7c9971d",
+    "_syncId": "5aa9f243-0e0e-42a4-ad41-a79fd4af5813"
+  },
+  {
     "collection": "collections",
     "action": "read",
     "permissions": null,
@@ -66,6 +82,11 @@
     "validation": null,
     "presets": null,
     "fields": [
+      "id",
+      "email",
+      "first_name",
+      "last_name",
+      "role",
       "ethereum_address"
     ],
     "policy": "dbb083a5-0174-4f56-a3fa-60c64da11078",

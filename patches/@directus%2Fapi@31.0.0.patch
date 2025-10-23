@@ -1,11 +1,5 @@
-diff --git a/node_modules/@directus/api/.bun-tag-7baa9071a1e533c0 b/.bun-tag-7baa9071a1e533c0
-new file mode 100644
-index 0000000000000000000000000000000000000000..e69de29bb2d1d6434b8b29ae775ad8c2e48c5391
-diff --git a/node_modules/@directus/api/.bun-tag-ef1e465f68ec201d b/.bun-tag-ef1e465f68ec201d
-new file mode 100644
-index 0000000000000000000000000000000000000000..e69de29bb2d1d6434b8b29ae775ad8c2e48c5391
 diff --git a/dist/auth/drivers/local.js b/dist/auth/drivers/local.js
-index ca165f4df7d2c091f7bdaffa3ecdd414289717ca..bf4df5dbce16e381aaaf01f3a2d2208496c9c40c 100644
+index ca165f4df7d2c091f7bdaffa3ecdd414289717ca..512cb9a575ea4bce0da41d8de37e8c67147eacc2 100644
 --- a/dist/auth/drivers/local.js
 +++ b/dist/auth/drivers/local.js
 @@ -12,6 +12,7 @@ import asyncHandler from '../../utils/async-handler.js';
@@ -16,11 +10,11 @@ index ca165f4df7d2c091f7bdaffa3ecdd414289717ca..bf4df5dbce16e381aaaf01f3a2d22084
  export class LocalAuthDriver extends AuthDriver {
      async getUserID(payload) {
          if (!payload['email']) {
-@@ -27,8 +28,25 @@ export class LocalAuthDriver extends AuthDriver {
+@@ -27,8 +28,28 @@ export class LocalAuthDriver extends AuthDriver {
          }
          return user.id;
      }
-+    verifySignature(message, signature, signerAddress) {
++    verifySignature(message, signature, signerAddress) {       
 +        try {
 +            // Recover the signer's address from the signature
 +            const recoveredAddress = ethers.verifyMessage(message, signature);
@@ -34,6 +28,9 @@ index ca165f4df7d2c091f7bdaffa3ecdd414289717ca..bf4df5dbce16e381aaaf01f3a2d22084
 +    }
      async verify(user, password) {
 -        if (!user.password || !(await argon2.verify(user.password, password))) {
++        if (typeof password !== 'string') {
++            throw new InvalidCredentialsError();
++        }
 +        if (password.startsWith('0x')) {
 +            const message = `Welcome to the Museum of Crypto Art!\n\nSign this message login. No password needed.\n\nWallet address:\n${user.ethereum_address}`;
 +
@@ -43,7 +40,7 @@ index ca165f4df7d2c091f7bdaffa3ecdd414289717ca..bf4df5dbce16e381aaaf01f3a2d22084
              throw new InvalidCredentialsError();
          }
      }
-@@ -41,7 +59,7 @@ export function createLocalAuthRouter(provider) {
+@@ -41,7 +62,7 @@ export function createLocalAuthRouter(provider) {
      const router = Router();
      const userLoginSchema = Joi.object({
          email: Joi.string().email().required(),
@@ -53,7 +50,7 @@ index ca165f4df7d2c091f7bdaffa3ecdd414289717ca..bf4df5dbce16e381aaaf01f3a2d22084
          otp: Joi.string(),
      }).unknown();
 diff --git a/dist/controllers/users.js b/dist/controllers/users.js
-index 5ae4ded9f7b386253f66e15c33656d2c05ccd3e3..fc353064f114106b4ddec1fb4cbb62cf62545287 100644
+index d71232dfe15467d95613559fff6a608937a24099..c8a7067afd09373f1d884c590d1d2591b39468cb 100644
 --- a/dist/controllers/users.js
 +++ b/dist/controllers/users.js
 @@ -1,6 +1,7 @@
@@ -64,7 +61,7 @@ index 5ae4ded9f7b386253f66e15c33656d2c05ccd3e3..fc353064f114106b4ddec1fb4cbb62cf
  import checkRateLimit from '../middleware/rate-limiter-registration.js';
  import { respond } from '../middleware/respond.js';
  import useCollection from '../middleware/use-collection.js';
-@@ -298,15 +299,32 @@ router.post('/:pk/tfa/disable', asyncHandler(async (req, _res, next) => {
+@@ -308,15 +309,32 @@ router.post('/:pk/tfa/disable', asyncHandler(async (req, _res, next) => {
  }), respond);
  const registerSchema = Joi.object({
      email: Joi.string().email().required(),
@@ -100,10 +97,10 @@ index 5ae4ded9f7b386253f66e15c33656d2c05ccd3e3..fc353064f114106b4ddec1fb4cbb62cf
      await usersService.registerUser(value);
      return next();
 diff --git a/dist/services/authentication.js b/dist/services/authentication.js
-index 4d0d07b72d88b88631a7e24e784ee0c16fc24ac9..bca33586c00b7726243f76227e5e01e6bca26e7f 100644
+index 591fad3e8744a758464d76ce72be35c3e5892838..2ec61bcc16ceb008cd89a1af30f0f35808c48067 100644
 --- a/dist/services/authentication.js
 +++ b/dist/services/authentication.js
-@@ -50,7 +50,7 @@ export class AuthenticationService {
+@@ -51,7 +51,7 @@ export class AuthenticationService {
              throw err;
          }
          const user = await this.knex
@@ -112,7 +109,7 @@ index 4d0d07b72d88b88631a7e24e784ee0c16fc24ac9..bca33586c00b7726243f76227e5e01e6
              .from('directus_users')
              .where('id', userId)
              .first();
-@@ -380,7 +380,7 @@ export class AuthenticationService {
+@@ -416,7 +416,7 @@ export class AuthenticationService {
      }
      async verifyPassword(userID, password) {
          const user = await this.knex
@@ -121,3 +118,23 @@ index 4d0d07b72d88b88631a7e24e784ee0c16fc24ac9..bca33586c00b7726243f76227e5e01e6
              .from('directus_users')
              .where('id', userID)
              .first();
+diff --git a/dist/services/users.js b/dist/services/users.js
+index 31dacbf3d78d05ca730a99fd9ac0acb5050b9131..0c0c25267f26d2d1343cb682c72f187c7f03aeb1 100644
+--- a/dist/services/users.js
++++ b/dist/services/users.js
+@@ -381,6 +381,7 @@ export class UsersService extends ItemsService {
+         const emailFilter = settings?.['public_registration_email_filter'];
+         const first_name = input.first_name ?? null;
+         const last_name = input.last_name ?? null;
++        const ethereum_address = input.ethereum_address ? String(input.ethereum_address).toLowerCase() : null;
+         const partialUser = {
+             // Required fields
+             email: input.email,
+@@ -390,6 +391,7 @@ export class UsersService extends ItemsService {
+             // Optional fields
+             first_name,
+             last_name,
++            ethereum_address,
+         };
+         if (emailFilter && validatePayload(emailFilter, { email: input.email }).length !== 0) {
+             await stall(STALL_TIME, timeStart);

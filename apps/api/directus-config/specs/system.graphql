@@ -267,6 +267,8 @@ type Subscription {
   directus_files_mutated(event: EventEnum): directus_files_mutated
   collections_mutated(event: EventEnum): collections_mutated
   rooms_mutated(event: EventEnum): rooms_mutated
+  applications_mutated(event: EventEnum): applications_mutated
+  settings_mutated(event: EventEnum): settings_mutated
 }
 
 """The `Boolean` scalar type represents `true` or `false`."""
@@ -329,6 +331,21 @@ enum EventEnum {
 enum graphql_sdl_scope {
   items
   system
+}
+
+type applications {
+  id: ID!
+  status: String
+  url: String
+  application_id: String
+  decc0s: String
+  owner(filter: directus_users_filter, sort: [String], limit: Int, offset: Int, page: Int, search: String): directus_users
+}
+
+type applications_mutated {
+  key: ID!
+  event: EventEnum
+  data: applications
 }
 
 type auth_tokens {
@@ -1511,6 +1528,8 @@ type directus_users {
   theme_dark_overrides: JSON
   theme_dark_overrides_func: count_functions
   ethereum_address: String
+  applications(filter: applications_filter, sort: [String], limit: Int, offset: Int, page: Int, search: String): [applications]
+  applications_func: count_functions
   policies(filter: directus_access_filter, sort: [String], limit: Int, offset: Int, page: Int, search: String): [directus_access]
   policies_func: count_functions
 }
@@ -1550,6 +1569,7 @@ type directus_users_aggregated_count {
   theme_light_overrides: Int
   theme_dark_overrides: Int
   ethereum_address: Int
+  applications: Int
   policies: Int
 }
 
@@ -1741,6 +1761,17 @@ type server_info_query_limit {
   max: Int
 }
 
+type settings {
+  key: ID!
+  value: String
+}
+
+type settings_mutated {
+  key: ID!
+  event: EventEnum
+  data: settings
+}
+
 type users_me_tfa_generate_data {
   secret: String
   otpauth_url: String
@@ -1861,6 +1892,31 @@ type write_directus_relations_schema {
   on_delete: String!
 }
 
+input applications_filter {
+  id: number_filter_operators
+  status: string_filter_operators
+  url: string_filter_operators
+  application_id: string_filter_operators
+  decc0s: string_filter_operators
+  owner: directus_users_filter
+  _and: [applications_filter]
+  _or: [applications_filter]
+}
+
+""""""
+input applications_quantifier_filter {
+  id: number_filter_operators
+  status: string_filter_operators
+  url: string_filter_operators
+  application_id: string_filter_operators
+  decc0s: string_filter_operators
+  owner: directus_users_filter
+  _and: [applications_filter]
+  _or: [applications_filter]
+  _some: applications_filter
+  _none: applications_filter
+}
+
 input big_int_filter_operators {
   _eq: GraphQLBigInt
   _neq: GraphQLBigInt
@@ -1950,6 +2006,15 @@ input contracts_filter {
 
 input count_function_filter_operators {
   count: number_filter_operators
+}
+
+input create_applications_input {
+  id: ID
+  status: String
+  url: String
+  application_id: String
+  decc0s: String
+  owner: create_directus_users_input
 }
 
 input create_directus_access_input {
@@ -2194,6 +2259,7 @@ input create_directus_users_input {
   theme_light_overrides: JSON
   theme_dark_overrides: JSON
   ethereum_address: String
+  applications: [create_applications_input]
   policies: [create_directus_access_input]
 }
 
@@ -2699,6 +2765,8 @@ input directus_users_filter {
   theme_dark_overrides: string_filter_operators
   theme_dark_overrides_func: count_function_filter_operators
   ethereum_address: string_filter_operators
+  applications: applications_quantifier_filter
+  applications_func: count_function_filter_operators
   policies: directus_access_quantifier_filter
   policies_func: count_function_filter_operators
   _and: [directus_users_filter]
@@ -2739,6 +2807,8 @@ input directus_users_quantifier_filter {
   theme_dark_overrides: string_filter_operators
   theme_dark_overrides_func: count_function_filter_operators
   ethereum_address: string_filter_operators
+  applications: applications_quantifier_filter
+  applications_func: count_function_filter_operators
   policies: directus_access_quantifier_filter
   policies_func: count_function_filter_operators
   _and: [directus_users_filter]
@@ -2904,6 +2974,15 @@ input string_filter_operators {
   _nnull: Boolean
   _empty: Boolean
   _nempty: Boolean
+}
+
+input update_applications_input {
+  id: ID
+  status: String
+  url: String
+  application_id: String
+  decc0s: String
+  owner: update_directus_users_input
 }
 
 input update_directus_access_input {
@@ -3200,6 +3279,7 @@ input update_directus_users_input {
   theme_light_overrides: JSON
   theme_dark_overrides: JSON
   ethereum_address: String
+  applications: [update_applications_input]
   policies: [update_directus_access_input]
 }
 

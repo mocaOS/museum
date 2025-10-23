@@ -1,7 +1,7 @@
 <template>
   <div class="relative w-full">
     <div v-if="leadingIcon" class="absolute top-1/2 left-3 -translate-y-1/2">
-      <Icon :icon="leadingIcon" />
+      <Icon v-if="leadingIcon" :icon="leadingIcon" />
     </div>
     <input
       v-model="modelValue"
@@ -39,7 +39,7 @@
       v-if="trailingIcon"
       class="absolute top-1/2 right-3 -translate-y-1/2 cursor-pointer"
     >
-      <Icon :icon="trailingIcon" />
+      <Icon v-if="trailingIcon" :icon="trailingIcon" />
     </div>
     <!-- Right slot for custom content like send button -->
     <div

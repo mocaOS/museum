@@ -16,32 +16,45 @@ export const character: Character = {
     ...(process.env.VENICE_API_KEY?.trim() ? [ "@elizaos/plugin-venice" ] : []),
 
     // Text-only plugins (no embedding support)
-    ...(process.env.ANTHROPIC_API_KEY?.trim() ? [ "@elizaos/plugin-anthropic" ] : []),
-    ...(process.env.OPENROUTER_API_KEY?.trim() ? [ "@elizaos/plugin-openrouter" ] : []),
+    ...(process.env.ANTHROPIC_API_KEY?.trim()
+      ? [ "@elizaos/plugin-anthropic" ]
+      : []),
+    ...(process.env.OPENROUTER_API_KEY?.trim()
+      ? [ "@elizaos/plugin-openrouter" ]
+      : []),
 
     // Embedding-capable plugins (optional, based on available credentials)
     ...(process.env.OPENAI_API_KEY?.trim() ? [ "@elizaos/plugin-openai" ] : []),
-    ...(process.env.GOOGLE_GENERATIVE_AI_API_KEY?.trim() ? [ "@elizaos/plugin-google-genai" ] : []),
+    ...(process.env.GOOGLE_GENERATIVE_AI_API_KEY?.trim()
+      ? [ "@elizaos/plugin-google-genai" ]
+      : []),
 
     // Ollama as fallback (only if no main LLM providers are configured)
-    ...(process.env.OLLAMA_API_ENDPOINT?.trim() ? [ "@elizaos/plugin-ollama" ] : []),
+    ...(process.env.OLLAMA_API_ENDPOINT?.trim()
+      ? [ "@elizaos/plugin-ollama" ]
+      : []),
 
     // Platform plugins
-    ...(process.env.DISCORD_API_TOKEN?.trim() ? [ "@elizaos/plugin-discord" ] : []),
+    ...(process.env.DISCORD_API_TOKEN?.trim()
+      ? [ "@elizaos/plugin-discord" ]
+      : []),
     ...(process.env.TWITTER_API_KEY?.trim()
     && process.env.TWITTER_API_SECRET_KEY?.trim()
     && process.env.TWITTER_ACCESS_TOKEN?.trim()
     && process.env.TWITTER_ACCESS_TOKEN_SECRET?.trim()
       ? [ "@elizaos/plugin-twitter" ]
       : []),
-    ...(process.env.TELEGRAM_BOT_TOKEN?.trim() ? [ "@elizaos/plugin-telegram" ] : []),
+    ...(process.env.TELEGRAM_BOT_TOKEN?.trim()
+      ? [ "@elizaos/plugin-telegram" ]
+      : []),
 
     // Bootstrap plugin
     ...(!process.env.IGNORE_BOOTSTRAP ? [ "@elizaos/plugin-bootstrap" ] : []),
   ],
   settings: {
     secrets: {},
-    avatar: "https://raw.githubusercontent.com/mocaOS/museum/main/misc/social.jpg",
+    avatar:
+      "https://raw.githubusercontent.com/mocaOS/museum/main/misc/social.jpg",
   },
   system:
     "You are the MOCA Curator, an AI guide for the Museum of Crypto Art (M○C△).\n\nYour mission: preserve the truth, elevate artists, and help visitors explore crypto art with context and care.\n\nBehavioral principles:\n- Be welcoming, precise, and curatorially rigorous.\n- When MOCA, cryptoart, NFTs, artists, ROOMs, $MOCA, Genesis/Permanent Collections, Library, or DAO are mentioned, prefer the museum's knowledge sources (e.g., MOCA Library powered by R2R) and verifiable primary references.\n- If uncertain, say so, and suggest the next best source (manifesto, collection pages, on-chain explorers, library docs).\n- For $MOCA token price questions, fetch current data from the MOCA_TOKEN_PRICE provider and present the price and 24h change with a non‑advisory tone. Do not speculate or offer financial advice.\n- Use short paragraphs and optional bullets for skimmability.\n\nYou can explain: MOCA’s mission and history; Genesis and Permanent Collections; MOCA ROOMs; $MOCA token and DAO participation; artist backgrounds and notable works; provenance, chains, and contracts; research via the MOCA Library (R2R).",

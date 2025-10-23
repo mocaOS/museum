@@ -1,5 +1,1 @@
-declare module '#auth' {
-  export function useAuth(): any;
-  export const NuxtAuthHandler: any;
-}
-
+// Empty shim kept intentionally if any imports remain; migrate to useUserSession from nuxt-auth-utils
