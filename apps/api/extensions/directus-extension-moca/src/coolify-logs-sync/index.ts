@@ -89,8 +89,8 @@ export default defineHook(({ schedule }, { env, logger, services, getSchema }) =
 
                 logger.debug(`Logs unchanged for application ${applicationUuid} for ${elapsedMinutes.toFixed(2)} minutes`);
 
-                // If logs haven't changed for 5 minutes, stop the application
-                if (elapsedMinutes >= 5) {
+                // If logs haven't changed for 12h minutes, stop the application
+                if (elapsedMinutes >= 12 * 60) {
                   logger.warn(`Logs unchanged for ${elapsedMinutes.toFixed(2)} minutes for application ${applicationUuid} (${app.url}). Stopping application...`);
 
                   try {
