@@ -28,7 +28,7 @@ export default defineHook(({ schedule }, { env, services, getSchema }) => {
   // Schedule to restart Coolify application every hour at minute 55
   schedule("55 * * * *", async () => {
     try {
-      const applicationUuid = "ack4woskwo84ccokc4gc80ww";
+      const applicationUuid = env.APP_ENV === "production" ? "d4wkgogsw0gscosg8o0c4k8s" : "ack4woskwo84ccokc4gc80ww";
       console.log(`[Coolify Restart] Restarting application ${applicationUuid}...`);
 
       const restartUrl = `${COOLIFY_API}/applications/${applicationUuid}/restart`;
