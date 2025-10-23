@@ -182,7 +182,7 @@ interface OwnedToken {
 
 type AgentStatus = "online" | "offline" | "starting";
 
-const SUBGRAPH_URL = "https://api.studio.thegraph.com/query/1095/decc-0-s/version/latest";
+const SUBGRAPH_URL = "https://gateway.thegraph.com/api/subgraphs/id/G39v7PFNz911KNWga8erpgei622XKQLW7P6JBmm6fC97";
 
 const queryDocument = `
   query OwnedTokens($owner: Bytes!) {

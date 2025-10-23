@@ -25,7 +25,7 @@ export default defineEndpoint({
     }
 
     async function verifyOwnership(tokenId: string, ownerAddress: string): Promise<boolean> {
-      const graphqlEndpoint = "https://api.studio.thegraph.com/query/1095/decc-0-s/version/latest";
+      const graphqlEndpoint = "https://gateway.thegraph.com/api/subgraphs/id/G39v7PFNz911KNWga8erpgei622XKQLW7P6JBmm6fC97";
       const query = "query GetTokenByIdAndOwner($tokenId: String!, $owner: String!) { tokens(where: { tokenId: $tokenId, owner: $owner }) { tokenId owner id } }";
       const body = JSON.stringify({ query, variables: { tokenId, owner: ownerAddress } });
       const response = await fetch(graphqlEndpoint, {
