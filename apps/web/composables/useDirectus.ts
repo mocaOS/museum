@@ -59,34 +59,27 @@ function getOrCreateClient(directusUrl: string) {
         if (error?.response?.status === 401 || tokenExpired) {
           if (shouldRetry(operationId)) {
             incrementRetry(operationId);
-            try {
-              const previousToken = currentAccessToken.value;
-              // Attempt to refresh access token via our API, then refetch session
-              const refreshResult = await $fetch("/api/auth/refresh", { method: "POST" }).catch((e): { ok: boolean } | null => {
-                // If refresh fails with 401, session is cleared - redirect to login
-                if (e?.statusCode === 401) {
-                  if (process.client) {
-                    connectionHealth.value = "unhealthy";
-                    navigateTo("/login");
-                  }
-                  return null;
-                }
-                return null;
-              });
 
-              // If refresh failed, don't retry the request
-              if (!refreshResult) {
-                throw error;
-              }
+            const previousToken = currentAccessToken.value;
 
+            // Attempt to refresh access token via our API, then refetch session
+            const refreshResult = await $fetch("/api/auth/refresh", { method: "POST" }).catch((): { ok: boolean } | null => {
+              // If refresh fails, just return null - don't redirect yet, let retry logic handle it
+              return null;
+            });
+
+            // If refresh succeeded, update session and retry the request
+            if (refreshResult?.ok) {
               const { fetch: refreshSession } = useUserSession();
               await refreshSession().catch(() => {});
+
               // Wait briefly for token state to update after refresh
               const startedAt = Date.now();
               while (currentAccessToken.value === previousToken || !currentAccessToken.value) {
                 if (Date.now() - startedAt > 2000) break;
                 await new Promise(resolve => setTimeout(resolve, 50));
               }
+
               const retryToken = currentAccessToken.value;
               const retryOptions = {
                 ...(options || {}),
@@ -96,16 +89,31 @@ function getOrCreateClient(directusUrl: string) {
                   ...(retryToken ? { Authorization: `Bearer ${retryToken}` } : {}),
                 },
               } as any;
+
+              // Retry the request with new token
               return await originalRequest(withOptions(command, retryOptions));
-            } catch {
-              connectionHealth.value = "unhealthy";
-              if (process.client) {
-                await navigateTo("/login");
-              }
             }
-          } else if (process.client) {
+
+            // Refresh failed - check if we should retry again or give up
+            if (!shouldRetry(operationId)) {
+              // Max retries exhausted
+              connectionHealth.value = "unhealthy";
+              if (process.client && !window.location.pathname.includes("/login")) {
+                await navigateTo("/login?from=directus-max-retries");
+              }
+              throw error;
+            }
+
+            // Still have retries left, throw error to let caller retry
             connectionHealth.value = "unhealthy";
-            await navigateTo("/login");
+            throw error;
+          } else {
+            // Max retries already exhausted
+            connectionHealth.value = "unhealthy";
+            if (process.client && !window.location.pathname.includes("/login")) {
+              await navigateTo("/login?from=directus-no-retries-left");
+            }
+            throw error;
           }
         } else if (error?.response?.status >= 500) {
           connectionHealth.value = "degraded";
