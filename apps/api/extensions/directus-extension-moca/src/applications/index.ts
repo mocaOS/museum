@@ -239,7 +239,7 @@ export default defineEndpoint({
         const BUILD_PACK = "nixpacks";
         const GIT_REPOSITORY = "https://github.com/mocaOS/museum.git";
         const GIT_BRANCH = env.APP_ENV === "production" ? "main" : "staging";
-        const DOMAIN_SUFFIX = "deploy.qwellco.de";
+        const DOMAIN_SUFFIX = env.APP_ENV === "production" ? "moca.qwellco.de" : "deploy.qwellco.de";
         const baseName = "moca-agent";
 
         if (existingApp && (existingApp as any).application_id) {
