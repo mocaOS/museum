@@ -5,6 +5,6 @@ export default defineNuxtRouteMiddleware(async (to) => {
   } catch {}
   if (!loggedIn.value) {
     const callbackUrl = encodeURIComponent(to.fullPath);
-    return navigateTo(`/login?callbackUrl=${callbackUrl}`);
+    return navigateTo(`/login?from=middleware-auth&callbackUrl=${callbackUrl}`);
   }
 });

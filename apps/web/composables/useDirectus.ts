@@ -63,8 +63,17 @@ function getOrCreateClient(directusUrl: string) {
             const previousToken = currentAccessToken.value;
 
             // Attempt to refresh access token via our API, then refetch session
-            const refreshResult = await $fetch("/api/auth/refresh", { method: "POST" }).catch((): { ok: boolean } | null => {
-              // If refresh fails, just return null - don't redirect yet, let retry logic handle it
+            const refreshResult = await $fetch("/api/auth/refresh", {
+              method: "POST",
+              credentials: "include",
+            }).catch((e): { ok: boolean } | null => {
+              // If refresh fails with 400 (missing refresh token) or 401 (invalid/expired), redirect immediately
+              if (e?.statusCode === 400 || e?.statusCode === 401) {
+                if (process.client && !window.location.pathname.includes("/login")) {
+                  connectionHealth.value = "unhealthy";
+                  navigateTo("/login?from=directus-no-refresh-token");
+                }
+              }
               return null;
             });
 

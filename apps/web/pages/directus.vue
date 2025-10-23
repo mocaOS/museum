@@ -39,6 +39,6 @@
 
 <script setup lang="ts">
 async function handleLogin() {
-  navigateTo("/login");
+  navigateTo("/login?from=directus-page");
 }
 </script>
