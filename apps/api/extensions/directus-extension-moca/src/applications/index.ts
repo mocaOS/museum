@@ -46,8 +46,8 @@ export default defineEndpoint({
     const COOLIFY_API = `${COOLIFY_BASE_URL}/api/v1`;
     const COOLIFY_TOKEN = env.COOLIFY_TOKEN;
     const PROJECT_UUID = "aww04oc";
-    const SERVER_UUID = "zgcgcw0";
-    const ENVIRONMENT_UUID = "igkwgkcs4g84ksgs048w08kg";
+    const SERVER_UUID = env.APP_ENV === "production" ? "ccc4o0cc0ckcoso4sc44kkcg" : "zgcgcw0";
+    const ENVIRONMENT_UUID = env.APP_ENV === "production" ? "q40o8wck4skwsg484kc0088c" : "igkwgkcs4g84ksgs048w08kg";
 
     async function httpJson(method: string, url: string, body?: Record<string, unknown> | string) {
       const headers: Record<string, string> = { Authorization: `Bearer ${COOLIFY_TOKEN}` };
@@ -234,11 +234,11 @@ export default defineEndpoint({
         // constants for Coolify build
         const INSTALL_COMMAND = "/usr/local/bin/bun install --frozen-lockfile";
         const BUILD_COMMAND = "#";
-        const START_COMMAND = `cd /app/apps/moca-agent && APP_ENV=staging /usr/local/bin/bun run generate-characters.ts ${address} && /usr/local/bin/bun run start`;
+        const START_COMMAND = `cd /app/apps/moca-agent && APP_ENV=${env.APP_ENV} /usr/local/bin/bun run generate-characters.ts ${address} && /usr/local/bin/bun run start`;
         const EXPOSE_PORT = 3005;
         const BUILD_PACK = "nixpacks";
         const GIT_REPOSITORY = "https://github.com/mocaOS/museum.git";
-        const GIT_BRANCH = "staging";
+        const GIT_BRANCH = env.APP_ENV === "production" ? "main" : "staging";
         const DOMAIN_SUFFIX = "deploy.qwellco.de";
         const baseName = "moca-agent";
 

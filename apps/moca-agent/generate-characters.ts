@@ -112,7 +112,7 @@ if (isAdoptionMode) {
 }
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const API_BASE_URL = "https://api-staging.moca.qwellco.de";
+const API_BASE_URL = process.env.APP_ENV === "production" ? "https://api.moca.qwellco.de" : "https://api-staging.moca.qwellco.de";
 const CHARACTERS_DIR = join(__dirname, "src", "characters");
 
 // Get Directus configuration from environment
