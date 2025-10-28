@@ -198,7 +198,7 @@ interface OwnedToken {
 
 type AgentStatus = "online" | "offline" | "starting";
 
-const MAX_SELECTION = 5;
+const MAX_SELECTION = 10;
 const SUBGRAPH_URL = "https://gateway.thegraph.com/api/subgraphs/id/G39v7PFNz911KNWga8erpgei622XKQLW7P6JBmm6fC97";
 
 const queryDocument = `
