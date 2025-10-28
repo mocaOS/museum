@@ -50,6 +50,16 @@
         "type": "module",
         "id": "generate-types",
         "enabled": true
+      },
+      {
+        "type": "module",
+        "id": "visual",
+        "enabled": false
+      },
+      {
+        "type": "module",
+        "id": "raw-query",
+        "enabled": true
       }
     ],
     "project_descriptor": null,

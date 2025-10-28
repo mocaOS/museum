@@ -13,13 +13,27 @@
             Decc0s
           </h1>
         </div>
-        <div v-if="directusUserId" class="flex items-center gap-2">
+        <div v-if="directusUserId" class="flex items-center gap-3">
           <p
             v-if="loadingInfo && appStatus === 'starting'"
             class="text-xs text-orange-400"
           >
             {{ loadingInfo }}
           </p>
+          <div
+            v-if="displayTokens.length > 0"
+            :class="cn(
+              `
+                rounded-md border px-3 py-2 text-center text-xs font-medium
+                whitespace-nowrap
+              `,
+              selectedCount >= MAX_SELECTION
+                ? 'border-amber-500/50 bg-amber-500/10 text-amber-500'
+                : 'border-border bg-muted/30 text-muted-foreground',
+            )"
+          >
+            {{ selectedCount }}<span class="mx-1 text-[0.6rem]"> / </span>{{ MAX_SELECTION }}
+          </div>
           <Button
             @click="onToggleStartStopHeader"
             size="sm"
@@ -73,7 +87,7 @@
         </div>
         <div v-else>
           <div
-            v-if="tokens.length === 0"
+            v-if="displayTokens.length === 0"
             class="text-sm text-muted-foreground"
           >
             No tokens found for this address.
@@ -88,22 +102,24 @@
           >
             <div
               @click="toggleSelected(t.tokenId)"
-              v-for="t in tokens"
+              v-for="t in displayTokens"
               :key="t.id || t.tokenId"
               class="relative rounded-md border"
             >
               <GlowingEffect
                 :spread="40"
                 :glow="true"
-                :disabled="false"
+                :disabled="selectedCount >= MAX_SELECTION && !isTokenSelected(t.tokenId)"
                 :proximity="64"
                 :inactive-zone="0.01"
               />
               <div
-                class="
-                  cursor-pointer overflow-hidden rounded-md border
-                  border-border/50
-                "
+                :class="cn(
+                  'overflow-hidden rounded-md border border-border/50',
+                  selectedCount >= MAX_SELECTION && !isTokenSelected(t.tokenId)
+                    ? 'cursor-not-allowed opacity-50'
+                    : 'cursor-pointer',
+                )"
               >
                 <div
                   class="
@@ -182,6 +198,7 @@ interface OwnedToken {
 
 type AgentStatus = "online" | "offline" | "starting";
 
+const MAX_SELECTION = 5;
 const SUBGRAPH_URL = "https://gateway.thegraph.com/api/subgraphs/id/G39v7PFNz911KNWga8erpgei622XKQLW7P6JBmm6fC97";
 
 const queryDocument = `
@@ -202,6 +219,8 @@ const { directus } = useDirectus();
 const selectedTokenIds = ref<Set<string>>(new Set());
 const initializedFromApp = ref(false);
 const isStarting = ref(false);
+const displayTokens = ref<OwnedToken[]>([]);
+const hasInitializedOrder = ref(false);
 
 const directusUserId = computed(() => (session.value as any)?.user?.id || null);
 const address = computed(() => (session.value as any)?.user?.ethereum_address);
@@ -279,6 +298,7 @@ const applicationTokenIds = computed<string[]>(() => {
   return decc0.split(",").map(s => s.trim()).filter(Boolean);
 });
 const selectedTokenIdsArray = computed<string[]>(() => Array.from(selectedTokenIds.value));
+const selectedCount = computed<number>(() => selectedTokenIds.value.size);
 const selectionDiffersFromApp = computed<boolean>(() => {
   if (!application.value) return false;
   return !arraysEqualAsSets(selectedTokenIdsArray.value, applicationTokenIds.value);
@@ -304,6 +324,34 @@ watch(applicationTokenIds, (newTokenIds) => {
   if (newTokenIds.length > 0) {
     selectedTokenIds.value = new Set(newTokenIds);
     initializedFromApp.value = true;
+  }
+}, { immediate: true });
+
+// Initialize displayTokens with selected tokens at the beginning, but only once
+watch([ applicationTokenIds, tokens ], ([ appTokenIds, tokensArray ]) => {
+  if (hasInitializedOrder.value) return;
+  if (!tokensArray || tokensArray.length === 0) return;
+
+  // Wait for applicationTokenIds to be initialized (if they exist)
+  if (appTokenIds.length > 0 || initializedFromApp.value) {
+    const selectedSet = new Set(appTokenIds);
+    const sorted = tokensArray.slice().sort((a, b) => {
+      const aSelected = selectedSet.has(a.tokenId) ? 1 : 0;
+      const bSelected = selectedSet.has(b.tokenId) ? 1 : 0;
+
+      // Selected first
+      if (aSelected !== bSelected) return bSelected - aSelected;
+
+      // Then by revealed status
+      return Number(b.revealed) - Number(a.revealed);
+    });
+
+    displayTokens.value = sorted;
+    hasInitializedOrder.value = true;
+  } else if (tokensArray.length > 0) {
+    // No app tokens yet, just use the sorted tokens
+    displayTokens.value = tokensArray;
+    hasInitializedOrder.value = true;
   }
 }, { immediate: true });
 
@@ -361,6 +409,10 @@ function toggleSelected(id: string) {
   if (next.has(key)) {
     next.delete(key);
   } else {
+    // Enforce max selection limit
+    if (next.size >= MAX_SELECTION) {
+      return;
+    }
     next.add(key);
   }
   selectedTokenIds.value = next;
