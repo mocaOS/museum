@@ -126,17 +126,16 @@
                     flex aspect-square items-center justify-center bg-muted/20
                   "
                 >
-                  <NuxtImg
-                    provider="mediaproxy"
-                    :src="ipfsGateway + (t.image || 'QmTZkKv1f3kZL5BweAP8jipaQH9A15xoCm8iYT3P8wf3Lv')"
-                    height="215"
-                    width="215"
+                  <img
+                    :src="getImageUrl(t.image)"
+                    height="264"
+                    width="264"
                     :alt="`Art DeCC0 #${t.tokenId}`"
                     :class="cn(
                       'rounded transition-colors',
                       t.revealed ? 'bg-amber-500/10' : '',
                     )"
-                  />
+                  >
                 </div>
                 <div class="grid grid-cols-[1fr_auto] gap-2 border-t p-2">
                   <div>
@@ -184,6 +183,7 @@ import { useQuery } from "@tanstack/vue-query";
 import type { Applications } from "@local/types/directus";
 import { cn } from "~/lib/utils";
 import { Button } from "~/components/ui/button";
+import { getImage } from "~/providers/mediaproxy";
 
 definePageMeta({
   middleware: [ "auth" ],
@@ -226,6 +226,24 @@ const directusUserId = computed(() => (session.value as any)?.user?.id || null);
 const address = computed(() => (session.value as any)?.user?.ethereum_address);
 const ipfsGateway = computed(() => String((runtimeConfig.public as any)?.ipfs?.gateway || "https://ipfs.qwellcode.de/ipfs/"));
 const directusBaseUrl = computed(() => String((runtimeConfig.public as any)?.api?.baseUrl || "http://localhost:8055"));
+const mediaBaseUrl = computed(() => String((runtimeConfig.public as any)?.media?.baseUrl || "https://media.qwellcode.de/api"));
+
+function getImageUrl(imageUri: string | null | undefined): string {
+  const src = ipfsGateway.value + (imageUri || "QmTZkKv1f3kZL5BweAP8jipaQH9A15xoCm8iYT3P8wf3Lv");
+  const { url } = getImage(src, {
+    modifiers: {
+      width: 264,
+      height: 264,
+      fit: "fill",
+      gravity: "ce",
+      enlarge: 1,
+      format: "webp",
+      quality: 70,
+    },
+    baseURL: mediaBaseUrl.value,
+  });
+  return url;
+}
 
 const { data, isLoading, error, suspense: suspenseOwnedTokens } = useQuery<OwnedToken[]>({
   queryKey: [ "decc0s-owned", address ],
