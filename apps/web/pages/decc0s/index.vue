@@ -221,6 +221,8 @@ const initializedFromApp = ref(false);
 const isStarting = ref(false);
 const displayTokens = ref<OwnedToken[]>([]);
 const hasInitializedOrder = ref(false);
+const startButtonClickedAt = ref<number | null>(null);
+const transitionToOnlineAt = ref<number | null>(null);
 
 const directusUserId = computed(() => (session.value as any)?.user?.id || null);
 const address = computed(() => (session.value as any)?.user?.ethereum_address);
@@ -307,6 +309,22 @@ const tokenIds = computed(() => (tokens.value || []).map(t => t.tokenId));
 const application = computed(() => (applicationsData.value && applicationsData.value[0]) || null);
 const applicationUrl = computed(() => String((application.value as any)?.url || ""));
 const appStatus = computed<AgentStatus>(() => {
+  // If start button was clicked, ensure minimum 10 seconds
+  if (startButtonClickedAt.value !== null) {
+    const elapsed = Date.now() - startButtonClickedAt.value;
+    if (elapsed < 10_000) {
+      return "starting";
+    }
+  }
+
+  // If we're in transition delay period, keep showing "starting"
+  if (transitionToOnlineAt.value !== null) {
+    const elapsed = Date.now() - transitionToOnlineAt.value;
+    if (elapsed < 10_000) {
+      return "starting";
+    }
+  }
+
   if (isStarting.value) return "starting";
   const s = String((application.value as any)?.status || "offline").toLowerCase();
   return (s === "online" || s === "starting") ? (s as AgentStatus) : "offline";
@@ -372,6 +390,32 @@ watch([ applicationTokenIds, tokens ], ([ appTokenIds, tokensArray ]) => {
     hasInitializedOrder.value = true;
   }
 }, { immediate: true });
+
+// Watch for transition from "starting" to "online" and add extra delay
+let previousApiStatus: string = "offline";
+watch(application, (newApp) => {
+  const currentApiStatus = String((newApp as any)?.status || "offline").toLowerCase();
+
+  // If we transitioned from "starting" to "online", start the transition delay
+  if (previousApiStatus === "starting" && currentApiStatus === "online" && transitionToOnlineAt.value === null) {
+    transitionToOnlineAt.value = Date.now();
+    // Clear the transition delay after 10 seconds
+    setTimeout(() => {
+      transitionToOnlineAt.value = null;
+    }, 10_000);
+  }
+
+  // Clear startButtonClickedAt and isStarting after minimum duration has passed
+  if (startButtonClickedAt.value !== null) {
+    const elapsed = Date.now() - startButtonClickedAt.value;
+    if (elapsed >= 10_000) {
+      startButtonClickedAt.value = null;
+      isStarting.value = false;
+    }
+  }
+
+  previousApiStatus = currentApiStatus;
+});
 
 async function fetchOwnedTokens(owner: string): Promise<OwnedToken[]> {
   const res = await fetch(SUBGRAPH_URL, {
@@ -451,24 +495,30 @@ async function onToggleStartStopHeader() {
     if (appStatus.value === "online") {
       if (selectionDiffersFromApp.value) {
         isStarting.value = true;
+        startButtonClickedAt.value = Date.now();
         await postApplicationsStart(selected.length ? selected : [ firstTokenId ]);
       } else {
+        startButtonClickedAt.value = null;
+        transitionToOnlineAt.value = null;
         await postApplicationsStop();
       }
       await refetchApplications();
     } else if (appStatus.value === "offline") {
       isStarting.value = true;
+      startButtonClickedAt.value = Date.now();
       await postApplicationsStart(selected.length ? selected : [ firstTokenId ]);
       await refetchApplications();
     } else if (appStatus.value === "starting" && selectionDiffersFromApp.value) {
       isStarting.value = true;
+      startButtonClickedAt.value = Date.now();
       await postApplicationsStart(selected.length ? selected : [ firstTokenId ]);
       await refetchApplications();
     }
   } catch (e) {
     console.error(e);
   } finally {
-    isStarting.value = false;
+    // isStarting will be cleared by the watcher after minimum duration
+    // The appStatus computed property ensures "starting" shows for at least 10 seconds
   }
 }
 
