@@ -1,8 +1,20 @@
-# Directus Raw Query Extension
+<p align="center">
+  <img src="https://github.com/creazy231/directus-extension-raw-query/blob/main/logo-transparent-cropped.png?raw=true" alt="Directus Raw Query Extension Logo" width="200">
+</p>
 
-A powerful Directus extension that allows administrators to execute raw SQL queries directly from the Directus admin panel using Monaco Editor.
+<h1 align="center">
+Directus Extension: Raw Query
+</h1>
 
-## Features
+<p align="center"><img src="https://img.shields.io/github/package-json/v/creazy231/directus-extension-raw-query" alt="GitHub package.json version">&nbsp;<a href="https://github.com/creazy231/directus-extension-raw-query/releases"><img src="https://img.shields.io/github/v/release/creazy231/directus-extension-raw-query" alt="GitHub Release"></a></p>
+
+<p align="center"><a href="https://www.npmjs.org/package/directus-extension-raw-query"><img src="https://img.shields.io/npm/v/directus-extension-raw-query?logo=npm&logoColor=%23FFFFFF&label=NPM" alt="NPM Version"></a>&nbsp;<a href="https://www.npmjs.org/package/directus-extension-raw-query"><img src="https://img.shields.io/npm/dm/directus-extension-raw-query?logo=npm&logoColor=%23FFFFFF&label=Downloads" alt="NPM Downloads"></a>&nbsp;<a href="https://github.com/creazy231/directus-extension-raw-query/graphs/commit-activity"><img src="https://img.shields.io/badge/Maintained%3F-yes-green.svg" alt="Maintenance"></a></p>
+
+<p align="center"><a href="https://github.com/creazy231/directus-extension-raw-query/stargazers/"><img src="https://img.shields.io/github/stars/creazy231/directus-extension-raw-query?style=social&label=Stars" alt="GitHub Stars"></a>&nbsp;<a href="https://github.com/creazy231/directus-extension-raw-query/network/"><img src="https://img.shields.io/github/forks/creazy231/directus-extension-raw-query?style=social&label=Forks" alt="GitHub Forks"></a>&nbsp;<a href="https://ko-fi.com/creazy231"><img src="https://img.shields.io/badge/Ko--fi-Support%20me%20on%20Ko--fi-FF5E5B?logo=ko-fi&logoColor=white" alt="Support me on Ko-fi"></a></p>
+
+<hr>
+
+## ✨ Features
 
 ### Editor
 - 🎨 **Monaco Editor Integration**: Professional SQL editor with syntax highlighting and error detection
@@ -27,19 +39,38 @@ A powerful Directus extension that allows administrators to execute raw SQL quer
 ### Security & Access
 - 🔐 **Admin-Only Access**: Only administrators can access and execute queries
 
-## Installation
+## ⏳ Installation
 
-The extension is already installed in this monorepo as a workspace dependency:
+Install the extension via npm:
 
-```json
-{
-  "devDependencies": {
-    "directus-extension-raw-query": "workspace:*"
-  }
-}
+```bash
+npm install directus-extension-raw-query@latest
+
+# or
+
+yarn add directus-extension-raw-query@latest
 ```
 
-## Usage
+Or using Directus CLI:
+
+```bash
+npx directus-extension install directus-extension-raw-query
+```
+
+After installation, restart your Directus instance. The extension will be automatically loaded and available in the admin panel.
+
+## 🖐 Requirements
+
+**Supported Directus versions**:
+- Directus: >= 10.10.0
+
+**Supported Node versions**:
+- Node: >= 18.x.x
+- npm: >= 8.0.0
+
+_We recommend always using the latest version of Directus to start your new projects_.
+
+## 📖 Usage
 
 ### Getting Started
 
@@ -81,17 +112,7 @@ The extension is already installed in this monorepo as a workspace dependency:
    - Duplicate queries are automatically merged (keeps most recent)
    - Clear all history with the "Clear All" button
 
-### Additional Features
-
-6. **Clear Query**: 
-   - Click the clear button (✕) to reset the editor
-   - This also removes your saved draft
-
-7. **Documentation Links**:
-   - Access SQL documentation directly from the navigation sidebar
-   - Quick links to Directus query reference and GitHub
-
-## Security
+## 🔒 Security
 
 - **Admin-Only**: The extension performs multiple security checks:
   1. User must be authenticated
@@ -100,7 +121,7 @@ The extension is already installed in this monorepo as a workspace dependency:
 - **Data Storage**: Query history and drafts are stored in browser localStorage
 - **No Password Exposure**: Query results don't expose sensitive fields
 
-## API Endpoints
+## 🔌 API Endpoints
 
 ### Execute Query
 
@@ -162,7 +183,7 @@ Response:
 }
 ```
 
-## Development
+## 💻 Development
 
 Build the extension:
 ```bash
@@ -174,7 +195,7 @@ Watch mode for development:
 bun run dev
 ```
 
-## Architecture
+## 🏗️ Architecture
 
 - **Type**: Bundle Extension (contains both endpoint and module)
 - **Endpoints**:
@@ -186,7 +207,7 @@ bun run dev
 - **UI Components**: Uses Directus's built-in UI library for consistent design
 - **Autocomplete**: Dynamic SQL completions based on actual database structure
 
-## Example Queries
+## 📝 Example Queries
 
 ```sql
 -- View all collections
@@ -202,7 +223,7 @@ SET status = 'active'
 WHERE last_login > NOW() - INTERVAL '30 days';
 ```
 
-## Troubleshooting
+## 🔧 Troubleshooting
 
 - **Module not visible**: Ensure you're logged in as an administrator
 - **Query fails**: Check the error message - it may be a SQL syntax error or permission issue
@@ -215,7 +236,7 @@ WHERE last_login > NOW() - INTERVAL '30 days';
 - **Draft not restoring**: Check browser localStorage isn't disabled
 - **History not saving**: Ensure localStorage has space (stores up to 50 queries)
 
-## LocalStorage Keys
+## 💾 LocalStorage Keys
 
 The extension uses the following localStorage keys:
 - `directus_raw_query_history`: Stores the last 50 executed queries
@@ -223,11 +244,25 @@ The extension uses the following localStorage keys:
 
 To clear all stored data, use your browser's developer tools or click "Clear All" in the history sidebar.
 
-## Inspired By
+## 🤝 Contributing
+
+Feel free to fork and make a Pull Request to this extension project. All the input is warmly welcome!
+
+## ⭐️ Show your support
+
+Give a star if this project helped you.
+
+## 🔗 Links
+
+- [NPM package](https://www.npmjs.com/package/directus-extension-raw-query)
+- [GitHub repository](https://github.com/creazy231/directus-extension-raw-query)
+
+## 📄 License
+
+MIT License Copyright 2025 creazy231
+
+## 🙏 Inspired By
 
 This extension is inspired by the [strapi-plugin-raw-query](https://github.com/creazy231/strapi-plugin-raw-query) for Strapi CMS.
 
-## Contributing
-
-Feel free to submit issues or pull requests to improve this extension!
-
+[![ForTheBadge built-with-love](http://ForTheBadge.com/images/badges/built-with-love.svg)](https://github.com/creazy231/)

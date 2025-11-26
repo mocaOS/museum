@@ -58,7 +58,7 @@ export default defineHook(({ schedule }, { env, services, getSchema }) => {
             "https://api.opensea.io/api/v2/listings/collection/art-decc0s/best",
           );
           url.searchParams.set("include_private_listings", "false");
-          url.searchParams.set("limit", "10");
+          url.searchParams.set("limit", "100");
           if (cursor) {
             url.searchParams.set("next", cursor);
           }

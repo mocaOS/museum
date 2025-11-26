@@ -63,7 +63,7 @@
     <template #navigation>
       <v-list nav class="nav">
         <v-list-item
-          href="https://github.com/placeholder/email-designer"
+          href="https://github.com/creazy231/directus-extension-raw-query"
           target="_blank"
           rel="noopener noreferrer"
           class="link"

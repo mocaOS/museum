@@ -1,0 +1,48 @@
+# Source files
+src/
+tsconfig.json
+
+# Development files
+*.log
+*.tsbuildinfo
+node_modules/
+
+# Build artifacts (keep dist/)
+*.map
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Logo files (optional - remove if you want to include them)
+logo.jpg
+logo-transparent.png
+logo-transparent-cropped.png
+
+# Test files
+test/
+tests/
+*.test.ts
+*.spec.ts
+
+# Documentation (keep README.md)
+docs/
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+.travis.yml
+
+# Publishing files
+PUBLISHING.md

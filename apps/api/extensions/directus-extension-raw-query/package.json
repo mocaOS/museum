@@ -1,7 +1,7 @@
 {
   "name": "directus-extension-raw-query",
   "type": "module",
-  "version": "1.0.0",
+  "version": "1.0.3",
   "description": "Execute raw SQL queries in Directus with Monaco Editor",
   "keywords": [
     "directus",
@@ -11,8 +11,21 @@
     "sql"
   ],
   "icon": "code",
+  "license": "MIT",
+  "author": "",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/creazy231/directus-extension-raw-query.git"
+  },
+  "bugs": {
+    "url": "https://github.com/creazy231/directus-extension-raw-query/issues"
+  },
+  "homepage": "https://github.com/creazy231/directus-extension-raw-query#readme",
+  "main": "dist/app.js",
   "files": [
-    "dist"
+    "dist",
+    "README.md",
+    "package.json"
   ],
   "directus:extension": {
     "type": "bundle",
