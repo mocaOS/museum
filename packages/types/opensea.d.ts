@@ -28,3 +28,66 @@ export type OpenSeaAsset = {
   }>;
   rarity: any | null;
 };
+
+export type OpenSeaOfferItem = {
+  itemType: number;
+  token: string;
+  identifierOrCriteria: string;
+  startAmount: string;
+  endAmount: string;
+};
+
+export type OpenSeaConsiderationItem = {
+  itemType: number;
+  token: string;
+  identifierOrCriteria: string;
+  startAmount: string;
+  endAmount: string;
+  recipient: string;
+};
+
+export type OpenSeaProtocolParameters = {
+  offerer: string;
+  offer: OpenSeaOfferItem[];
+  consideration: OpenSeaConsiderationItem[];
+  startTime: string;
+  endTime: string;
+  orderType: number;
+  zone: string;
+  zoneHash: string;
+  salt: string;
+  conduitKey: string;
+  totalOriginalConsiderationItems: number;
+  counter: number;
+};
+
+export type OpenSeaProtocolData = {
+  parameters: OpenSeaProtocolParameters;
+  signature: string | null;
+};
+
+export type OpenSeaPriceValue = {
+  currency: string;
+  decimals: number;
+  value: string;
+};
+
+export type OpenSeaPrice = {
+  current: OpenSeaPriceValue;
+};
+
+export type OpenSeaListing = {
+  order_hash: string;
+  chain: string;
+  protocol_data: OpenSeaProtocolData;
+  protocol_address: string;
+  remaining_quantity: number;
+  price: OpenSeaPrice;
+  type: string;
+  status: string;
+};
+
+export type OpenSeaListingsResponse = {
+  listings: OpenSeaListing[];
+  next?: string;
+};

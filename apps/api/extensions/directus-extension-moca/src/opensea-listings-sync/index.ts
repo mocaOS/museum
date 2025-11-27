@@ -1,6 +1,5 @@
 import { defineHook } from "@directus/extensions-sdk";
-import axios from "axios";
-import type { OpenSeaListing, OpenSeaListingsResponse } from "./types";
+import type { OpenSeaListing, OpenSeaListingsResponse } from "@local/types/opensea";
 
 export default defineHook(({ schedule }, { env, services, getSchema }) => {
   // Coolify API configuration
@@ -46,7 +45,6 @@ export default defineHook(({ schedule }, { env, services, getSchema }) => {
       const MAX_ATTEMPTS = 5;
       const uniqueListings = new Map<string, OpenSeaListing>();
       let cursor: string | undefined;
-      let totalFetched = 0;
       let attempts = 0;
 
       // Fetch listings until we have 10 unique token IDs or reach max attempts
@@ -58,21 +56,23 @@ export default defineHook(({ schedule }, { env, services, getSchema }) => {
             "https://api.opensea.io/api/v2/listings/collection/art-decc0s/best",
           );
           url.searchParams.set("include_private_listings", "false");
-          url.searchParams.set("limit", "100");
+          url.searchParams.set("limit", "200");
           if (cursor) {
             url.searchParams.set("next", cursor);
           }
 
-          const { data } = await axios.get<OpenSeaListingsResponse>(
-            url.toString(),
-            {
-              headers: {
-                "X-API-KEY": env.OPENSEA_API_KEY,
-              },
+          const response = await fetch(url.toString(), {
+            headers: {
+              "X-API-KEY": env.OPENSEA_API_KEY,
             },
-          );
+          });
 
-          totalFetched += data.listings.length;
+          if (!response.ok) {
+            const text = await response.text();
+            throw new Error(`GET ${url.toString()} -> ${response.status} ${response.statusText}: ${text}`);
+          }
+
+          const data = await response.json() as OpenSeaListingsResponse;
 
           // Add unique listings to our map
           for (const listing of data.listings) {

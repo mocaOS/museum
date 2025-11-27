@@ -51,7 +51,7 @@
     },
     "apps/api/extensions/directus-extension-raw-query": {
       "name": "directus-extension-raw-query",
-      "version": "1.0.0",
+      "version": "1.0.3",
       "dependencies": {
         "monaco-editor": "^0.52.2",
       },
