@@ -115,5 +115,26 @@
     ],
     "policy": "dbb083a5-0174-4f56-a3fa-60c64da11078",
     "_syncId": "4da91129-ef7d-43f9-a09b-0f0fd24a103d"
+  },
+  {
+    "collection": "settings",
+    "action": "read",
+    "permissions": {
+      "_and": [
+        {
+          "key": {
+            "_eq": "adoption_details"
+          }
+        }
+      ]
+    },
+    "validation": null,
+    "presets": null,
+    "fields": [
+      "key",
+      "value"
+    ],
+    "policy": "dbb083a5-0174-4f56-a3fa-60c64da11078",
+    "_syncId": "dae9d8db-c381-4bb3-88ee-b88ebdd2c9d3"
   }
 ]
