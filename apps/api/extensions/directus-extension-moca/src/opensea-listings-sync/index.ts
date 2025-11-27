@@ -44,6 +44,7 @@ export default defineHook(({ schedule }, { env, services, getSchema }) => {
       const TARGET_COUNT = 10;
       const MAX_ATTEMPTS = 5;
       const uniqueListings = new Map<string, OpenSeaListing>();
+      const allListings: OpenSeaListing[] = [];
       let cursor: string | undefined;
       let attempts = 0;
 
@@ -73,6 +74,9 @@ export default defineHook(({ schedule }, { env, services, getSchema }) => {
           }
 
           const data = await response.json() as OpenSeaListingsResponse;
+
+          // Add all listings to the array
+          allListings.push(...data.listings);
 
           // Add unique listings to our map
           for (const listing of data.listings) {
@@ -114,9 +118,10 @@ export default defineHook(({ schedule }, { env, services, getSchema }) => {
         .join(",");
 
       console.log(`[OpenSea Listings Sync] Token IDs: ${tokenIds}`);
+      console.log(`[OpenSea Listings Sync] Total listings fetched: ${allListings.length}`);
 
-      // Prepare adoption details with tokenId and price
-      const adoptionDetails = listings.map(listing => ({
+      // Prepare adoption details with all listings (tokenId and price)
+      const adoptionDetails = allListings.map(listing => ({
         tokenId: listing.protocol_data.parameters.offer[0]?.identifierOrCriteria,
         price: {
           value: listing.price.current.value,
