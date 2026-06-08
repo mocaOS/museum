@@ -1,0 +1,21 @@
+{
+  "headline": "Incubator of Crypto Art",
+  "mark": "I○C△",
+  "intro": "The Incubator explores and develops crypto art experiences in the Metaverse with forward-thinking artists, technologists, and developers. It reaches across digital worlds and communities to foster artistic and technological development.",
+  "functions": [
+    "Exhibiting the work of emerging artists",
+    "Showcasing unique stories, projects, and creative process",
+    "Stewarding radical creative practices and technological experimentation"
+  ],
+  "projects": [
+    { "name": "IRL Art", "description": "A Denver collective of artists and art directors bridging physical and digital realms, running an NFT gallery and community venue." },
+    { "name": "District XYZ", "description": "A metaverse district and design lab exploring virtual architecture through creative contests for artists, designers, and architects." },
+    { "name": "Nous Institute", "description": "A research organization building platforms that use machine learning to cultivate human creativity in symbiosis with its users." },
+    { "name": "CryptoArg", "description": "A network of artists in Buenos Aires encouraging creation, cooperation, and knowledge exchange." },
+    { "name": "The Guild", "description": "A global community of futurists, activists, developers, and artists." },
+    { "name": "AfrofutureDAO", "description": "A platform giving Africa's artists and historical assets access to Web3 through curated Afrofuturism projects." },
+    { "name": "Chimbites", "description": "An international trans-led network from Colombia providing a decentralized platform for Queer and BIPOC artists and social leaders." },
+    { "name": "ArtDAO", "description": "An artist collective curating and incubating local artistry across global cities." },
+    { "name": "Making It", "description": "A collective of creatives celebrating artistic evolution through post-internet culture." }
+  ]
+}

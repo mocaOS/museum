@@ -1,0 +1,21 @@
+node_modules/
+.next/
+out/
+.env
+.env.local
+.env*.local
+*.tsbuildinfo
+next-env.d.ts
+.claude/settings.local.json
+
+# runtime data (SQLite DB + avatars)
+data/
+
+# editor / os
+.DS_Store
+.vscode/
+.idea/
+
+# scripts/ — user data for one-off imports never belongs in the repo
+scripts/.env
+scripts/*.xlsx

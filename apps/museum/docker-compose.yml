@@ -1,0 +1,26 @@
+services:
+  moca-museum:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      # Cortex (MOCA Library)
+      CORTEX_API_URL: ${CORTEX_API_URL:-https://library.moca.qwellco.de}
+      CORTEX_API_KEY: ${CORTEX_API_KEY}
+      BACKEND_ADMIN_API_KEY: ${BACKEND_ADMIN_API_KEY:-}
+      # Directus (museum CMS)
+      DIRECTUS_URL: ${DIRECTUS_URL:-https://api.moca.qwellco.de}
+      MEDIA_BASE_URL: ${MEDIA_BASE_URL:-https://media.qwellcode.de/api}
+      IPFS_GATEWAY: ${IPFS_GATEWAY:-https://ipfs.qwellcode.de/ipfs/}
+      # Community / curation side
+      SUPERADMIN_EMAIL: ${SUPERADMIN_EMAIL}
+      SUPERADMIN_PASSWORD: ${SUPERADMIN_PASSWORD}
+      APP_ENCRYPTION_KEY: ${APP_ENCRYPTION_KEY}
+    ports:
+      - "${PORT:-3331}:3331"
+    volumes:
+      - moca-museum-data:/app/data
+    restart: unless-stopped
+
+volumes:
+  moca-museum-data:
