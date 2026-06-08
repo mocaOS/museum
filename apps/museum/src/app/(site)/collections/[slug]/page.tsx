@@ -21,9 +21,18 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
   const { slug } = await params;
   const collection = await getCollection(slug);
   if (!collection) return { title: "Gallery" };
+  const title = collection.title || collection.name;
+  const description =
+    collection.description ??
+    `Browse "${title}" — part of the Museum of Crypto Art permanent collection.`;
+  const canonical = `/collections/${slug}`;
   return {
-    title: collection.title || collection.name,
-    description: collection.description ?? undefined,
+    title,
+    description,
+    // Canonicalize paginated/filtered variants (?page, ?search) to the base slug.
+    alternates: { canonical },
+    openGraph: { title, description, url: canonical, type: "article" },
+    twitter: { title, description },
   };
 }
 

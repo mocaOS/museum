@@ -6,10 +6,19 @@ import CollectionCard from "@/components/museum/CollectionCard";
 
 export const dynamic = "force-dynamic";
 
+const HOME_DESCRIPTION =
+  "A community museum for crypto art and Web3 culture. Explore the collections, walk the exhibitions, and enter the Library to query the MOCA Cortex.";
+
 export const metadata: Metadata = {
   title: { absolute: "Museum of Crypto Art" },
-  description:
-    "A community museum for crypto art and Web3 culture. Explore the collections, walk the exhibitions, and enter the Library to query the MOCA Cortex.",
+  description: HOME_DESCRIPTION,
+  alternates: { canonical: "/" },
+  openGraph: {
+    title: "Museum of Crypto Art",
+    description: HOME_DESCRIPTION,
+    url: "/",
+  },
+  twitter: { title: "Museum of Crypto Art", description: HOME_DESCRIPTION },
 };
 
 const MODES = [

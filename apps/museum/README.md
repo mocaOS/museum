@@ -1,12 +1,15 @@
 # Museum of Crypto Art — Web App
 
-The public website for the **Museum of Crypto Art (MOCA)**: browse the collections, walk immersive 3D exhibitions, study the writings and crypto-art timeline, and enter the **Library** — a live, public chat over the MOCA **Cortex** knowledge graph.
+The public website for the **Museum of Crypto Art (MOCA)**: browse the collections, walk immersive 3D exhibitions, study the writings and crypto-art timeline, and enter the **Library** — a live, public chat over the MOCA **[Cortex](https://cortex.eco)** knowledge engine.
 
 Built with **Next.js 16** (App Router, standalone output), **React 19**, **Tailwind CSS 4**, **react-three-fiber** for 3D, and the MOCA Library design system. It grew out of [`cortex-chat`](https://github.com/mocaOS/cortex-chat) — the Library is that chat engine, made public and embedded into the museum.
 
+**The Library is powered by [Cortex](https://cortex.eco)** — MOCA's agentic RAG platform (knowledge graph + streaming chat). Cortex runs as its own service ([code: `mocaOS/cortex-app`](https://github.com/mocaOS/cortex-app)); this app talks to it server-side. See **[docs.cortex.eco](https://docs.cortex.eco)** for the Cortex API, key model, and self-hosting.
+
 - **Dev / container port:** `3331`
 - **Canonical site URL:** `https://museumofcryptoart.com`
-- **Cortex API:** `https://library.moca.qwellco.de` · **Directus CMS:** `https://api.moca.qwellco.de`
+- **Cortex** — tech layer for the Library: [cortex.eco](https://cortex.eco) · docs [docs.cortex.eco](https://docs.cortex.eco) · MOCA instance `https://library.moca.qwellco.de`
+- **Directus CMS:** `https://api.moca.qwellco.de`
 
 ---
 

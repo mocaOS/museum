@@ -8,15 +8,57 @@ import ConfigBootstrap from "@/components/ConfigBootstrap";
 
 export const dynamic = "force-dynamic";
 
+// Open Graph / Twitter locale uses the underscore form (en_US); map our 2-letter
+// app locale to a reasonable default region.
+const OG_LOCALE: Record<string, string> = { en: "en_US", de: "de_DE" };
+
 // Title and description are superadmin-editable via /admin/settings.
 export async function generateMetadata(): Promise<Metadata> {
-  const { appTitle, appDescription } = getAppSettings();
+  const { appTitle, appDescription, locale } = getAppSettings();
   const siteUrl =
     process.env.NEXT_PUBLIC_SITE_URL || "https://museumofcryptoart.com";
+  const siteName = "Museum of Crypto Art";
+  const ogImage = {
+    url: "/social.jpg",
+    width: 1200,
+    height: 630,
+    alt: siteName,
+  };
   return {
     metadataBase: new URL(siteUrl),
-    title: { default: appTitle, template: "%s · Museum of Crypto Art" },
+    title: { default: appTitle, template: `%s · ${siteName}` },
     description: appDescription,
+    applicationName: siteName,
+    keywords: [
+      "Museum of Crypto Art",
+      "MOCA",
+      "crypto art",
+      "NFT",
+      "digital art",
+      "Web3",
+      "blockchain art",
+      "exhibitions",
+    ],
+    openGraph: {
+      type: "website",
+      siteName,
+      title: appTitle,
+      description: appDescription,
+      url: siteUrl,
+      locale: OG_LOCALE[locale] ?? "en_US",
+      images: [ogImage],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: appTitle,
+      description: appDescription,
+      images: [ogImage.url],
+    },
+    robots: {
+      index: true,
+      follow: true,
+      googleBot: { index: true, follow: true, "max-image-preview": "large" },
+    },
     icons: {
       icon: [
         { url: "/favicon.ico", sizes: "any" },
