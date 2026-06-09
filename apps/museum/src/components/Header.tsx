@@ -11,7 +11,12 @@ const NAV = [
   { href: "/exhibitions", label: "Exhibitions" },
   { href: "/writings", label: "Writings" },
   { href: "/timeline", label: "Timeline" },
+  { href: "https://codex.decc0s.com/", label: "Art DeCC0s", external: true },
+  { href: "https://vibe.museumofcryptoart.com/", label: "Vibe Studio", external: true },
 ];
+
+const internalNav = NAV.filter((item) => !item.external);
+const externalNav = NAV.filter((item) => item.external);
 
 export default function Header({
   logoUrl,
@@ -50,29 +55,42 @@ export default function Header({
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={logoUrl} alt="Museum of Crypto Art" className="h-6 w-auto" />
         </Link>
+        {/* Museum menubar — navigate out of the Library back into the museum */}
+        <nav className="ml-2 hidden items-center gap-1 sm:flex">
+          {internalNav.map((item) => (
+            <Link
+              key={item.href}
+              href={item.href}
+              className="rounded-[var(--radius)] px-3 py-1.5 text-sm transition-colors"
+              style={{ color: "var(--fg2)" }}
+            >
+              {item.label}
+            </Link>
+          ))}
+        </nav>
       </div>
 
-      {/* Museum menubar — navigate out of the Library back into the museum */}
-      <nav className="hidden items-center gap-1 sm:flex">
-        {NAV.map((item) => (
-          <Link
-            key={item.href}
-            href={item.href}
-            className="rounded-[var(--radius)] px-3 py-1.5 text-sm transition-colors"
-            style={{ color: "var(--fg2)" }}
-          >
-            {item.label}
-          </Link>
-        ))}
-        <span
-          className="rounded-[var(--radius)] px-3 py-1.5 text-sm"
-          style={{ color: "var(--fg1)" }}
-        >
-          Library
-        </span>
-      </nav>
-
       <div className="flex items-center gap-1">
+        <nav className="hidden items-center gap-1 sm:flex">
+          {externalNav.map((item) => (
+            <a
+              key={item.href}
+              href={item.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="rounded-[var(--radius)] px-3 py-1.5 text-sm transition-colors"
+              style={{ color: "var(--fg2)" }}
+            >
+              {item.label}
+            </a>
+          ))}
+          <span
+            className="rounded-[var(--radius)] px-3 py-1.5 text-sm"
+            style={{ color: "var(--fg1)" }}
+          >
+            Library
+          </span>
+        </nav>
         {supportUrl ? (
           <a
             href={supportUrl}

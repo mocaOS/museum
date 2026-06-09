@@ -9,6 +9,8 @@ const NAV = [
   { href: "/exhibitions", label: "Exhibitions" },
   { href: "/writings", label: "Writings" },
   { href: "/timeline", label: "Timeline" },
+  { href: "https://codex.decc0s.com/", label: "Art DeCC0s", external: true },
+  { href: "https://vibe.museumofcryptoart.com/", label: "Vibe Studio", external: true },
 ];
 
 export default function SiteHeader({ logoUrl = "/logo.svg" }: { logoUrl?: string }) {
@@ -17,6 +19,38 @@ export default function SiteHeader({ logoUrl = "/logo.svg" }: { logoUrl?: string
 
   const isActive = (href: string) =>
     pathname === href || pathname.startsWith(`${href}/`);
+
+  const internalNav = NAV.filter((item) => !item.external);
+  const externalNav = NAV.filter((item) => item.external);
+
+  const renderDesktopItem = (item: (typeof NAV)[number]) =>
+    item.external ? (
+      <a
+        key={item.href}
+        href={item.href}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="rounded-[var(--radius)] px-3.5 py-2 text-sm transition-colors"
+        style={{ color: "var(--fg2)" }}
+      >
+        {item.label}
+      </a>
+    ) : (
+      <Link
+        key={item.href}
+        href={item.href}
+        className="relative rounded-[var(--radius)] px-3.5 py-2 text-sm transition-colors"
+        style={{ color: isActive(item.href) ? "var(--fg1)" : "var(--fg2)" }}
+      >
+        {item.label}
+        {isActive(item.href) && (
+          <span
+            className="absolute inset-x-3 -bottom-px h-px"
+            style={{ background: "var(--accent)" }}
+          />
+        )}
+      </Link>
+    );
 
   return (
     <header
@@ -29,29 +63,20 @@ export default function SiteHeader({ logoUrl = "/logo.svg" }: { logoUrl?: string
       }}
     >
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-5 sm:px-8">
-        <Link href="/" className="flex items-center gap-2.5">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={logoUrl} alt="Museum of Crypto Art" className="h-7 w-auto" />
-        </Link>
+        {/* Left: logo + primary nav */}
+        <div className="flex items-center gap-1">
+          <Link href="/" className="flex items-center gap-2.5">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={logoUrl} alt="Museum of Crypto Art" className="h-7 w-auto" />
+          </Link>
+          <nav className="ml-3 hidden items-center gap-1 sm:flex">
+            {internalNav.map(renderDesktopItem)}
+          </nav>
+        </div>
 
-        {/* Desktop nav */}
+        {/* Right: external links + Library CTA */}
         <nav className="hidden items-center gap-1 sm:flex">
-          {NAV.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              className="relative rounded-[var(--radius)] px-3.5 py-2 text-sm transition-colors"
-              style={{ color: isActive(item.href) ? "var(--fg1)" : "var(--fg2)" }}
-            >
-              {item.label}
-              {isActive(item.href) && (
-                <span
-                  className="absolute inset-x-3 -bottom-px h-px"
-                  style={{ background: "var(--accent)" }}
-                />
-              )}
-            </Link>
-          ))}
+          {externalNav.map(renderDesktopItem)}
           <Link
             href="/library"
             className="ml-2 flex h-9 items-center rounded-[var(--radius)] px-4 text-sm font-medium transition-transform active:scale-[0.98]"
@@ -80,17 +105,31 @@ export default function SiteHeader({ logoUrl = "/logo.svg" }: { logoUrl?: string
           className="border-t px-5 py-3 sm:hidden"
           style={{ borderColor: "var(--border)" }}
         >
-          {NAV.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              onClick={() => setOpen(false)}
-              className="block rounded-[var(--radius)] px-3 py-2.5 text-sm"
-              style={{ color: isActive(item.href) ? "var(--fg1)" : "var(--fg2)" }}
-            >
-              {item.label}
-            </Link>
-          ))}
+          {NAV.map((item) =>
+            item.external ? (
+              <a
+                key={item.href}
+                href={item.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={() => setOpen(false)}
+                className="block rounded-[var(--radius)] px-3 py-2.5 text-sm"
+                style={{ color: "var(--fg2)" }}
+              >
+                {item.label}
+              </a>
+            ) : (
+              <Link
+                key={item.href}
+                href={item.href}
+                onClick={() => setOpen(false)}
+                className="block rounded-[var(--radius)] px-3 py-2.5 text-sm"
+                style={{ color: isActive(item.href) ? "var(--fg1)" : "var(--fg2)" }}
+              >
+                {item.label}
+              </Link>
+            )
+          )}
         </nav>
       )}
     </header>
