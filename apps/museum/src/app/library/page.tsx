@@ -2,7 +2,6 @@
 
 import { useState, useRef, useCallback, useEffect } from "react";
 import { ChatMessage, ChatSession, Mode, Settings, Source, GraphContext, RetrievalStats } from "@/types";
-import { CurrentUser } from "@/types/auth";
 import {
   askQuestion,
   askQuestionStream,
@@ -51,8 +50,6 @@ export default function LibraryPage() {
     () => getCachedConfig()?.logoUrl || "/logo.svg"
   );
   const [configReady, setConfigReady] = useState(() => !!getCachedConfig());
-  // Anonymous (public) users are allowed; currentUser stays null for them.
-  const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
@@ -61,8 +58,8 @@ export default function LibraryPage() {
   // Opaque conversation_memory blob for the active session. Held in a ref so
   // the async handleSend always reads the latest value (no stale closure) and
   // so updating it mid-stream doesn't trigger a re-render. Replayed verbatim on
-  // each turn, replaced from the memory_update event. Works in-session for
-  // anonymous visitors too; persisted with messages only for signed-in members.
+  // each turn, replaced from the memory_update event, and persisted with the
+  // session in localStorage.
   const memoryRef = useRef<unknown>(undefined);
 
   // Library-specific empty state (members of the community studying the archive).
@@ -79,43 +76,27 @@ export default function LibraryPage() {
     }
   }, []);
 
-  // Load config, optional auth, collections on mount.
+  // Load config, local chat history, and collections on mount.
   useEffect(() => {
     getConfig().then((cfg) => {
       setLogoUrl(cfg.logoUrl || "/logo.svg");
       setConfigReady(true);
     });
-    // Auth is optional for the public Library. A 401 just means "anonymous".
-    fetch("/api/auth/me")
-      .then(async (res) => (res.ok ? ((await res.json()) as CurrentUser) : null))
-      .then((me) => {
-        if (me) {
-          setCurrentUser(me);
-          refreshSessions();
-        }
-      })
-      .catch(() => {});
+    refreshSessions();
     fetchCollections()
       .then(setCollections)
       .catch(() => {});
   }, [refreshSessions]);
 
-  const handleSignOut = useCallback(async () => {
-    await fetch("/api/auth/logout", { method: "POST" });
-    setCurrentUser(null);
-    setSessions([]);
-    setActiveSessionId(null);
-  }, []);
-
-  // Persist messages whenever they settle — members only (anonymous = ephemeral).
+  // Persist messages to localStorage whenever they settle.
   useEffect(() => {
-    if (!currentUser || !activeSessionId || messages.length === 0) return;
+    if (!activeSessionId || messages.length === 0) return;
     const hasStreaming = messages.some((m) => m.isStreaming);
     if (hasStreaming) return;
     updateChatMessages(activeSessionId, messages, memoryRef.current)
       .then(refreshSessions)
       .catch(() => {});
-  }, [messages, activeSessionId, currentUser, refreshSessions]);
+  }, [messages, activeSessionId, refreshSessions]);
 
   const handleSelectSession = useCallback(async (id: string) => {
     const session = await getChat(id);
@@ -151,9 +132,9 @@ export default function LibraryPage() {
     async (question: string) => {
       if (!question.trim() || isLoading) return;
 
-      // Server-side chat sessions only exist for signed-in members.
+      // Lazily create a localStorage-backed session on the first message.
       let sessionId = activeSessionId;
-      if (currentUser && !sessionId) {
+      if (!sessionId) {
         const created = await createChat();
         sessionId = created.id;
         setActiveSessionId(sessionId);
@@ -180,7 +161,6 @@ export default function LibraryPage() {
       };
 
       if (
-        currentUser &&
         isFirstMessage &&
         sessionId &&
         !titleGeneratedRef.current.has(sessionId)
@@ -209,7 +189,7 @@ export default function LibraryPage() {
       };
 
       const finalize = (finalMessages: ChatMessage[]) => {
-        if (currentUser && sessionId) {
+        if (sessionId) {
           updateChatMessages(sessionId, finalMessages, memoryRef.current)
             .then(refreshSessions)
             .catch(() => {});
@@ -368,7 +348,7 @@ export default function LibraryPage() {
         setIsLoading(false);
       }
     },
-    [isLoading, messages, mode, settings, activeSessionId, currentUser, refreshSessions]
+    [isLoading, messages, mode, settings, activeSessionId, refreshSessions]
   );
 
   const handleStop = useCallback(() => {
@@ -396,8 +376,6 @@ export default function LibraryPage() {
         }}
         onDeleteSession={handleDeleteSession}
         logoUrl={logoUrl}
-        currentUser={currentUser}
-        onSignOut={handleSignOut}
       />
 
       <main className="flex-1 overflow-hidden relative">

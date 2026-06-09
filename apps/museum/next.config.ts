@@ -10,15 +10,11 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: dirname(fileURLToPath(import.meta.url)),
   },
-  serverExternalPackages: ["better-sqlite3", "@node-rs/argon2"],
   async redirects() {
     return [
       { source: "/galleries", destination: "/collections", permanent: true },
       { source: "/galleries/:slug", destination: "/collections/:slug", permanent: true },
     ];
-  },
-  outputFileTracingIncludes: {
-    "/**/*": ["./src/lib/db/migrations/**/*"],
   },
   experimental: {
     // Keep in sync with MAX_UPLOAD_BYTES in src/lib/upload-limits.ts.

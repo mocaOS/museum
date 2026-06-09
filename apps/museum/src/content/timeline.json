@@ -1,6 +1,18 @@
 {
   "intro": "An abbreviated history of crypto art — from the first tributes etched onto the blockchain to the auctions that put NFTs on the world stage. Adapted from the chronology by artist Martin Lukas Ostachowski.",
   "events": [
+    { "date": "2026-06-01", "title": "Crypto art enters a rebuilding phase", "description": "As of mid-2026 the space remains quiet after years of contraction — surviving \"bedroom artists\" and core collectors carry the work forward as the market searches for new footing." },
+    { "date": "2025-12-01", "title": "MOCA Town Hall reflects on a perishing year", "description": "At the December Town Hall the community describes 2025 as the year crypto art \"as we knew it\" receded — activity scarce for weeks at a time and survival hinging on weathering the volatility." },
+    { "date": "2024-10-01", "title": "Group Exhibition: Resbalar (una cosa)", "description": "Group show at CEM Can Felipa, Barcelona, running through January 2025, featuring Agustine Zeguers, Daniel Llaría, and Nazario Díaz." },
+    { "date": "2024-03-01", "title": "Robbie Barrat's AI portrait resells for 150 ETH", "description": "AI Generated Nude Portrait #7, Frame #166 trades for 150 ETH on SuperRare's secondary market." },
+    { "date": "2024-02-23", "title": "NFT Paris draws the core believers", "description": "The Paris conference is markedly smaller and more intimate than 2022's hype-era crowds — a gathering of the movement's remaining faithful." },
+    { "date": "2024-02-01", "title": "Yuga Labs wins Yuga Labs v. Ripps", "description": "A landmark $1.6M judgment against Ryder Ripps sets precedent for trademark and copyright enforcement around NFTs." },
+    { "date": "2024-01-20", "title": "The market fragments across ETH, Bitcoin, and Solana", "description": "Activity spreads multi-chain: Bitcoin Ordinals surge (ripcache's swarm_, Harto's The Golden Ratio), Ethereum's 1/1 market revives, and Solana draws its own scene." },
+    { "date": "2023-08-17", "title": "OpenSea makes creator royalties optional", "description": "Under market pressure, OpenSea stops enforcing artist royalties on secondary sales — a major blow to the on-chain creator protections artists had fought to establish." },
+    { "date": "2023-02-08", "title": "Hermès v. Rothschild (MetaBirkins) verdict", "description": "A New York jury rules against the MetaBirkins NFTs, affirming that buyers acquire tokens tied to their associated content, not deeds divorced from the art." },
+    { "date": "2022-10-28", "title": "First Historic NFT Fest, Barcelona", "description": "DADA gathers pioneers of NFTs and crypto art at the Reial Cercle Artístic in the Gothic Quarter (28–30 October)." },
+    { "date": "2022-06-01", "title": "The market turns from euphoria to contraction", "description": "After 2021's highs the market begins a long contraction, as speculative euphoria gives way to a more sober reality." },
+    { "date": "2021-04-30", "title": "First dip in NFT transaction volume", "description": "Weeks after the Beeple sale, NFT trading sees its first volume dip of the year — later read as the start of the comedown from the speculative peak." },
     { "date": "2021-04-29", "title": "Launch of the Versus Marketplace", "description": "Serverless, on-chain marketplace built on Flow that stores images directly on the blockchain." },
     { "date": "2021-04-25", "title": "Launch of the Truesy Marketplace", "description": "Curated NFT marketplace focused on personalities and brands, built on Tezos." },
     { "date": "2021-04-23", "title": "Mad Dog Jones' Replicator sets record for living Canadian artist", "description": "Micah Dowbak's conceptual work sold at Phillips for $4.2M and generates 220 further versions." },

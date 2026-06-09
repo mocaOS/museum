@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { getAppSettings } from "@/lib/settings";
-import { resolveLogoUrl } from "@/lib/branding-url";
 import { setLocale as setI18nLocale } from "@/lib/i18n";
 import { MAX_UPLOAD_BYTES } from "@/lib/upload-limits";
 import ConfigBootstrap from "@/components/ConfigBootstrap";
@@ -12,7 +11,7 @@ export const dynamic = "force-dynamic";
 // app locale to a reasonable default region.
 const OG_LOCALE: Record<string, string> = { en: "en_US", de: "de_DE" };
 
-// Title and description are superadmin-editable via /admin/settings.
+// Title and description are read from the environment — see src/lib/settings.ts.
 export async function generateMetadata(): Promise<Metadata> {
   const { appTitle, appDescription, locale } = getAppSettings();
   const siteUrl =
@@ -78,7 +77,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   const settings = getAppSettings();
-  const logoUrl = resolveLogoUrl(settings);
+  const logoUrl = settings.logoUrl;
   setI18nLocale(settings.locale);
 
   const initialConfig = {

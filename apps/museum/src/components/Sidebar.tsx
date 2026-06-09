@@ -1,8 +1,6 @@
 "use client";
 
-import Link from "next/link";
 import { ChatSession } from "@/types";
-import { CurrentUser } from "@/types/auth";
 import { t } from "@/lib/i18n";
 import { useLocale } from "@/lib/i18n-client";
 
@@ -15,8 +13,6 @@ interface Props {
   onNewChat: () => void;
   onDeleteSession: (id: string) => void;
   logoUrl: string;
-  currentUser?: CurrentUser | null;
-  onSignOut?: () => void;
 }
 
 function timeLabel(ts: number): string {
@@ -57,8 +53,6 @@ export default function Sidebar({
   onNewChat,
   onDeleteSession,
   logoUrl,
-  currentUser,
-  onSignOut,
 }: Props) {
   useLocale();
   const groups = groupSessions(sessions);
@@ -193,118 +187,7 @@ export default function Sidebar({
             </div>
           ))}
         </div>
-
-        {currentUser && (
-          <div
-            className="border-t px-2 py-2 space-y-0.5"
-            style={{ borderColor: "var(--border)" }}
-          >
-            <SidebarNavLink
-              href="/profile"
-              label={t("profile")}
-              onNav={onClose}
-              icon={
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                  <circle cx="12" cy="8" r="4" />
-                  <path d="M5 21v-1a7 7 0 0 1 14 0v1" />
-                </svg>
-              }
-              rightSlot={
-                <span
-                  className="text-[11px] truncate max-w-[120px]"
-                  style={{
-                    color: "var(--fg2)",
-                    fontFamily: "var(--font-mono)",
-                  }}
-                >
-                  {currentUser.username || currentUser.email}
-                </span>
-              }
-            />
-            {currentUser.canUpload && (
-              <SidebarNavLink
-                href="/upload"
-                label={t("uploadDocuments")}
-                onNav={onClose}
-                icon={
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M21 15v4a2 2 0 0 1 -2 2H5a2 2 0 0 1 -2 -2v-4" />
-                    <path d="M17 8l-5 -5l-5 5" />
-                    <path d="M12 3v12" />
-                  </svg>
-                }
-              />
-            )}
-            {(currentUser.role === "superadmin" ||
-              currentUser.role === "admin") && (
-              <SidebarNavLink
-                href="/admin"
-                label={t("admin")}
-                onNav={onClose}
-                icon={
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                    <rect x="3" y="11" width="18" height="11" rx="2" />
-                    <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-                  </svg>
-                }
-              />
-            )}
-            <button
-              onClick={onSignOut}
-              className="w-full flex items-center gap-2 px-2.5 py-2 rounded-[var(--radius)] text-sm transition-colors"
-              style={{ color: "var(--fg2)" }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.color = "var(--fg1)";
-                e.currentTarget.style.background = "var(--muted)";
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.color = "var(--fg2)";
-                e.currentTarget.style.background = "transparent";
-              }}
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                <path d="M9 21H5a2 2 0 0 1 -2 -2V5a2 2 0 0 1 2 -2h4" />
-                <path d="M16 17l5 -5l-5 -5" />
-                <path d="M21 12H9" />
-              </svg>
-              <span className="flex-1 text-left">{t("signOut")}</span>
-            </button>
-          </div>
-        )}
       </div>
     </>
-  );
-}
-
-function SidebarNavLink({
-  href,
-  label,
-  icon,
-  onNav,
-  rightSlot,
-}: {
-  href: string;
-  label: string;
-  icon: React.ReactNode;
-  onNav?: () => void;
-  rightSlot?: React.ReactNode;
-}) {
-  return (
-    <Link
-      href={href}
-      onClick={onNav}
-      className="flex items-center gap-2 px-2.5 py-2 rounded-[var(--radius)] text-sm transition-colors"
-      style={{ color: "var(--fg1)" }}
-      onMouseEnter={(e) => {
-        e.currentTarget.style.background = "var(--muted)";
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.background = "transparent";
-      }}
-    >
-      {icon}
-      <span className="flex-1 truncate">{label}</span>
-      {rightSlot}
-    </Link>
   );
 }
