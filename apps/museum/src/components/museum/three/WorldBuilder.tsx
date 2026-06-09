@@ -37,7 +37,7 @@ function RTSControls({ apiRef }: { apiRef: React.MutableRefObject<CameraApi | nu
   const s = useRef({
     target: new THREE.Vector3(0, 0, 0),
     yaw: Math.PI / 4,
-    pitch: 0.9,
+    pitch: THREE.MathUtils.degToRad(20),
     dist: 46,
     keys: new Set<string>(),
     drag: null as null | "rotate" | "pan",
@@ -51,7 +51,7 @@ function RTSControls({ apiRef }: { apiRef: React.MutableRefObject<CameraApi | nu
       reset: () => {
         s.current.target.set(0, 0, 0);
         s.current.yaw = Math.PI / 4;
-        s.current.pitch = 0.9;
+        s.current.pitch = THREE.MathUtils.degToRad(20);
         s.current.dist = 46;
       },
     };
@@ -84,7 +84,7 @@ function RTSControls({ apiRef }: { apiRef: React.MutableRefObject<CameraApi | nu
         s.current.last = { x: e.clientX, y: e.clientY };
         if (s.current.drag === "rotate") {
           s.current.yaw -= dx * 0.005;
-          s.current.pitch = clamp(s.current.pitch - dy * 0.005, 0.2, 1.45);
+          s.current.pitch = clamp(s.current.pitch + dy * 0.005, 0.2, 1.45);
         } else {
           const k = s.current.dist * 0.0016;
           const yaw = s.current.yaw;

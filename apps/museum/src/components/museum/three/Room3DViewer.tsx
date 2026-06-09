@@ -1,12 +1,11 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useLayoutEffect, useState } from "react";
 import { Canvas, useThree } from "@react-three/fiber";
 import {
   OrbitControls,
   Environment,
   Lightformer,
-  Html,
   useGLTF,
   AdaptiveDpr,
   BakeShadows,
@@ -47,7 +46,13 @@ function Model({
  * (near/far in camera-distance space) from the same radius so every room reads
  * with the same gentle depth haze whether it's 2m or 200m across.
  */
-function AutoFrame({ radius }: { radius: number }) {
+function AutoFrame({
+  radius,
+  onFramed,
+}: {
+  radius: number;
+  onFramed: () => void;
+}) {
   const { camera, controls, scene, size } = useThree();
 
   useEffect(() => {
@@ -67,12 +72,12 @@ function AutoFrame({ radius }: { radius: number }) {
     cam.far = distance * 6 + radius * 12;
     cam.updateProjectionMatrix();
 
-    // Gentle, scale-relative fog: clear at the model's front face, hazing
-    // toward the back and fully fogging the void beyond it.
+    // Scale-relative fog: haze begins just in front of the model's center and
+    // closes in quickly so every room keeps a soft, enclosed atmosphere.
     scene.fog = new THREE.Fog(
       "#0a0a0a",
-      Math.max(distance - radius * 0.5, 0.01),
-      distance + radius * 4,
+      Math.max(distance - radius, 0.01),
+      distance + radius * 1.6,
     );
 
     const ctl = controls as unknown as {
@@ -87,23 +92,20 @@ function AutoFrame({ radius }: { radius: number }) {
       ctl.maxDistance = distance * 3;
       ctl.update();
     }
-  }, [radius, camera, controls, scene, size.width, size.height]);
+
+    // Reveal only after the framed camera has actually painted a frame, so the
+    // user never sees the default/pre-framed zoom snapping into place.
+    let raf2 = 0;
+    const raf1 = requestAnimationFrame(() => {
+      raf2 = requestAnimationFrame(onFramed);
+    });
+    return () => {
+      cancelAnimationFrame(raf1);
+      cancelAnimationFrame(raf2);
+    };
+  }, [radius, camera, controls, scene, size.width, size.height, onFramed]);
 
   return null;
-}
-
-function Loader() {
-  return (
-    <Html center>
-      <div
-        className="flex items-center gap-2 rounded-full px-3 py-1.5 text-xs"
-        style={{ background: "oklch(1 0 0 / 0.08)", color: "oklch(0.85 0 0)" }}
-      >
-        <span className="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" />
-        Loading 3D…
-      </div>
-    </Html>
-  );
 }
 
 export default function Room3DViewer({
@@ -113,29 +115,20 @@ export default function Room3DViewer({
   url: string;
   className?: string;
 }) {
-  const wrapRef = useRef<HTMLDivElement>(null);
-  const [isFs, setIsFs] = useState(false);
   const [radius, setRadius] = useState(0);
+  const [framed, setFramed] = useState(false);
 
-  // Reset the measured size when the model changes so a stale frame from the
-  // previous room never leaks into the next one.
-  useEffect(() => setRadius(0), [url]);
-  const handleMeasure = useCallback((r: number) => setRadius(r), []);
-
+  // Reset measurement + reveal state when the model changes so a stale frame
+  // from the previous room never leaks into (or flashes before) the next one.
   useEffect(() => {
-    const h = () => setIsFs(!!document.fullscreenElement);
-    document.addEventListener("fullscreenchange", h);
-    return () => document.removeEventListener("fullscreenchange", h);
-  }, []);
-
-  const toggleFullscreen = () => {
-    if (!document.fullscreenElement) wrapRef.current?.requestFullscreen?.();
-    else document.exitFullscreen?.();
-  };
+    setRadius(0);
+    setFramed(false);
+  }, [url]);
+  const handleMeasure = useCallback((r: number) => setRadius(r), []);
+  const handleFramed = useCallback(() => setFramed(true), []);
 
   return (
     <div
-      ref={wrapRef}
       className={`relative h-full w-full overflow-hidden ${className ?? ""}`}
       style={{ background: "#0a0a0a" }}
     >
@@ -161,12 +154,12 @@ export default function Room3DViewer({
         />
         <directionalLight position={[-6, 4, -4]} intensity={0.4} color="#9bbcff" />
 
-        <Suspense fallback={<Loader />}>
+        <Suspense fallback={null}>
           {/* Model is recentered on the origin; AutoFrame measures it and
               positions the camera so it always covers ~80% of the viewport
               and derives fog from its size — independent of the GLB's scale. */}
           <Model url={url} onMeasure={handleMeasure} />
-          <AutoFrame radius={radius} />
+          <AutoFrame radius={radius} onFramed={handleFramed} />
 
           {/* In-scene studio environment — reflections without any CDN fetch. */}
           <Environment resolution={256} frames={1}>
@@ -201,28 +194,30 @@ export default function Room3DViewer({
           minDistance={0.5}
           maxDistance={200}
           enablePan
+          mouseButtons={{
+            LEFT: THREE.MOUSE.ROTATE,
+            MIDDLE: THREE.MOUSE.PAN,
+            RIGHT: THREE.MOUSE.PAN,
+          }}
         />
         <AdaptiveDpr pixelated />
         <BakeShadows />
       </Canvas>
 
-      {/* Fullscreen toggle */}
-      <button
-        onClick={toggleFullscreen}
-        className="absolute right-3 top-3 z-10 flex h-9 w-9 items-center justify-center rounded-[var(--radius)] transition-colors"
-        style={{ background: "oklch(0 0 0 / 0.5)", color: "oklch(1 0 0)" }}
-        aria-label={isFs ? "Exit fullscreen" : "Fullscreen"}
+      {/* Opaque cover over the canvas until the camera is framed — hides the
+          GLB download and the initial zoom snap, then fades away. */}
+      <div
+        className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center transition-opacity duration-500 ease-out"
+        style={{ background: "#0a0a0a", opacity: framed ? 0 : 1 }}
       >
-        {isFs ? (
-          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-            <path d="M8 3v3a2 2 0 0 1-2 2H3M21 8h-3a2 2 0 0 1-2-2V3M3 16h3a2 2 0 0 1 2 2v3M16 21v-3a2 2 0 0 1 2-2h3" />
-          </svg>
-        ) : (
-          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-            <path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3" />
-          </svg>
-        )}
-      </button>
+        <div
+          className="flex items-center gap-2 rounded-full px-3 py-1.5 text-xs"
+          style={{ background: "oklch(1 0 0 / 0.08)", color: "oklch(0.85 0 0)" }}
+        >
+          <span className="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" />
+          Loading 3D…
+        </div>
+      </div>
 
       <div
         className="pointer-events-none absolute bottom-3 left-3 z-10 rounded-full px-3 py-1 text-[11px]"
