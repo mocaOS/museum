@@ -60,7 +60,29 @@ export default function EssayDrawer({ essay }: { essay: string }) {
               </button>
             </div>
             <div className="markdown-content flex-1 overflow-y-auto px-6 py-6">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>{essay}</ReactMarkdown>
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm]}
+                components={{
+                  // Essay links point at external sources — open them in a new
+                  // tab so the collection view stays put behind the drawer.
+                  a: ({ href, children, ...props }) => {
+                    const external = /^https?:\/\//i.test(href ?? "");
+                    return (
+                      <a
+                        href={href}
+                        {...(external
+                          ? { target: "_blank", rel: "noopener noreferrer" }
+                          : {})}
+                        {...props}
+                      >
+                        {children}
+                      </a>
+                    );
+                  },
+                }}
+              >
+                {essay}
+              </ReactMarkdown>
             </div>
           </aside>
         </div>

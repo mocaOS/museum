@@ -11,7 +11,15 @@ import ThinkingIndicator from "./ThinkingIndicator";
 interface Props {
   message: ChatMessage;
   onSourceClick: (source: Source) => void;
+  // Conversation-wide source pool keyed by `sid`, accumulated across all turns.
+  // Lets a message resolve `[src_N]` markers that point at documents first
+  // retrieved on an earlier turn (the backend's additive source ledger).
+  sourceLedger?: Map<string, Source>;
 }
+
+// A resolved citation: which source `[src_N]` points to, and the compact
+// 1-based number we actually render for it within this message.
+type CitationMap = Map<string, { displayIndex: number; source: Source }>;
 
 function CitationBadge({
   index,
@@ -41,7 +49,11 @@ const CITE_PREFIX = "\u200Bcite:";
 const CITE_REGEX = /\u200Bcite:(\d+)\u200B/g;
 const CITE_SPLIT = /(\u200Bcite:\d+\u200B)/g;
 
-export default function MessageBubble({ message, onSourceClick }: Props) {
+export default function MessageBubble({
+  message,
+  onSourceClick,
+  sourceLedger,
+}: Props) {
   useLocale();
   const [thinkingExpanded, setThinkingExpanded] = useState(false);
   const [userCollapsed, setUserCollapsed] = useState(false);
@@ -68,15 +80,46 @@ export default function MessageBubble({ message, onSourceClick }: Props) {
     }
   }, [thinkingCount, isStreaming]);
 
-  // Replace [src_N] with zero-width-space-wrapped markers that survive markdown
-  const processedContent = useMemo(() => {
-    if (!message.content) return "";
-    if (!message.sources?.length) return message.content;
-    return message.content.replace(
-      /\[src_(\d+)\]/g,
-      `${CITE_PREFIX}$1\u200B`
+  // Resolve every `[src_N]` in the answer. N is the backend's conversation-stable
+  // `sid`, not a positional index \u2014 so we look it up by `sid`, first in this
+  // message's own sources, then in the conversation-wide ledger (for documents
+  // carried over from an earlier turn), and finally fall back to positional
+  // (`src_N` \u2192 sources[N-1]) for legacy responses that carry no `sid`. Cited
+  // sources are renumbered compactly (1..k in order of first appearance) so the
+  // inline badges and the source strip share one consistent numbering.
+  const { processedContent, citedSources, citationMap } = useMemo(() => {
+    const content = message.content || "";
+    const empty = { processedContent: content, citedSources: [] as Source[], citationMap: new Map() as CitationMap };
+    if (!content) return empty;
+
+    const resolve = (sid: string): Source | undefined => {
+      const local = message.sources?.find((s) => s.sid === sid);
+      if (local) return local;
+      const fromLedger = sourceLedger?.get(sid);
+      if (fromLedger) return fromLedger;
+      const idx = parseInt(sid, 10) - 1;
+      return message.sources?.[idx];
+    };
+
+    const map: CitationMap = new Map();
+    const cited: Source[] = [];
+    let m: RegExpExecArray | null;
+    const scan = /\[src_(\d+)\]/g;
+    while ((m = scan.exec(content)) !== null) {
+      const sid = m[1];
+      if (map.has(sid)) continue;
+      const source = resolve(sid);
+      if (source) map.set(sid, { displayIndex: cited.push(source), source });
+    }
+
+    // Only markers we can actually resolve become citation badges; anything
+    // unresolvable is left as literal text rather than silently dropped.
+    const processed = content.replace(/\[src_(\d+)\]/g, (full, sid) =>
+      map.has(sid) ? `${CITE_PREFIX}${sid}\u200B` : full
     );
-  }, [message.content, message.sources]);
+
+    return { processedContent: processed, citedSources: cited, citationMap: map };
+  }, [message.content, message.sources, sourceLedger]);
 
   if (isUser) {
     return (
@@ -95,7 +138,7 @@ export default function MessageBubble({ message, onSourceClick }: Props) {
   }
 
   const hasThinking = message.thinking && message.thinking.length > 0;
-  const hasSources = message.sources && message.sources.length > 0;
+  const hasSources = citedSources.length > 0;
 
   return (
     <div className="flex justify-start">
@@ -222,22 +265,22 @@ export default function MessageBubble({ message, onSourceClick }: Props) {
                 components={{
                   p: ({ children, ...props }) => (
                     <p {...props}>
-                      {injectCitations(children, message.sources || [], onSourceClick)}
+                      {injectCitations(children, citationMap, onSourceClick)}
                     </p>
                   ),
                   li: ({ children, ...props }) => (
                     <li {...props}>
-                      {injectCitations(children, message.sources || [], onSourceClick)}
+                      {injectCitations(children, citationMap, onSourceClick)}
                     </li>
                   ),
                   strong: ({ children, ...props }) => (
                     <strong {...props}>
-                      {injectCitations(children, message.sources || [], onSourceClick)}
+                      {injectCitations(children, citationMap, onSourceClick)}
                     </strong>
                   ),
                   em: ({ children, ...props }) => (
                     <em {...props}>
-                      {injectCitations(children, message.sources || [], onSourceClick)}
+                      {injectCitations(children, citationMap, onSourceClick)}
                     </em>
                   ),
                 }}
@@ -255,9 +298,9 @@ export default function MessageBubble({ message, onSourceClick }: Props) {
               className="flex flex-wrap gap-1.5 mt-3.5 pt-3 border-t"
               style={{ borderColor: "var(--border)" }}
             >
-              {message.sources!.map((source, i) => (
+              {citedSources.map((source, i) => (
                 <button
-                  key={source.chunk_id}
+                  key={`${source.chunk_id}-${i}`}
                   onClick={() => onSourceClick(source)}
                   className="group inline-flex items-center gap-1.5 text-[11.5px] px-2.5 py-1 rounded-[6px] transition-colors"
                   style={{
@@ -305,11 +348,11 @@ export default function MessageBubble({ message, onSourceClick }: Props) {
 
 function injectCitations(
   children: React.ReactNode,
-  sources: Source[],
+  citationMap: CitationMap,
   onSourceClick: (source: Source) => void
 ): React.ReactNode {
   if (!children) return children;
-  if (!sources.length) return children;
+  if (!citationMap.size) return children;
 
   const childArray = Array.isArray(children) ? children : [children];
 
@@ -322,15 +365,14 @@ function injectCitations(
     return parts.map((part, j) => {
       const match = part.match(/\u200Bcite:(\d+)\u200B/);
       if (match) {
-        const idx = parseInt(match[1], 10) - 1;
-        const source = sources[idx];
-        if (source) {
+        const cite = citationMap.get(match[1]);
+        if (cite) {
           return (
             <CitationBadge
               key={`c-${i}-${j}`}
-              index={idx + 1}
-              source={source}
-              onClick={() => onSourceClick(source)}
+              index={cite.displayIndex}
+              source={cite.source}
+              onClick={() => onSourceClick(cite.source)}
             />
           );
         }

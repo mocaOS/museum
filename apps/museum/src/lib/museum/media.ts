@@ -88,21 +88,81 @@ export function mediaKind(m?: MediaInfo | null): MediaKind {
   return "unsupported";
 }
 
+// Hosts whose media has gone dead at origin. openseauserdata.com (OpenSea's old
+// user-content host) was shut down, so any blob still pointing there 404s — and
+// the transform-in proxy just redirects back to it. When we hit one of these we
+// revive the work from the live OpenSea CDN (seadn.io) URL in response_opensea.
+const DEAD_MEDIA_HOSTS = ["openseauserdata.com"];
+
+function isDeadMediaUrl(url?: string): boolean {
+  return !!url && DEAD_MEDIA_HOSTS.some((host) => url.includes(host));
+}
+
+interface OpenseaMediaUrls {
+  display_animation_url?: string;
+  animation_url?: string;
+  display_image_url?: string;
+  image_url?: string;
+}
+
+/** A live OpenSea CDN URL from the raw response, preferring motion or still. */
+function openseaLiveUrl(responseOpensea: unknown, preferStill: boolean): string | undefined {
+  const o = responseOpensea as OpenseaMediaUrls | null;
+  if (!o) return undefined;
+  const order = preferStill
+    ? [o.display_image_url, o.image_url, o.display_animation_url, o.animation_url]
+    : [o.display_animation_url, o.animation_url, o.display_image_url, o.image_url];
+  return order.find((u) => u && !isDeadMediaUrl(u)) || undefined;
+}
+
+/** Swap a dead media URL for a live OpenSea CDN fallback when one exists. */
+export function reviveMedia(media: MediaInfo | null, responseOpensea: unknown): MediaInfo | null {
+  if (!media || !isDeadMediaUrl(media.url)) return media;
+  const live = openseaLiveUrl(responseOpensea, mediaKind(media) !== "video");
+  return live ? { ...media, url: live } : media;
+}
+
 /**
  * Pick the best media blob for display, preferring an animated/video variant,
- * then the optimized display variant, then the raw original.
+ * then the optimized display variant, then the raw original. Dead source URLs
+ * are revived from response_opensea where possible.
  */
 export function pickDisplayMedia(nft: {
   display_animation_info?: unknown;
   display_media_info?: unknown;
   media_info?: unknown;
+  response_opensea?: unknown;
 }): MediaInfo | null {
-  return (
+  const media =
     (nft.display_animation_info as MediaInfo) ||
     (nft.display_media_info as MediaInfo) ||
     (nft.media_info as MediaInfo) ||
-    null
-  );
+    null;
+  return reviveMedia(media, nft.response_opensea);
+}
+
+/**
+ * Pick the best STILL preview image for a work. Video/animated pieces keep their
+ * clip in `display_animation_info` while a poster still lives in
+ * `display_media_info` / `media_info` — so overview cards can show a lightweight
+ * image instead of autoplaying a multi-megabyte video. Returns null when every
+ * variant is motion media (some works have video in all three slots), letting
+ * callers fall back to `pickDisplayMedia`.
+ */
+export function pickPreviewMedia(nft: {
+  display_media_info?: unknown;
+  media_info?: unknown;
+  response_opensea?: unknown;
+}): MediaInfo | null {
+  for (const candidate of [nft.display_media_info, nft.media_info]) {
+    const media = (candidate as MediaInfo) || null;
+    if (!media) continue;
+    const kind = mediaKind(media);
+    if (kind === "image" || kind === "svg" || kind === "raw") {
+      return reviveMedia(media, nft.response_opensea);
+    }
+  }
+  return null;
 }
 
 /** Clamp display dimensions to a max edge while preserving aspect ratio. */

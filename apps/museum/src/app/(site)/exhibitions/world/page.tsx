@@ -19,7 +19,11 @@ export default async function WorldPage() {
     title: r.title || "Untitled room",
     architect: r.architect,
     modelUrl: r.model ? assetUrl(r.model) : undefined,
-    imageUrl: r.image ? assetUrl(r.image) : undefined,
+    // Used as a 3D plane texture — a medium WebP is ample and avoids loading
+    // 100+ multi-megabyte JPEGs into the scene at once.
+    imageUrl: r.image
+      ? assetUrl(r.image, { width: 1024, quality: 78, format: "webp" })
+      : undefined,
   }));
 
   return (

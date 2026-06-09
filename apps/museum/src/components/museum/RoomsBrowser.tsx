@@ -21,6 +21,8 @@ export interface RoomView {
   series?: string | null;
   modelUrl?: string;
   imageUrl?: string;
+  // Larger variant for the full-screen lightbox; falls back to imageUrl.
+  imageLargeUrl?: string;
 }
 
 export default function RoomsBrowser({ rooms }: { rooms: RoomView[] }) {
@@ -175,9 +177,9 @@ function RoomLightbox({
         {room.modelUrl ? (
           // Truly fullscreen 3D — the viewer fills the whole stage, model centered.
           <Room3DViewer key={room.id} url={room.modelUrl} className="absolute inset-0" />
-        ) : room.imageUrl ? (
+        ) : room.imageLargeUrl || room.imageUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={room.imageUrl} alt={room.title} className="mx-auto max-h-[82vh] max-w-5xl object-contain px-4" />
+          <img src={room.imageLargeUrl || room.imageUrl} alt={room.title} className="mx-auto max-h-[82vh] max-w-5xl object-contain px-4" />
         ) : null}
         {hasNext && <Nav side="right" onClick={() => go(1)} />}
       </div>

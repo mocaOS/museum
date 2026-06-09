@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { ChatMessage, Source } from "@/types";
 import { t } from "@/lib/i18n";
 import { useLocale } from "@/lib/i18n-client";
@@ -21,6 +21,21 @@ export default function MessageList({
 }: Props) {
   useLocale();
   const endRef = useRef<HTMLDivElement>(null);
+
+  // Conversation-wide source pool keyed by `sid`, so a message can resolve
+  // `[src_N]` citations that point at documents first retrieved on an earlier
+  // turn. First occurrence of a `sid` wins.
+  const sourceLedger = useMemo(() => {
+    const ledger = new Map<string, Source>();
+    for (const msg of messages) {
+      for (const source of msg.sources ?? []) {
+        if (source.sid && !ledger.has(source.sid)) {
+          ledger.set(source.sid, source);
+        }
+      }
+    }
+    return ledger;
+  }, [messages]);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -52,6 +67,7 @@ export default function MessageList({
             key={msg.id}
             message={msg}
             onSourceClick={onSourceClick}
+            sourceLedger={sourceLedger}
           />
         ))}
         <div ref={endRef} />

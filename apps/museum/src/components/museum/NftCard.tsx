@@ -1,7 +1,7 @@
 "use client";
 
 import type { Nft } from "@/lib/museum/directus";
-import { pickDisplayMedia } from "@/lib/museum/media";
+import { pickDisplayMedia, pickPreviewMedia, mediaKind } from "@/lib/museum/media";
 import MediaView from "./MediaView";
 
 interface Props {
@@ -10,8 +10,12 @@ interface Props {
 }
 
 export default function NftCard({ nft, onView }: Props) {
-  const media = pickDisplayMedia(nft);
+  const display = pickDisplayMedia(nft);
+  // Overview card: show the still poster when the work is a video; the full
+  // clip plays in the lightbox.
+  const media = pickPreviewMedia(nft) ?? display;
   if (!media) return null;
+  const isVideo = mediaKind(display) === "video";
 
   return (
     <button
@@ -20,6 +24,20 @@ export default function NftCard({ nft, onView }: Props) {
       style={{ borderColor: "var(--border)", background: "var(--card)" }}
     >
       <MediaView media={media} alt={nft.name ?? "Artwork"} fit="cover" className="w-full" />
+
+      {/* Video affordance — the still is a poster; the clip plays in the lightbox */}
+      {isVideo && (
+        <span
+          className="absolute left-2 top-2 flex items-center gap-1 rounded-full px-2 py-1 text-[10px] uppercase tracking-wide"
+          style={{ background: "oklch(0 0 0 / 0.55)", color: "oklch(1 0 0)" }}
+          aria-hidden
+        >
+          <svg className="h-3 w-3" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M8 5v14l11-7z" />
+          </svg>
+          Video
+        </span>
+      )}
 
       {/* Always-visible caption strip */}
       <div

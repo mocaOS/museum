@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { Metadata } from "next";
 import { listTopCollections, listCollectionPreviews } from "@/lib/museum/directus";
-import { pickDisplayMedia } from "@/lib/museum/media";
+import { pickDisplayMedia, pickPreviewMedia } from "@/lib/museum/media";
 import CollectionCard from "@/components/museum/CollectionCard";
 
 export const dynamic = "force-dynamic";
@@ -46,7 +46,8 @@ export default async function HomePage() {
     featured.map(async (c) => {
       const slugs = [c.slug, ...(c.child_collections || []).map((cc) => cc.slug)];
       const nfts = await listCollectionPreviews(slugs, 12);
-      return nfts.map((n) => pickDisplayMedia(n));
+      // Prefer a still poster so video works don't autoplay in the overview.
+      return nfts.map((n) => pickPreviewMedia(n) ?? pickDisplayMedia(n));
     })
   );
 

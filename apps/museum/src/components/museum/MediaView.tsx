@@ -66,6 +66,10 @@ export default function MediaView({
     );
   } else if (kind === "video" || kind === "gif") {
     // GIFs are served as mp4 too (animated, lighter), matching the legacy app.
+    // Video autoplays muted/looped here. The card-level perf win comes from
+    // pickPreviewMedia(), which feeds a still poster for video works that have
+    // one — so only the minority of video-only works reach this branch and play
+    // (showing the art instead of a blank poster frame).
     const src = rawFallback
       ? rawUrl
       : proxiedUrl(rawUrl, { width: 1200, format: "mp4", q: 75 });

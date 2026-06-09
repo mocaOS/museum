@@ -61,10 +61,34 @@ function client() {
   return createDirectus<Schema>(getDirectusUrl()).with(rest());
 }
 
-/** Asset URL for a Directus file id (rooms images/models). */
-export function assetUrl(fileId?: string | null): string {
+/** On-the-fly image transform options for the Directus assets endpoint. */
+export interface AssetTransform {
+  width?: number;
+  height?: number;
+  quality?: number;
+  fit?: "cover" | "contain" | "inside" | "outside";
+  format?: "webp" | "jpg" | "png" | "auto";
+}
+
+/**
+ * Asset URL for a Directus file id (rooms images/models). Pass `transform` to
+ * have Directus generate (and cache) a resized/re-encoded variant on demand —
+ * the source room images are multi-megabyte JPEGs, so requesting a sized WebP
+ * thumbnail cuts payloads ~100x. Transforms are cached at the origin/CDN, so
+ * the first request warms every later one. Models (.glb/.gltf) take no transform.
+ */
+export function assetUrl(fileId?: string | null, transform?: AssetTransform): string {
   if (!fileId) return "";
-  return `${getDirectusUrl()}/assets/${fileId}`;
+  const base = `${getDirectusUrl()}/assets/${fileId}`;
+  if (!transform) return base;
+  const params = new URLSearchParams();
+  if (transform.width) params.set("width", String(transform.width));
+  if (transform.height) params.set("height", String(transform.height));
+  if (transform.quality) params.set("quality", String(transform.quality));
+  if (transform.fit) params.set("fit", transform.fit);
+  if (transform.format) params.set("format", transform.format);
+  const qs = params.toString();
+  return qs ? `${base}?${qs}` : base;
 }
 
 export const DEFAULT_COLLECTION_SLUG = "the-genesis-collection";
