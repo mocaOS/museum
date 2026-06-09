@@ -9,6 +9,7 @@ const NAV = [
   { href: "/exhibitions", label: "Exhibitions" },
   { href: "/writings", label: "Writings" },
   { href: "/timeline", label: "Timeline" },
+  { href: "https://museumofcrypto.substack.com/", label: "Newsletter", external: true },
   { href: "https://codex.decc0s.com/", label: "Art DeCC0s", external: true },
   { href: "https://vibe.museumofcryptoart.com/", label: "Vibe Studio", external: true },
 ];
