@@ -1,10 +1,16 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { embedSrc, type VideoRef } from "@/lib/museum/video";
+import { embedSrc, posterSrc, type VideoRef } from "@/lib/museum/video";
 
 // On-page player. Embeds YouTube/Vimeo in a 16:9 frame with a fallback link
 // below in case the embed is blocked (some videos disable embedding).
+//
+// Perceived load: we never hide the iframe behind our own spinner. The poster
+// frame paints instantly as the backdrop and the iframe sits on top fully
+// opaque, so the visitor sees the video still immediately and then YouTube's
+// own player fades in — instead of staring at a spinner until the (late)
+// onLoad event.
 //
 // Esc-to-close keeps working even after the user clicks into the player: a
 // cross-origin iframe steals keyboard focus, so a window keydown listener alone
@@ -19,6 +25,7 @@ export default function VideoPlayerModal({
 }) {
   const shellRef = useRef<HTMLDivElement>(null);
   const [ready, setReady] = useState(false);
+  const poster = posterSrc(video);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -67,20 +74,22 @@ export default function VideoPlayerModal({
           className="relative aspect-video w-full overflow-hidden rounded-[var(--radius-lg)] border"
           style={{ borderColor: "var(--border)", background: "oklch(0 0 0)" }}
         >
-          {!ready && (
-            <div className="absolute inset-0 z-0 flex items-center justify-center">
-              <span
-                className="h-7 w-7 animate-spin rounded-full border-2 border-current border-t-transparent"
-                style={{ color: "oklch(0.7 0 0)" }}
-              />
-            </div>
+          {/* Poster paints instantly as the backdrop so the frame is visible
+              the moment the modal opens; YouTube's player fades in on top. */}
+          {poster && (
+            <img
+              src={poster}
+              alt=""
+              aria-hidden
+              className="absolute inset-0 z-0 h-full w-full object-cover"
+            />
           )}
           <iframe
             src={embedSrc(video)}
             title={video.title}
             onLoad={() => setReady(true)}
             className="absolute inset-0 z-10 h-full w-full transition-opacity duration-300"
-            style={{ opacity: ready ? 1 : 0 }}
+            style={{ opacity: poster && !ready ? 0 : 1 }}
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
             allowFullScreen
           />

@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { posterSrc, type VideoRef } from "@/lib/museum/video";
 import VideoPlayerModal from "./VideoPlayerModal";
+import VideoEmbedPreconnect from "./VideoEmbedPreconnect";
 
 interface Stream {
   id: string;
@@ -54,6 +55,7 @@ export default function MocaLiveBrowser({ data }: { data: MocaLive }) {
 
   return (
     <>
+      <VideoEmbedPreconnect />
       {/* Podcast / audio */}
       <a
         href={data.spotify.url}

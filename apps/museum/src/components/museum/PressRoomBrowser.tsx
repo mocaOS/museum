@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { posterSrc, type VideoPlatform, type VideoRef } from "@/lib/museum/video";
 import VideoPlayerModal from "./VideoPlayerModal";
+import VideoEmbedPreconnect from "./VideoEmbedPreconnect";
 
 interface Article {
   title: string;
@@ -121,6 +122,7 @@ export default function PressRoomBrowser({ data }: { data: PressRoom }) {
 
   return (
     <>
+      <VideoEmbedPreconnect />
       <div className="mb-10 flex flex-wrap gap-2">
         {FILTERS.map((f) => (
           <button
