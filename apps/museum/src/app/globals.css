@@ -1,0 +1,458 @@
+@import "tailwindcss";
+
+/*
+ * Cortex design system (derived from the MOCA design language).
+ *
+ * Monochrome OKLCh surfaces + a single chromatic accent. Accent stays runtime-
+ * overridable (see src/lib/config.ts + layout.tsx); everything else is fixed.
+ * Dark mode is primary; light is retained as a fallback but the app mounts
+ * with class="dark" on <html>.
+ *
+ * Legacy hex vars (--bg-primary, --bg-secondary, …) are preserved as aliases
+ * so existing components keep rendering while we migrate to MOCA tokens.
+ */
+
+/* ============================================
+   Fonts (served from /public/fonts)
+   ============================================ */
+@font-face {
+  font-family: "Inter";
+  src: url("/fonts/InterVariable.ttf") format("truetype-variations"),
+       url("/fonts/InterVariable.ttf") format("truetype");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Inter";
+  src: url("/fonts/InterVariable-Italic.ttf") format("truetype-variations"),
+       url("/fonts/InterVariable-Italic.ttf") format("truetype");
+  font-weight: 100 900;
+  font-style: italic;
+  font-display: swap;
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("/fonts/JetBrainsMono.ttf") format("truetype-variations"),
+       url("/fonts/JetBrainsMono.ttf") format("truetype");
+  font-weight: 100 800;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("/fonts/JetBrainsMono-Italic.ttf") format("truetype-variations"),
+       url("/fonts/JetBrainsMono-Italic.ttf") format("truetype");
+  font-weight: 100 800;
+  font-style: italic;
+  font-display: swap;
+}
+
+/* ============================================
+   Light theme (fallback)
+   ============================================ */
+:root {
+  /* MOCA tokens */
+  --bg: oklch(1.0000 0 0);
+  --fg: oklch(0.1448 0 0);
+  --card: oklch(1.0000 0 0);
+  --card-fg: oklch(0.1448 0 0);
+  --popover: oklch(1.0000 0 0);
+  --popover-fg: oklch(0.1448 0 0);
+  --fg1: oklch(0.1448 0 0);
+  --fg2: oklch(0.5486 0 0);
+  --fg3: oklch(0.7090 0 0);
+  --primary: oklch(0.2046 0 0);
+  --primary-fg: oklch(0.9851 0 0);
+  --secondary: oklch(0.9702 0 0);
+  --secondary-fg: oklch(0.2046 0 0);
+  --muted: oklch(0.9702 0 0);
+  --muted-fg: oklch(0.5486 0 0);
+  --accent-fg: oklch(0.1448 0 0);
+  --destructive: oklch(0.5830 0.2387 28.4765);
+  --destructive-fg: oklch(0.9702 0 0);
+  --success: oklch(0.55 0.10 155);
+  --success-fg: oklch(0.97 0 0);
+  --warning: oklch(0.68 0.13 55);
+  --warning-fg: oklch(0.15 0 0);
+  --info: oklch(0.58 0.07 240);
+  --info-fg: oklch(0.97 0 0);
+  --ring: oklch(0.7090 0 0);
+  --input: oklch(0.9219 0 0);
+  --sidebar: oklch(0.9851 0 0);
+  --sidebar-fg: oklch(0.1448 0 0);
+
+  /* Legacy aliases — keep existing components working */
+  --bg-primary: var(--bg);
+  --bg-secondary: var(--sidebar);
+  --bg-tertiary: var(--muted);
+  --border: oklch(0.9219 0 0);
+  --text-primary: var(--fg1);
+  --text-secondary: var(--fg2);
+
+  /* Baseline accent — /api/config overrides this at runtime. */
+  --accent: oklch(0.79 0.18 70.67);
+
+  /* Global UI scale — the whole app renders at this factor (browser-zoom
+     equivalent). 1 = 100%. The museum renders at native scale; a >1 value
+     (e.g. the legacy 1.5) interacts badly with overflow:hidden + hover
+     transforms, breaking card image clipping. See `body { zoom }` and the
+     .h-dvh / .max-h-dvh overrides below that compensate viewport units. */
+  --ui-scale: 1;
+
+  /* Shape */
+  --radius: 0.5rem;
+  --radius-sm: 0.25rem;
+  --radius-md: 0.375rem;
+  --radius-lg: 0.5rem;
+  --radius-xl: 1rem;
+
+  /* Motion */
+  --ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-out: cubic-bezier(0, 0, 0.2, 1);
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+  --dur-micro: 150ms;
+  --dur-fast: 200ms;
+  --dur-std: 300ms;
+  --dur-slow: 400ms;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px oklch(0 0 0 / 0.30);
+  --shadow-md: 0 4px 6px oklch(0 0 0 / 0.35);
+  --shadow-lg: 0 10px 15px oklch(0 0 0 / 0.40);
+  --shadow-xl: 0 20px 25px oklch(0 0 0 / 0.50);
+
+  /* Fonts */
+  --font-sans: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+
+/* ============================================
+   Dark theme (primary experience)
+   ============================================ */
+.dark {
+  color-scheme: dark;
+  --bg: oklch(0.1448 0 0);
+  --fg: oklch(0.9851 0 0);
+  --card: oklch(0.2134 0 0);
+  --card-fg: oklch(0.9851 0 0);
+  --popover: oklch(0.2686 0 0);
+  --popover-fg: oklch(0.9851 0 0);
+  --fg1: oklch(0.9851 0 0);
+  --fg2: oklch(0.7090 0 0);
+  --fg3: oklch(0.5555 0 0);
+  --primary: oklch(0.9851 0 0);
+  --primary-fg: oklch(0.1448 0 0);
+  --secondary: oklch(0.2686 0 0);
+  --secondary-fg: oklch(0.9851 0 0);
+  --muted: oklch(0.2686 0 0);
+  --muted-fg: oklch(0.7090 0 0);
+  --accent-fg: oklch(0.1448 0 0);
+  --destructive: oklch(0.7022 0.1892 22.2279);
+  --destructive-fg: oklch(0.2686 0 0);
+  --success: oklch(0.65 0.11 155);
+  --success-fg: oklch(0.15 0 0);
+  --warning: oklch(0.78 0.14 60);
+  --warning-fg: oklch(0.15 0 0);
+  --info: oklch(0.68 0.08 240);
+  --info-fg: oklch(0.15 0 0);
+  --ring: oklch(0.4386 0 0);
+  --input: oklch(0.2800 0 0);
+  --sidebar: oklch(0.2046 0 0);
+  --sidebar-fg: oklch(0.9851 0 0);
+
+  /* Legacy aliases */
+  --bg-primary: var(--bg);
+  --bg-secondary: var(--sidebar);
+  --bg-tertiary: var(--muted);
+  --border: oklch(0.3407 0 0);
+  --text-primary: var(--fg1);
+  --text-secondary: var(--fg2);
+}
+
+* {
+  box-sizing: border-box;
+  border-color: var(--border);
+}
+
+html {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: var(--bg);
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  /* Height intentionally not fixed to 100% here: the app's full-height shells
+     use `.h-dvh` (compensated below), and a fixed body height would itself be
+     scaled by `zoom` and overflow the viewport by (--ui-scale - 1). */
+  min-height: 100%;
+  background: var(--bg);
+  color: var(--fg1);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+  font-feature-settings: "ss01", "cv11";
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  /* Render the entire app at --ui-scale (default 150%). `zoom` scales layout
+     like browser zoom — unlike a transform it keeps document flow, focus, and
+     fixed positioning intact. Supported in all current evergreen browsers. */
+  zoom: var(--ui-scale);
+}
+
+/* `zoom` multiplies viewport units too, so a raw 100dvh shell would render at
+   150dvh and overflow. Dividing by --ui-scale maps these back to the real
+   viewport. All full-height shells in the app use .h-dvh / .max-h-dvh; modals
+   that use vh do the same calc inline. Unlayered → wins over Tailwind's. */
+.h-dvh {
+  height: calc(100dvh / var(--ui-scale));
+}
+.min-h-dvh {
+  min-height: calc(100dvh / var(--ui-scale));
+}
+.max-h-dvh {
+  max-height: calc(100dvh / var(--ui-scale));
+}
+
+/* ============================================
+   Surfaces — glass, cards, glow
+   ============================================ */
+.glass {
+  background-color: oklch(0.21 0 0 / 0.55);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid oklch(1 0 0 / 0.1);
+}
+.glass-strong {
+  background-color: oklch(0.15 0 0 / 0.75);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid oklch(1 0 0 / 0.1);
+}
+.glow-accent {
+  box-shadow: 0 0 20px color-mix(in oklch, var(--accent) 35%, transparent);
+}
+
+/* ============================================
+   Scrollbar
+   ============================================ */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--muted);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--ring);
+}
+
+::selection {
+  background: var(--accent);
+  color: var(--accent-fg);
+}
+
+/* Native <select> dropdown — force readable colors in the popup.
+   Browsers render <option> with system colors unless forced, which
+   produces white-on-white on some Linux/Firefox builds. */
+select {
+  color-scheme: dark;
+}
+option {
+  background: var(--card);
+  color: var(--fg1);
+}
+option:checked,
+option:hover {
+  background: var(--muted);
+}
+
+/* ============================================
+   Markdown content
+   ============================================ */
+.markdown-content h1,
+.markdown-content h2,
+.markdown-content h3 {
+  font-weight: 600;
+  margin-top: 1em;
+  margin-bottom: 0.5em;
+  letter-spacing: -0.01em;
+}
+.markdown-content h1 {
+  font-size: 1.25rem;
+}
+.markdown-content h2 {
+  font-size: 1.125rem;
+}
+.markdown-content h3 {
+  font-size: 1rem;
+}
+.markdown-content p {
+  margin-bottom: 0.75em;
+  line-height: 1.65;
+}
+.markdown-content ul,
+.markdown-content ol {
+  margin-bottom: 0.75em;
+  padding-left: 1.5em;
+}
+.markdown-content li {
+  margin-bottom: 0.25em;
+  line-height: 1.65;
+}
+.markdown-content code {
+  background: var(--muted);
+  padding: 0.15em 0.4em;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: 0.875em;
+}
+.markdown-content pre {
+  background: var(--muted);
+  padding: 1em;
+  border-radius: var(--radius);
+  overflow-x: auto;
+  margin-bottom: 0.75em;
+  font-family: var(--font-mono);
+}
+.markdown-content pre code {
+  background: none;
+  padding: 0;
+}
+.markdown-content blockquote {
+  border-left: 2px solid var(--accent);
+  padding-left: 1em;
+  margin-left: 0;
+  color: var(--fg2);
+}
+.markdown-content a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-underline-offset: 3px;
+}
+.markdown-content table {
+  border-collapse: collapse;
+  width: 100%;
+  margin-bottom: 0.75em;
+}
+.markdown-content th,
+.markdown-content td {
+  border: 1px solid var(--border);
+  padding: 0.5em 0.75em;
+  text-align: left;
+}
+.markdown-content th {
+  background: var(--muted);
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--fg2);
+}
+
+/* ============================================
+   Inline source citation (sup badge)
+   ============================================ */
+.source-citation {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.25em;
+  height: 1.25em;
+  font-size: 0.68em;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  background: var(--accent);
+  color: var(--accent-fg);
+  border-radius: 50%;
+  cursor: pointer;
+  vertical-align: super;
+  margin: 0 1px;
+  transition: transform 0.15s var(--ease-out), opacity 0.15s var(--ease-out);
+}
+.source-citation:hover {
+  transform: scale(1.15);
+  opacity: 0.85;
+}
+
+/* ============================================
+   Thinking / pulse animations
+   ============================================ */
+@keyframes pulse-dot {
+  0%,
+  100% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+.thinking-dot {
+  animation: pulse-dot 1.2s ease-in-out infinite;
+}
+.thinking-dot:nth-child(2) {
+  animation-delay: 0.2s;
+}
+.thinking-dot:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+/* Live "working" dot — solid accent core with an expanding ping ring. The
+   primary "it's alive, not stuck" cue during the silent pre-token window. */
+.live-dot {
+  position: relative;
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  flex-shrink: 0;
+  border-radius: 9999px;
+  background: var(--accent);
+}
+.live-dot::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  background: var(--accent);
+  animation: live-ping 1.5s var(--ease-out) infinite;
+}
+@keyframes live-ping {
+  0% {
+    transform: scale(1);
+    opacity: 0.55;
+  }
+  70%,
+  100% {
+    transform: scale(2.6);
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .live-dot::before {
+    animation: none;
+  }
+}
+
+.thinking-steps-fade {
+  mask-image: linear-gradient(
+    to bottom,
+    black 0%,
+    black calc(100% - 28px),
+    transparent 100%
+  );
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    black 0%,
+    black calc(100% - 28px),
+    transparent 100%
+  );
+}

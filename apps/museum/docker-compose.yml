@@ -1,0 +1,16 @@
+services:
+  moca-museum:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      # Cortex (MOCA Library) — single read-only key, anonymous public Library
+      CORTEX_API_URL: ${CORTEX_API_URL:-https://library.moca.qwellco.de}
+      CORTEX_API_KEY: ${CORTEX_API_KEY}
+      # Directus (museum CMS)
+      DIRECTUS_URL: ${DIRECTUS_URL:-https://api.moca.qwellco.de}
+      MEDIA_BASE_URL: ${MEDIA_BASE_URL:-https://media.qwellcode.de/api}
+      IPFS_GATEWAY: ${IPFS_GATEWAY:-https://ipfs.qwellcode.de/ipfs/}
+    ports:
+      - "${PORT:-3331}:3331"
+    restart: unless-stopped

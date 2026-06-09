@@ -1,0 +1,32 @@
+{
+  "intro": "A living reading list — the manifestos, papers, and essays that shaped crypto art and the culture around it. Curated by the Museum of Crypto Art.",
+  "items": [
+    { "title": "Bitcoin: A Peer-to-Peer Electronic Cash System", "author": "Satoshi Nakamoto", "date": "2008-10-31", "url": "https://bitcoin.org/bitcoin.pdf", "category": "crypto" },
+    { "title": "A Cypherpunk's Manifesto", "author": "Eric Hughes", "date": "1993-03-09", "url": "https://www.activism.net/cypherpunk/manifesto.html", "category": "crypto" },
+    { "title": "The Crypto Anarchist Manifesto", "author": "Timothy C. May", "date": "1992-01-01", "url": "https://groups.csail.mit.edu/mac/classes/6.805/articles/crypto/cypherpunks/may-crypto-manifesto.html", "category": "crypto" },
+    { "title": "How to Time-Stamp a Digital Document", "author": "Stuart Haber; W. Scott Stornetta", "date": "1991-01-01", "url": "https://link.springer.com/article/10.1007/BF00196791", "category": "crypto" },
+    { "title": "The Most Important Scarce Resource is Legitimacy", "author": "Vitalik Buterin", "date": "2021-03-23", "url": "https://vitalik.ca/general/2021/03/23/legitimacy.html", "category": "crypto" },
+    { "title": "Crypto Art: A Decentralized View", "author": "Franceschet, Colavizza, et al.", "date": "2019-06-11", "url": "https://arxiv.org/pdf/1906.03263.pdf", "category": "cryptoart" },
+    { "title": "Art and Blockchain", "author": "Amy Whitaker", "date": "2019-10-18", "url": "https://artivate.org/artivate/article/view/94", "category": "cryptoart" },
+    { "title": "What Is CryptoArt?", "author": "Artnome", "date": "2018-01-19", "url": "https://www.artnome.com/news/2018/1/14/what-is-cryptoart", "category": "cryptoart" },
+    { "title": "History of Crypto Art", "author": "Martin Lukas Ostachowski", "date": "2021-01-01", "url": "https://ostachowski.com/about/what-is-crypto-art-or-nft-art/history-of-crypto-art/", "category": "cryptoart" },
+    { "title": "The History of Non-Fungible Tokens (NFTs)", "author": "Andrew Steinwold", "date": "2019-10-07", "url": "https://medium.com/@Andrew.Steinwold/the-history-of-non-fungible-tokens-nfts-f362ca57ae10", "category": "nft" },
+    { "title": "How to Look at NFTs", "author": "ARTnews", "date": "2021-03-04", "url": "https://www.artnews.com/art-in-america/features/nft-art-1234585590/", "category": "nft" },
+    { "title": "The Non-Fungible Token Bible", "author": "OpenSea", "date": "2020-01-10", "url": "https://opensea.io/blog/guides/non-fungible-tokens/", "category": "nft" },
+    { "title": "Art After Philosophy", "author": "Joseph Kosuth", "date": "1969-10-01", "url": "https://ubu.com/papers/kosuth_philosophy.html", "category": "art" },
+    { "title": "Contemporary Art is Post-conceptual Art", "author": "Peter Osborne", "date": "2010-01-01", "url": "http://www.fondazioneratti.org/mat/mostre/Contemporary%20art%20is%20post-conceptual%20art%20/Leggi%20il%20testo%20della%20conferenza%20di%20Peter%20Osborne%20in%20PDF.pdf", "category": "art" },
+    { "title": "This is not a Pipe", "author": "Michel Foucault", "date": "1973-01-01", "url": "https://monoskop.org/images/9/99/Foucault_Michel_This_Is_Not_a_Pipe.pdf", "category": "art" },
+    { "title": "The Dada Manifesto", "author": "Hugo Ball", "date": "1916-07-14", "url": "https://en.wikisource.org/wiki/Dada_Manifesto_(1916,_Hugo_Ball)", "category": "art" },
+    { "title": "The Futurist Manifesto", "author": "Filippo Tommaso Marinetti", "date": "1909-02-20", "url": "https://391.org/manifestos/1909-the-futurist-manifesto-f-t-marinetti/", "category": "art" },
+    { "title": "Drop Everything", "author": "André Breton", "date": "1922-04-11", "url": "https://391.org/manifestos/1922-drop-everything-andre-breton/", "category": "art" },
+    { "title": "First Infrarealist Manifesto", "author": "Roberto Bolaño", "date": "1976-01-01", "url": "http://altarpiece.blogspot.com/2009/06/first-infrarealist-manifesto-english.html", "category": "art" },
+    { "title": "The Library of Babel", "author": "Jorge Luis Borges", "date": "1941-01-01", "url": "https://blogs.commons.georgetown.edu/modernities-working-group/files/2013/07/borges_the-library-of-babel.pdf", "category": "art" },
+    { "title": "The Flowers of Evil", "author": "Charles Baudelaire", "date": "1857-01-01", "url": "https://www.gutenberg.org/files/36098/36098-h/36098-h.htm", "category": "art" },
+    { "title": "Poems of Paul Verlaine", "author": "Paul Verlaine", "date": "1895-01-01", "url": "https://www.gutenberg.org/files/8426/8426-h/8426-h.htm", "category": "art" },
+    { "title": "Marcel Duchamp interview on Art and Dada (1956)", "author": "Marcel Duchamp", "date": "1956-01-01", "url": "https://youtu.be/Wuf_GHmjxLM", "category": "art" },
+    { "title": "David Bowie and Julian Schnabel on \"Basquiat\" (1996)", "author": "David Bowie; Julian Schnabel", "date": "1996-01-01", "url": "https://youtu.be/ExDfj-_D6Sk", "category": "art" },
+    { "title": "The Ideology of Cyberspace", "author": "V. N. Pervushina; S. N. Khutornoy", "date": "2017-01-01", "url": "http://sociosphera.com/files/conference/2017/Paradigmata_poznani_3-17/pp_3-17.pdf#page=11", "category": "politics" },
+    { "title": "Other Worlds Are (already) Possible", "author": "Arturo Escobar", "date": "2003-01-01", "url": "https://zcomm.org/znetarticle/other-worlds-are-already-possible-cyber-internationalism-and-post-capitalist-cultures-by-arturo-escobar/", "category": "politics" },
+    { "title": "Create Your Own NFT Store with WordPress Plugins", "author": "Nino Arteiro", "date": "2020-11-01", "url": "https://forum.openzeppelin.com/t/create-your-own-nft-store-on-your-website-with-wordpress-plugins/4348", "category": "nft" }
+  ]
+}
