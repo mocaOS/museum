@@ -4,7 +4,33 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Museum of Crypto Art (MOCA) — an open-source, AI-powered museum tech stack. Turborepo monorepo with a Nuxt 3 frontend, Directus headless CMS backend, ElizaOS AI agents, and Web3 integrations.
+Museum of Crypto Art (MOCA) — an open-source, AI-powered museum tech stack. Turborepo monorepo with a Directus headless CMS backend, ElizaOS AI agents, Web3 integrations, and **two** web frontends.
+
+### Frontends & domains
+
+- **`apps/museum`** (`moca-museum`) — **Next.js 16** app. This is the **current public-facing site served at `museumofcryptoart.com`**. It renders the galleries/collections/exhibitions (live from Directus), static content (writings/timeline/incubator from `src/content/*.json`), and the **Library** — an anonymous, single-read-only-key chat front-end for the Cortex RAG backend (`library.moca.qwellco.de`). See `apps/museum/CLAUDE.md` for its full architecture. It is **self-contained** — NOT a Turborepo workspace, with its own `Dockerfile`/`docker-compose.yml`, deployed standalone on Coolify (port 3331).
+- **`apps/web`** (`web`) — **Nuxt 3** frontend (Vue 3.5, TailwindCSS v4, shadcn-nuxt, TanStack Vue Query). The earlier frontend, mapped to `v2.museumofcryptoart.com` (see `packages/config`). Part of the Turborepo workspace; this is what `yarn dev:web` runs.
+
+When someone says "the museum site" / `museumofcryptoart.com`, they mean **`apps/museum`** (Next.js).
+
+## Agent guidance (read these)
+
+This file is the high-level map. Detailed, current guidance lives in dedicated files —
+read the one matching your task:
+
+- **Per-app deep docs** (auto-load when you work in that app):
+  - `apps/museum/CLAUDE.md` — the Next.js site + the Cortex Library (current product).
+  - `apps/api/CLAUDE.md` — the Directus backend (extensions, hooks/endpoints, schema sync).
+  - `apps/moca-agent/CLAUDE.md` — the ElizaOS agent system.
+- **Cross-cutting references** in `.claude/docs/`:
+  - `monorepo.md` — full layout, workspaces, and what's deprecated.
+  - `conventions.md` — code conventions (repo-wide + per-stack).
+  - `tailwind-v4.md` — Tailwind v4 reference (both frontends).
+  - `deployment.md` — how everything ships.
+
+> **Legacy note.** `apps/web` (Nuxt v2) and **R2R** are deprecated, replaced by
+> `apps/museum` + **Cortex**. The old `.cursor/rules` describe that v2 stack; they are
+> not the standard. Don't build new product surface on Nuxt/R2R.
 
 ## Common Commands
 
@@ -16,9 +42,16 @@ yarn install
 docker-compose up -d
 
 # Development
-yarn dev              # All apps
-yarn dev:web          # Web frontend + API extensions + config
+yarn dev              # All workspace apps (does NOT include apps/museum)
+yarn dev:web          # Nuxt frontend (apps/web) + API extensions + config
 yarn dev:agents       # ElizaOS agent system
+
+# apps/museum (Next.js site at museumofcryptoart.com) — standalone, not a workspace
+cd apps/museum
+npm install           # its own node_modules (next@16); avoids root next@13 collision
+npm run dev           # dev server on port 3331
+npm run build         # production build (output: standalone)
+npm start             # serve the standalone build
 
 # Build
 yarn build            # All apps via Turbo
@@ -42,12 +75,13 @@ No unified test runner exists at the root. The moca-agent app has its own test s
 
 ### Monorepo Layout
 
-- **apps/web** — Nuxt 3 frontend (Vue 3.5, TailwindCSS v4, shadcn-nuxt, TanStack Vue Query)
+- **apps/museum** — Next.js 16 public site at `museumofcryptoart.com` (galleries + the Cortex Library). Self-contained, not a workspace; see `apps/museum/CLAUDE.md`
+- **apps/web** — Nuxt 3 frontend (Vue 3.5, TailwindCSS v4, shadcn-nuxt, TanStack Vue Query), `v2.museumofcryptoart.com`
 - **apps/api** — Directus 11 instance with custom extensions, PostgreSQL 17, Redis 7
 - **apps/api/extensions/directus-extension-moca** — Main Directus extension (hooks + endpoints)
 - **apps/api/extensions/directus-extension-raw-query** — Raw SQL query extension
 - **apps/moca-agent** — ElizaOS AI agent (has its own CLAUDE.md with detailed guidance)
-- **apps/scripts** — Bun-based utility scripts (CSV imports, R2R API key management)
+- **apps/scripts** — Bun-based utility scripts (CSV imports, key management)
 - **apps/migration** — Legacy migration tools
 - **packages/config** — Shared environment config (dev/staging/prod), imported as `@local/config`
 - **packages/types** — Shared TypeScript types (directus.d.ts, opensea.d.ts, google-sheets.d.ts)
@@ -57,55 +91,35 @@ No unified test runner exists at the root. The moca-agent app has its own test s
 
 Defined in root package.json: `apps/api`, `apps/api/extensions/*`, `apps/web`, `apps/moca-agent`, `packages/*`.
 
-### Directus Extension Architecture
+**`apps/museum` is intentionally NOT a workspace** — it is a self-contained Next.js app with its own lockfile and dependencies (so its `next@16` doesn't collide with `next-auth`'s `next@13` peer in `apps/web`). Install and build it standalone from inside `apps/museum` (see below), not via root `turbo`.
 
-The main extension (`directus-extension-moca`) contains:
-- **Hooks**: `insert-opensea-data`, `opensea-listings-sync`, `r2r-document-sync`, `r2r-graph-pull`, `coolify-logs-sync`
-- **Endpoints**: `applications`, `codex`, `listings`
+### Directus backend (`apps/api`)
 
-These hooks run as async event handlers on Directus item lifecycle events. Endpoints are custom REST routes under `/api/`.
+The `directus-extension-moca` bundle adds **hooks** (`insert-opensea-data`,
+`opensea-listings-sync`, `coolify-logs-sync`, plus the legacy `r2r-document-sync` /
+`r2r-graph-pull`) and **endpoints** (`applications`, `codex`, `listings`). Schema/config
+is version-controlled via `directus-sync` under `apps/api/directus-config/`. Full
+detail — env, build, every hook/endpoint, the R2R legacy status — is in
+**`apps/api/CLAUDE.md`**.
 
-### Data Fetching Pattern
+### apps/web (legacy Nuxt v2)
 
-All API calls in the web app use **TanStack Vue Query** with the Directus SDK:
-```js
-const { data, suspense } = useQuery({
-  queryKey: ["collection", ...deps],
-  queryFn: () => readItems("collection-name", { fields, filter })
-});
-await suspense(); // SSR compatibility
-```
-
-Key composables: `useDirectus` (Directus SDK), `useR2R` (AI search/RAG), `useSearch`, `usePagination`.
-
-### Web3 Stack
-
-Multi-chain wallet support via **@reown/appkit** (WalletConnect v3) with adapters for ethers.js and wagmi. Supports Ethereum and Solana. Signature-based authentication (no passwords).
+Maintenance only. Uses TanStack Vue Query + Directus SDK (`await suspense()` for SSR),
+the `useR2R` RAG composable, shadcn-nuxt/Radix Vue, and @reown/appkit multi-chain
+wallets. Its R2R Library and web3 features are **deprecated** (replaced by
+`apps/museum` + Cortex). Vue conventions and the `<script setup>` ordering live in
+`.claude/docs/conventions.md` under the legacy section.
 
 ## Code Conventions
 
-- **Package manager**: Bun 1.2 (declared in packageManager field); yarn also works for workspace commands
-- **Node**: >= 22
-- **TypeScript**: 5.9+, strict mode, avoid `any`
-- **Vue**: Composition API with `<script setup>` exclusively
-- **Naming**: files/dirs kebab-case, components PascalCase, variables/functions camelCase, constants UPPER_SNAKE_CASE, interfaces `IFooBar`, composables `useFoo`
-- **Imports**: Nuxt auto-imports are available (`ref`, `computed`, `watch`, `useRoute`, etc. — do not import from `vue` or `#imports`). Components are auto-imported by directory name (e.g., `App/Example/Button.vue` → `<AppExampleButton />`)
-- **UI**: shadcn-nuxt components in `components/ui/`, extended with Radix Vue primitives. Use class-variance-authority (CVA) for component variants
-- **Styling**: TailwindCSS v4 — use `@import "tailwindcss"` not `@tailwind` directives. Always specify border/ring colors explicitly (v4 defaults to `currentColor`). Use `@theme` directive for theme customization, `@utility` for custom utilities. CSS variable syntax: `bg-(--brand-color)` not `bg-[--brand-color]`
-- **Icons**: `@nuxt/icon` with Lucide icons + custom SVGs in `svg/moca/` (prefix: `moca`)
-- **Shared types**: Define in `packages/types` for cross-app reuse
+Core: Bun 1.2 for the workspace (npm for standalone `apps/museum`); Node >= 22;
+TypeScript 5.9+ strict, avoid `any`; naming — files/dirs kebab-case, components
+PascalCase, vars/functions camelCase, constants UPPER_SNAKE_CASE, interfaces `IFooBar`,
+hooks/composables `useFoo`; shared types in `packages/types`; Tailwind **v4** (specify
+border/ring colors explicitly — see `.claude/docs/tailwind-v4.md`).
 
-### Vue Component Script Order
-
-1. Imports (external only — not vue/nuxt auto-imports, not components)
-2. `definePageMeta()`
-3. Constants
-4. Refs
-5. Data fetching (with `await suspense()` after each query)
-6. Computed properties
-7. Lifecycle hooks (chronological: onBeforeMount → onMounted → watch → onBeforeUnmount → onUnmounted)
-8. Methods/event handlers
-9. SEO (`useHead()`, `useSeoMeta()`)
+**Full conventions, including per-stack specifics (Next/React for `apps/museum`,
+Directus, and legacy Nuxt), are in `.claude/docs/conventions.md`.**
 
 ## Environment Configuration
 
@@ -113,20 +127,23 @@ Multi-chain wallet support via **@reown/appkit** (WalletConnect v3) with adapter
 - **`apps/api/.env`** — Directus config (DB credentials, API keys, admin auth). Copy from `.env.example`
 - **`apps/web/.env`** — Nuxt runtime config (`NUXT_PUBLIC_DIRECTUS_URL`, `R2R_*`, `REOWN_PROJECT_ID`, `NUXT_SESSION_PASSWORD`)
 - **Nuxt runtime config** — server-only secrets (R2R credentials, LiteLLM, session) + public config (spread from `@local/config`)
+- **`apps/museum/.env`** — Next.js site. Cortex is the only required config: `CORTEX_API_URL` + a single read-only `CORTEX_API_KEY`. Plus `DIRECTUS_URL`, `NEXT_PUBLIC_SITE_URL`, and optional branding/analytics vars. No database, no auth/superadmin env — see `apps/museum/.env.example` and `apps/museum/CLAUDE.md`.
 
 ## Deployment
 
 - **CI/CD**: GitLab CI (`.gitlab-ci.yml`)
-- **Build**: Nixpacks (`nixpacks.toml`) — Node 22, `bun install --frozen-lockfile`, `bun run build`, `bun run start`
+- **Build**: Nixpacks (`nixpacks.toml`) — Node 22, `bun install --frozen-lockfile`, `bun run build`, `bun run start`. Covers the Turborepo workspaces (Directus + Nuxt + agents).
+- **`apps/museum`** deploys separately via its own `Dockerfile` (Next.js `output: standalone`, port 3331) on Coolify; point the `museumofcryptoart.com` domain at it. It has no DB volume (chat history is client-side `localStorage`).
 - **Platform**: Coolify with Traefik proxy
 - **Remote cache**: Turbo remote cache at `remote-cache.deploy.qwellco.de`
 - **Patched deps**: `@directus/api@31.0.0` has a local patch in `patches/`
 
 ## External Services
 
+- **Cortex** — RAG backend powering the `apps/museum` Library (`library.moca.qwellco.de`; [cortex.eco](https://cortex.eco)). Accessed via a single read-only API key through the museum app's `/api/*` proxy.
 - **OpenSea API** — NFT marketplace data sync (via Directus hooks)
 - **The Graph** — Blockchain data indexing
-- **R2R** — RAG/semantic search for the AI Library feature
+- **R2R** — RAG/semantic search for the AI Library feature in `apps/web` (Nuxt `useR2R`); the `apps/museum` Library uses Cortex instead
 - **LiteLLM** — LLM proxy (optional, for chat)
 - **Strapi v3** — Legacy CMS at `api.museumofcryptoart.com`
 - **Reown AppKit** — Multi-chain wallet connection

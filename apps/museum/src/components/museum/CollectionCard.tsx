@@ -14,10 +14,21 @@ interface Props {
   aspect?: string;
 }
 
-// Collection cover card. Shows a random piece (cropped to the card), with a
-// shuffle button — that stays inside the card — to click through the works.
-// On hover, the exact current piece is "spawned" larger, in its true aspect
-// ratio, floating just below the cursor: the artwork shown properly.
+// Deterministic index from a stable seed (the card href), so the initial piece
+// is varied per collection yet identical on server and client — avoids a
+// hydration mismatch that Math.random() in render would cause. The shuffle
+// button (a client-only event) still randomizes freely.
+function seededIndex(seed: string, n: number): number {
+  if (n <= 0) return 0;
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) | 0;
+  return Math.abs(h) % n;
+}
+
+// Collection cover card. Shows a piece (cropped to the card), with a shuffle
+// button — that stays inside the card — to click through the works. On hover,
+// the exact current piece is "spawned" larger, in its true aspect ratio,
+// floating just below the cursor: the artwork shown properly.
 export default function CollectionCard({
   href,
   title,
@@ -26,9 +37,7 @@ export default function CollectionCard({
   aspect = "aspect-[16/10]",
 }: Props) {
   const valid = previews.filter(Boolean) as MediaInfo[];
-  const [idx, setIdx] = useState(() =>
-    valid.length ? Math.floor(Math.random() * valid.length) : 0
-  );
+  const [idx, setIdx] = useState(() => seededIndex(href, valid.length));
   const [hover, setHover] = useState(false);
   const [pos, setPos] = useState({ x: 0, y: 0 });
   const [mounted, setMounted] = useState(false);
