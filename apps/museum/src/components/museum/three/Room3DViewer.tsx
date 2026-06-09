@@ -1,21 +1,42 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useLayoutEffect, useState } from "react";
-import { Canvas, useThree } from "@react-three/fiber";
+import {
+  Suspense,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useState,
+} from "react";
+import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import {
   OrbitControls,
   Environment,
   Lightformer,
   useGLTF,
-  AdaptiveDpr,
   BakeShadows,
 } from "@react-three/drei";
 import * as THREE from "three";
+import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
+import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
+import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
+import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
 
 // Fraction of the viewport the model's bounding sphere should cover on load.
 const FILL = 0.8;
 // Slightly elevated 3/4 viewing angle (normalised before use).
 const VIEW_DIR = new THREE.Vector3(1, 0.55, 1.1).normalize();
+// Minimum emissive intensity for any self-lit ("Neon") material. Some rooms
+// author their neon with a white, environment-lit base and emissive at the
+// default strength of 1 (e.g. Feedback Loop) — under studio lighting that reads
+// as plain white. Lifting weak emissives to this floor lets their hue dominate
+// the lit base so the neon reads in colour; rooms that already bake in a strong
+// emissive (e.g. The BLeU Room at ×10) keep their authored value.
+const EMISSIVE_FLOOR = 3;
+// Global dial on the final neon intensity — pulls the overall glow back so the
+// brightest rooms don't blow out. Applied after the floor, so it scales both
+// the authored (×10) and floored (×3) values uniformly.
+const EMISSIVE_SCALE = 0.4;
 
 function Model({
   url,
@@ -28,6 +49,24 @@ function Model({
   const { scene } = useGLTF(url, true, true);
 
   useLayoutEffect(() => {
+    // Lift weak emissives to the floor so neon reads in colour rather than as
+    // washed-out white (see EMISSIVE_FLOOR), then scale the result down. We read
+    // from a cached original (userData.baseEmissive) rather than the live value
+    // so this stays idempotent across re-runs and the GLTF cache reusing the
+    // same materials between rooms — otherwise the scale would compound.
+    scene.traverse((obj) => {
+      const mesh = obj as THREE.Mesh;
+      if (!mesh.isMesh) return;
+      const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+      for (const mat of mats) {
+        const m = mat as THREE.MeshStandardMaterial;
+        if (m?.emissive && (m.emissive.r || m.emissive.g || m.emissive.b)) {
+          const base = (m.userData.baseEmissive ??= m.emissiveIntensity ?? 1);
+          m.emissiveIntensity = Math.max(base, EMISSIVE_FLOOR) * EMISSIVE_SCALE;
+        }
+      }
+    });
+
     // Recenter the model on the world origin and report its size so the
     // camera + fog can be framed relative to it (scale-independent).
     const box = new THREE.Box3().setFromObject(scene);
@@ -72,12 +111,15 @@ function AutoFrame({
     cam.far = distance * 6 + radius * 12;
     cam.updateProjectionMatrix();
 
-    // Scale-relative fog: haze begins just in front of the model's center and
-    // closes in quickly so every room keeps a soft, enclosed atmosphere.
+    // Scale-relative fog: a soft background haze for depth, pushed *behind* the
+    // model so it never desaturates the body itself. Starting it at the model's
+    // near face (distance - radius) washed dark, self-lit rooms (e.g. The BLeU
+    // Room's neon) toward near-black; begin it just past center and trail it far
+    // out so only the deep background fades, never the visible surfaces.
     scene.fog = new THREE.Fog(
       "#0a0a0a",
-      Math.max(distance - radius, 0.01),
-      distance + radius * 1.6,
+      distance + radius * 0.5,
+      distance + radius * 6,
     );
 
     const ctl = controls as unknown as {
@@ -104,6 +146,51 @@ function AutoFrame({
       cancelAnimationFrame(raf2);
     };
   }, [radius, camera, controls, scene, size.width, size.height, onFramed]);
+
+  return null;
+}
+
+/**
+ * Adds an UnrealBloom pass so the rooms' emissive "Neon" materials bloom in
+ * their own colour (paired with EMISSIVE_FLOOR, which makes sure the hue is
+ * bright enough to bloom in the first place). Wires three's own EffectComposer
+ * directly — no extra dependency: RenderPass → UnrealBloomPass → OutputPass,
+ * where the OutputPass applies the canvas tone mapping so the framing/colour
+ * match the plain pipeline. useFrame at priority 1 takes over R3F's render.
+ */
+function PostFX() {
+  const { gl, scene, camera, size } = useThree();
+
+  const composer = useMemo(() => {
+    const c = new EffectComposer(gl);
+    c.addPass(new RenderPass(scene, camera));
+    c.addPass(
+      new UnrealBloomPass(
+        new THREE.Vector2(size.width, size.height),
+        0.45, // strength
+        0.4, // radius
+        // Luminance threshold in linear HDR: high enough that environment-lit
+        // surfaces (even white marble) stay crisp and only the emissive neon —
+        // lifted to EMISSIVE_FLOOR or beyond — actually blooms.
+        1.0,
+      ),
+    );
+    c.addPass(new OutputPass());
+    return c;
+    // Size/dpr are synced in the effect below; only rebuild on a real swap.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gl, scene, camera]);
+
+  useEffect(() => {
+    composer.setPixelRatio(gl.getPixelRatio());
+    composer.setSize(size.width, size.height);
+  }, [composer, gl, size.width, size.height]);
+
+  useEffect(() => () => composer.dispose(), [composer]);
+
+  useFrame(() => {
+    composer.render();
+  }, 1);
 
   return null;
 }
@@ -200,8 +287,8 @@ export default function Room3DViewer({
             RIGHT: THREE.MOUSE.PAN,
           }}
         />
-        <AdaptiveDpr pixelated />
         <BakeShadows />
+        <PostFX />
       </Canvas>
 
       {/* Opaque cover over the canvas until the camera is framed — hides the
