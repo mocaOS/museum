@@ -1,10 +1,21 @@
 import "server-only";
+import { cache } from "react";
+import { unstable_cache } from "next/cache";
 import {
   createDirectus,
   rest,
   readItems,
   aggregate,
 } from "@directus/sdk";
+
+// Published museum content (collections, NFTs, rooms) changes rarely, so reads
+// are cached for an hour via the Next Data Cache (unstable_cache). This works
+// even on the dynamic, searchParams-driven gallery route, where the route
+// itself can't be statically rendered — the underlying Directus reads still
+// come from cache. `react.cache` adds per-request dedup on top (e.g.
+// getCollection is called by both generateMetadata and the page in one render).
+const REVALIDATE_SECONDS = 3600;
+const CACHE_TAG = "museum-content";
 
 // Public, read-only Directus client for published museum content (collections,
 // NFTs, rooms). No auth needed — these read policies are public on the CMS.
@@ -95,52 +106,62 @@ export const DEFAULT_COLLECTION_SLUG = "the-genesis-collection";
 export const NFTS_PER_PAGE = 24;
 
 /** Top-level (parent) published collections — for galleries index + nav. */
-export async function listTopCollections(): Promise<Collection[]> {
-  const rows = await client().request(
-    readItems("collections", {
-      fields: [
-        "id",
-        "name",
-        "title",
-        "description",
-        "slug",
-        "sort",
-        { child_collections: ["id", "name", "slug"] },
-      ],
-      filter: {
-        _and: [
-          { status: { _eq: "published" } },
-          { parent_collection: { _null: true } },
+export const listTopCollections = unstable_cache(
+  async (): Promise<Collection[]> => {
+    const rows = await client().request(
+      readItems("collections", {
+        fields: [
+          "id",
+          "name",
+          "title",
+          "description",
+          "slug",
+          "sort",
+          { child_collections: ["id", "name", "slug"] },
         ],
-      },
-      sort: ["sort", "name"],
-      limit: -1,
-    })
-  );
-  return rows as unknown as Collection[];
-}
+        filter: {
+          _and: [
+            { status: { _eq: "published" } },
+            { parent_collection: { _null: true } },
+          ],
+        },
+        sort: ["sort", "name"],
+        limit: -1,
+      })
+    );
+    return rows as unknown as Collection[];
+  },
+  ["museum:top-collections"],
+  { revalidate: REVALIDATE_SECONDS, tags: [CACHE_TAG] }
+);
 
 /** A single published collection by slug, with its child collections. */
-export async function getCollection(slug: string): Promise<Collection | null> {
-  const rows = await client().request(
-    readItems("collections", {
-      fields: [
-        "id",
-        "name",
-        "title",
-        "description",
-        "essay",
-        "slug",
-        { child_collections: ["id", "name", "slug"] },
-      ],
-      filter: {
-        _and: [{ status: { _eq: "published" } }, { slug: { _eq: slug } }],
-      },
-      limit: 1,
-    })
-  );
-  return ((rows as unknown as Collection[])[0]) ?? null;
-}
+export const getCollection = cache(
+  unstable_cache(
+    async (slug: string): Promise<Collection | null> => {
+      const rows = await client().request(
+        readItems("collections", {
+          fields: [
+            "id",
+            "name",
+            "title",
+            "description",
+            "essay",
+            "slug",
+            { child_collections: ["id", "name", "slug"] },
+          ],
+          filter: {
+            _and: [{ status: { _eq: "published" } }, { slug: { _eq: slug } }],
+          },
+          limit: 1,
+        })
+      );
+      return ((rows as unknown as Collection[])[0]) ?? null;
+    },
+    ["museum:collection"],
+    { revalidate: REVALIDATE_SECONDS, tags: [CACHE_TAG] }
+  )
+);
 
 function nftFilter(slugs: string[], search?: string) {
   const base: Record<string, unknown>[] = [
@@ -159,47 +180,52 @@ function nftFilter(slugs: string[], search?: string) {
   return { _and: base };
 }
 
-export async function countNfts(
-  slugs: string[],
-  search?: string
-): Promise<number> {
-  const res = await client().request(
-    aggregate("nfts", {
-      aggregate: { count: "*" },
-      query: { filter: nftFilter(slugs, search) as never },
-    })
-  );
-  const count = (res as unknown as { count: number | string }[])[0]?.count;
-  return Number(count) || 0;
-}
+export const countNfts = unstable_cache(
+  async (slugs: string[], search?: string): Promise<number> => {
+    const res = await client().request(
+      aggregate("nfts", {
+        aggregate: { count: "*" },
+        query: { filter: nftFilter(slugs, search) as never },
+      })
+    );
+    const count = (res as unknown as { count: number | string }[])[0]?.count;
+    return Number(count) || 0;
+  },
+  ["museum:count-nfts"],
+  { revalidate: REVALIDATE_SECONDS, tags: [CACHE_TAG] }
+);
 
-export async function listNfts(opts: {
-  slugs: string[];
-  page?: number;
-  search?: string;
-  limit?: number;
-}): Promise<Nft[]> {
-  const limit = opts.limit ?? NFTS_PER_PAGE;
-  const page = Math.max(1, opts.page ?? 1);
-  const rows = await client().request(
-    readItems("nfts", {
-      fields: [
-        "id",
-        "name",
-        "artist_name",
-        "collection",
-        "media_info",
-        "display_media_info",
-        "display_animation_info",
-        "response_opensea",
-      ],
-      filter: nftFilter(opts.slugs, opts.search) as never,
-      limit,
-      offset: (page - 1) * limit,
-    })
-  );
-  return rows as unknown as Nft[];
-}
+export const listNfts = unstable_cache(
+  async (opts: {
+    slugs: string[];
+    page?: number;
+    search?: string;
+    limit?: number;
+  }): Promise<Nft[]> => {
+    const limit = opts.limit ?? NFTS_PER_PAGE;
+    const page = Math.max(1, opts.page ?? 1);
+    const rows = await client().request(
+      readItems("nfts", {
+        fields: [
+          "id",
+          "name",
+          "artist_name",
+          "collection",
+          "media_info",
+          "display_media_info",
+          "display_animation_info",
+          "response_opensea",
+        ],
+        filter: nftFilter(opts.slugs, opts.search) as never,
+        limit,
+        offset: (page - 1) * limit,
+      })
+    );
+    return rows as unknown as Nft[];
+  },
+  ["museum:list-nfts"],
+  { revalidate: REVALIDATE_SECONDS, tags: [CACHE_TAG] }
+);
 
 /** A batch of candidate pieces (with media) for a collection cover/shuffle. */
 export async function listCollectionPreviews(
@@ -214,23 +240,27 @@ export async function listCollectionPreviews(
 }
 
 /** Published rooms (immersive exhibitions). */
-export async function listRooms(): Promise<Room[]> {
-  const rows = await client().request(
-    readItems("rooms", {
-      fields: [
-        "id",
-        "title",
-        "architect",
-        "description",
-        "series",
-        "slots",
-        "image",
-        "model",
-        "token_id",
-      ],
-      sort: ["series", "title"],
-      limit: -1,
-    })
-  );
-  return rows as unknown as Room[];
-}
+export const listRooms = unstable_cache(
+  async (): Promise<Room[]> => {
+    const rows = await client().request(
+      readItems("rooms", {
+        fields: [
+          "id",
+          "title",
+          "architect",
+          "description",
+          "series",
+          "slots",
+          "image",
+          "model",
+          "token_id",
+        ],
+        sort: ["series", "title"],
+        limit: -1,
+      })
+    );
+    return rows as unknown as Room[];
+  },
+  ["museum:rooms"],
+  { revalidate: REVALIDATE_SECONDS, tags: [CACHE_TAG] }
+);

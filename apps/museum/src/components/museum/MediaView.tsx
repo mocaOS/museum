@@ -11,6 +11,12 @@ interface Props {
   fit?: "cover" | "contain";
   /** Allow model/iframe interactivity (lightbox) vs static preview (cards). */
   interactive?: boolean;
+  /**
+   * Size the media to fit fully within its container at its natural aspect
+   * ratio (letterboxed), instead of filling the box. Used by the lightbox so
+   * portrait/wide works are never cropped.
+   */
+  fitToBox?: boolean;
 }
 
 // Renders any MOCA artwork media type: image, gif, video, 3D model, svg,
@@ -22,6 +28,7 @@ export default function MediaView({
   className,
   fit = "contain",
   interactive = false,
+  fitToBox = false,
 }: Props) {
   const [loaded, setLoaded] = useState(false);
   const [rawFallback, setRawFallback] = useState(false);
@@ -29,6 +36,10 @@ export default function MediaView({
   const rawUrl = resolveMediaUrl(media?.url);
   const label = alt ?? media?.alt ?? "Artwork";
   const objectFit = fit === "cover" ? "object-cover" : "object-contain";
+  // Letterbox to fit the box (lightbox) vs fill it (cards).
+  const sizeClass = fitToBox
+    ? "max-h-full max-w-full object-contain"
+    : `h-full w-full ${objectFit}`;
 
   if (!media || !rawUrl || kind === "unsupported") {
     return (
@@ -86,7 +97,7 @@ export default function MediaView({
           if (!rawFallback) setRawFallback(true);
           else setLoaded(true);
         }}
-        className={`h-full w-full ${objectFit}`}
+        className={sizeClass}
       />
     );
   } else if (kind === "iframe") {
@@ -108,7 +119,7 @@ export default function MediaView({
         loading="lazy"
         onLoad={() => setLoaded(true)}
         onError={() => setLoaded(true)}
-        className={`h-full w-full ${objectFit}`}
+        className={sizeClass}
       />
     );
   } else {
@@ -127,7 +138,7 @@ export default function MediaView({
           if (!rawFallback) setRawFallback(true);
           else setLoaded(true);
         }}
-        className={`h-full w-full ${objectFit}`}
+        className={sizeClass}
       />
     );
   }

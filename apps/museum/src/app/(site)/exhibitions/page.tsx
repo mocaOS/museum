@@ -3,7 +3,10 @@ import Link from "next/link";
 import { listRooms, assetUrl } from "@/lib/museum/directus";
 import RoomsBrowser, { type RoomView } from "@/components/museum/RoomsBrowser";
 
-export const dynamic = "force-dynamic";
+// Rooms are cached hourly in the data layer (lib/museum/directus.ts), so the CMS
+// isn't hit per request. Route stays dynamic via the root layout (runtime
+// branding env); this revalidate applies if that constraint is lifted.
+export const revalidate = 3600;
 
 export const metadata: Metadata = {
   title: "Exhibitions",

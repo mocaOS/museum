@@ -3,7 +3,11 @@ import { listTopCollections, listCollectionPreviews } from "@/lib/museum/directu
 import { pickDisplayMedia, pickPreviewMedia } from "@/lib/museum/media";
 import CollectionCard from "@/components/museum/CollectionCard";
 
-export const dynamic = "force-dynamic";
+// Directus reads are cached hourly in the data layer (see lib/museum/directus.ts),
+// so this page no longer hits the CMS on every request. The route itself still
+// renders dynamically because the root layout is force-dynamic (runtime branding
+// env); this revalidate takes effect if that constraint is ever lifted.
+export const revalidate = 3600;
 
 export const metadata: Metadata = {
   title: "Collections",

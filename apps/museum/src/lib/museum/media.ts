@@ -165,6 +165,44 @@ export function pickPreviewMedia(nft: {
   return null;
 }
 
+/**
+ * Lightweight, client-safe view of an NFT. Media is resolved (and dead URLs
+ * revived) server-side, so the heavy `response_opensea` blob and the three raw
+ * media columns stay on the server — the browser only receives the two small
+ * MediaInfo objects it actually renders.
+ */
+export interface NftView {
+  id: number;
+  name?: string | null;
+  artist_name?: string | null;
+  /** Still poster for grid cards (falls back to `display` when none). */
+  preview: MediaInfo | null;
+  /** Full media (animation/video preferred) for the lightbox. */
+  display: MediaInfo | null;
+  isVideo: boolean;
+}
+
+/** Resolve an NFT's media to a client-safe NftView (run on the server). */
+export function toNftView(nft: {
+  id: number;
+  name?: string | null;
+  artist_name?: string | null;
+  display_animation_info?: unknown;
+  display_media_info?: unknown;
+  media_info?: unknown;
+  response_opensea?: unknown;
+}): NftView {
+  const display = pickDisplayMedia(nft);
+  return {
+    id: nft.id,
+    name: nft.name,
+    artist_name: nft.artist_name,
+    preview: pickPreviewMedia(nft) ?? display,
+    display,
+    isVideo: mediaKind(display) === "video",
+  };
+}
+
 /** Clamp display dimensions to a max edge while preserving aspect ratio. */
 export function clampDimensions(
   width = 512,

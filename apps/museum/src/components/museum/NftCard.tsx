@@ -1,21 +1,19 @@
 "use client";
 
-import type { Nft } from "@/lib/museum/directus";
-import { pickDisplayMedia, pickPreviewMedia, mediaKind } from "@/lib/museum/media";
+import type { NftView } from "@/lib/museum/media";
 import MediaView from "./MediaView";
 
 interface Props {
-  nft: Nft;
+  view: NftView;
   onView: () => void;
 }
 
-export default function NftCard({ nft, onView }: Props) {
-  const display = pickDisplayMedia(nft);
+export default function NftCard({ view, onView }: Props) {
   // Overview card: show the still poster when the work is a video; the full
-  // clip plays in the lightbox.
-  const media = pickPreviewMedia(nft) ?? display;
+  // clip plays in the lightbox. Media was resolved server-side.
+  const media = view.preview ?? view.display;
   if (!media) return null;
-  const isVideo = mediaKind(display) === "video";
+  const isVideo = view.isVideo;
 
   return (
     <button
@@ -23,7 +21,7 @@ export default function NftCard({ nft, onView }: Props) {
       className="group relative block w-full overflow-hidden rounded-[var(--radius)] border text-left transition-transform duration-200 hover:-translate-y-0.5"
       style={{ borderColor: "var(--border)", background: "var(--card)" }}
     >
-      <MediaView media={media} alt={nft.name ?? "Artwork"} fit="cover" className="w-full" />
+      <MediaView media={media} alt={view.name ?? "Artwork"} fit="cover" className="w-full" />
 
       {/* Video affordance — the still is a poster; the clip plays in the lightbox */}
       {isVideo && (
@@ -45,10 +43,10 @@ export default function NftCard({ nft, onView }: Props) {
         style={{ borderColor: "var(--border)" }}
       >
         <div className="truncate text-sm font-medium" style={{ color: "var(--fg1)" }}>
-          {nft.name || "Untitled"}
+          {view.name || "Untitled"}
         </div>
         <div className="truncate text-xs" style={{ color: "var(--fg2)" }}>
-          {nft.artist_name ? `by ${nft.artist_name}` : "Unknown artist"}
+          {view.artist_name ? `by ${view.artist_name}` : "Unknown artist"}
         </div>
       </div>
 

@@ -120,3 +120,4 @@ database. See `.env.example`.
 - `NEXT_PUBLIC_` vars are compile-time inlined by Next.js — runtime config uses the `/api/config` endpoint instead
 - German UI uses du-form; keep product terms (Deep Research, etc.) in English even in German locale
 - Route handlers validate input with `zod`. There are no auth gates — every Library route is public.
+- Static editorial content lives in `src/content/*.json` (writings, timeline, incubator, manifesto, press-room, moca-live), rendered by Server Components + a client browser component. The **MOCA Live** (`/moca-live`) streams and **Press Room → Artist Interviews** lists are scraped from YouTube and refreshed with `node scripts/scrape-youtube.mjs` — see `scripts/README.md`.

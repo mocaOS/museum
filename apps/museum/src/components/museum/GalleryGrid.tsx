@@ -1,12 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import type { Nft } from "@/lib/museum/directus";
+import type { NftView } from "@/lib/museum/media";
 import NftCard from "./NftCard";
 import NftLightbox from "./NftLightbox";
 
 interface Props {
-  nfts: Nft[];
+  nfts: NftView[];
   emptyMessage?: string;
 }
 
@@ -26,16 +26,16 @@ export default function GalleryGrid({ nfts, emptyMessage }: Props) {
   return (
     <>
       <div className="gap-6 [column-fill:_balance] columns-1 sm:columns-2 lg:columns-3 xl:columns-4">
-        {nfts.map((nft, i) => (
-          <div key={nft.id} className="mb-6 break-inside-avoid">
-            <NftCard nft={nft} onView={() => setOpenIndex(i)} />
+        {nfts.map((view, i) => (
+          <div key={view.id} className="mb-6 break-inside-avoid">
+            <NftCard view={view} onView={() => setOpenIndex(i)} />
           </div>
         ))}
       </div>
 
       {openIndex !== null && (
         <NftLightbox
-          nfts={nfts}
+          items={nfts}
           index={openIndex}
           onClose={() => setOpenIndex(null)}
           onNavigate={setOpenIndex}

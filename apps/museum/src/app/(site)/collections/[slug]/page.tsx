@@ -3,16 +3,28 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import {
   getCollection,
+  listTopCollections,
   countNfts,
   listNfts,
   NFTS_PER_PAGE,
 } from "@/lib/museum/directus";
+import { toNftView } from "@/lib/museum/media";
 import GalleryControls from "@/components/museum/GalleryControls";
 import GalleryGrid from "@/components/museum/GalleryGrid";
 import Pager from "@/components/museum/Pager";
 import EssayDrawer from "@/components/museum/EssayDrawer";
 
-export const dynamic = "force-dynamic";
+// NFT reads (list + count) are cached hourly in the data layer
+// (lib/museum/directus.ts), so the CMS isn't hit per request even though the
+// route renders dynamically (root layout is force-dynamic for runtime branding
+// env). The revalidate + generateStaticParams below let Next prerender each
+// collection's base slug as static ISR if that root constraint is ever lifted.
+export const revalidate = 3600;
+
+export async function generateStaticParams() {
+  const collections = await listTopCollections();
+  return collections.map((c) => ({ slug: c.slug }));
+}
 
 type SearchParams = Promise<{ page?: string; search?: string; sub?: string }>;
 type Params = Promise<{ slug: string }>;
@@ -65,6 +77,11 @@ export default async function CollectionPage({
   ]);
   const totalPages = Math.ceil(total / NFTS_PER_PAGE);
 
+  // Resolve media (and revive dead OpenSea URLs) on the server so the heavy
+  // `response_opensea` blob and raw media columns never reach the browser —
+  // the client only receives the two small resolved MediaInfo objects per work.
+  const views = nfts.map(toNftView);
+
   return (
     <div className="mx-auto max-w-7xl px-5 py-10 sm:px-8">
       <nav className="mb-6 text-xs" style={{ color: "var(--fg3)" }}>
@@ -100,7 +117,7 @@ export default async function CollectionPage({
       />
 
       <GalleryGrid
-        nfts={nfts}
+        nfts={views}
         emptyMessage={
           search
             ? `No artworks matching “${search}”.`
