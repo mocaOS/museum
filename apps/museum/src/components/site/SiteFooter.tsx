@@ -31,7 +31,7 @@ const EXTERNAL = [
   { href: "https://opensea.io/MOCA-Genesis", label: "Our NFTs" },
   { href: "https://docs.cortex.eco", label: "Cortex Docs" },
   { href: "https://docs.decc0s.com", label: "DeCC0s Docs" },
-  { href: "https://github.com/mocaOS/museum", label: "GitHub" },
+  { href: "https://github.com/mocaOS", label: "GitHub" },
 ];
 
 export default function SiteFooter() {

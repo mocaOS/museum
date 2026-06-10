@@ -180,6 +180,40 @@ export interface NftView {
   /** Full media (animation/video preferred) for the lightbox. */
   display: MediaInfo | null;
   isVideo: boolean;
+  /**
+   * Aspect ratio (width / height) of the work, when the source media carries
+   * intrinsic dimensions. Defaults to 1 (square) when unknown. Consumed by the
+   * 3D exhibition builder to size wall frames portrait-vs-landscape.
+   */
+  ratio: number;
+}
+
+/** Intrinsic aspect ratio (w/h) from the best dimensioned media, else 1. */
+export function mediaRatio(...candidates: (MediaInfo | null | undefined)[]): number {
+  for (const m of candidates) {
+    if (m?.width && m?.height && m.width > 0 && m.height > 0) {
+      return m.width / m.height;
+    }
+  }
+  return 1;
+}
+
+/**
+ * A still, raster texture URL for rendering a work onto a 3D plane. Prefers the
+ * image preview; routes through the transform-in proxy (revives dead URLs +
+ * sizes to a power-of-two-ish WebP). Returns "" when no still image exists
+ * (e.g. video-only works) so callers can show a placeholder.
+ */
+export function artworkTextureUrl(view: NftView, size = 1024): string {
+  const still =
+    view.preview && mediaKind(view.preview) !== "video"
+      ? view.preview
+      : view.display && mediaKind(view.display) !== "video"
+        ? view.display
+        : null;
+  const raw = resolveMediaUrl(still?.url);
+  if (!raw) return "";
+  return proxiedUrl(raw, { width: size, format: "webp", q: 82 });
 }
 
 /** Resolve an NFT's media to a client-safe NftView (run on the server). */
@@ -193,13 +227,15 @@ export function toNftView(nft: {
   response_opensea?: unknown;
 }): NftView {
   const display = pickDisplayMedia(nft);
+  const preview = pickPreviewMedia(nft) ?? display;
   return {
     id: nft.id,
     name: nft.name,
     artist_name: nft.artist_name,
-    preview: pickPreviewMedia(nft) ?? display,
+    preview,
     display,
     isVideo: mediaKind(display) === "video",
+    ratio: mediaRatio(preview, display),
   };
 }
 
