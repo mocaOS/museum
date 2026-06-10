@@ -32,6 +32,7 @@ const EXTERNAL = [
   { href: "https://docs.cortex.eco", label: "Cortex Docs" },
   { href: "https://docs.decc0s.com", label: "DeCC0s Docs" },
   { href: "https://github.com/mocaOS", label: "GitHub" },
+  { href: "https://museumofcrypto.substack.com/", label: "Newsletter" },
 ];
 
 export default function SiteFooter() {
