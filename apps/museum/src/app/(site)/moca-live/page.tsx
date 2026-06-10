@@ -6,6 +6,7 @@ export const metadata: Metadata = {
   title: "MOCA Live",
   description:
     "Every MOCA livestream — town halls, artist conversations, and shows — watchable on-page, plus the podcast.",
+  alternates: { canonical: "/moca-live" },
 };
 
 export default function MocaLivePage() {

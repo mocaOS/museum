@@ -8,11 +8,13 @@ import {
   listNfts,
   NFTS_PER_PAGE,
 } from "@/lib/museum/directus";
-import { toNftView } from "@/lib/museum/media";
+import { toNftView, pickPreviewMedia, pickDisplayMedia, preferOriginalStill } from "@/lib/museum/media";
 import GalleryControls from "@/components/museum/GalleryControls";
 import GalleryGrid from "@/components/museum/GalleryGrid";
 import Pager from "@/components/museum/Pager";
 import EssayDrawer from "@/components/museum/EssayDrawer";
+import JsonLd from "@/components/seo/JsonLd";
+import { breadcrumbLd, collectionPageLd } from "@/lib/seo";
 
 // NFT reads (list + count) are cached hourly in the data layer
 // (lib/museum/directus.ts), so the CMS isn't hit per request even though the
@@ -38,13 +40,36 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
     collection.description ??
     `Browse "${title}" — part of the Museum of Crypto Art permanent collection.`;
   const canonical = `/collections/${slug}`;
+
+  // Social/answer-engine card: lead with an actual work from the collection
+  // (still poster, original-quality) instead of the generic site card.
+  let ogImage: string | undefined;
+  try {
+    const [first] = await listNfts({ slugs: [slug], page: 1 });
+    if (first) {
+      const media = preferOriginalStill(
+        pickPreviewMedia(first) ?? pickDisplayMedia(first),
+        first.response_opensea
+      );
+      ogImage = media?.url ?? undefined;
+    }
+  } catch {
+    // fall back to the site-wide /social.jpg from the root layout
+  }
+
   return {
     title,
     description,
     // Canonicalize paginated/filtered variants (?page, ?search) to the base slug.
     alternates: { canonical },
-    openGraph: { title, description, url: canonical, type: "article" },
-    twitter: { title, description },
+    openGraph: {
+      title,
+      description,
+      url: canonical,
+      type: "article",
+      ...(ogImage ? { images: [ogImage] } : {}),
+    },
+    twitter: { title, description, ...(ogImage ? { images: [ogImage] } : {}) },
   };
 }
 
@@ -82,8 +107,27 @@ export default async function CollectionPage({
   // the client only receives the two small resolved MediaInfo objects per work.
   const views = nfts.map(toNftView);
 
+  const collectionName = collection.title || collection.name;
   return (
     <div className="mx-auto max-w-7xl px-5 py-10 sm:px-8">
+      <JsonLd
+        data={breadcrumbLd([
+          { name: "Collections", path: "/collections" },
+          { name: collectionName, path: `/collections/${slug}` },
+        ])}
+      />
+      <JsonLd
+        data={collectionPageLd({
+          name: collectionName,
+          description: collection.description,
+          path: `/collections/${slug}`,
+          artworks: views.map((v) => ({
+            name: v.name,
+            artistName: v.artist_name,
+            imageUrl: v.preview?.url ?? v.display?.url,
+          })),
+        })}
+      />
       <nav className="mb-6 text-xs" style={{ color: "var(--fg3)" }}>
         <Link href="/collections" className="hover:underline">
           Collections

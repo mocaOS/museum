@@ -5,6 +5,7 @@ export const metadata: Metadata = {
   title: "Timeline",
   description:
     "An abbreviated history of crypto art — from the first on-chain tributes to the auctions that put NFTs on the world stage.",
+  alternates: { canonical: "/timeline" },
 };
 
 interface Event {

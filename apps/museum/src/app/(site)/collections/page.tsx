@@ -13,6 +13,7 @@ export const metadata: Metadata = {
   title: "Collections",
   description:
     "Explore the MOCA permanent collection — genesis works, curated collections, and the artists who shaped crypto art.",
+  alternates: { canonical: "/collections" },
 };
 
 export default async function CollectionsPage() {

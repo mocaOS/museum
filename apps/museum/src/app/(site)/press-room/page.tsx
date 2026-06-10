@@ -6,6 +6,7 @@ export const metadata: Metadata = {
   title: "Press Room",
   description:
     "Media coverage, interviews, podcast appearances, and the press kit for the Museum of Crypto Art.",
+  alternates: { canonical: "/press-room" },
 };
 
 export default function PressRoomPage() {

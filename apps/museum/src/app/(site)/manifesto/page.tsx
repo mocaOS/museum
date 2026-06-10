@@ -5,6 +5,7 @@ export const metadata: Metadata = {
   title: "Manifesto",
   description:
     "The Museum of Crypto Art manifesto — our mission to preserve the truth and define the crypto art movement.",
+  alternates: { canonical: "/manifesto" },
 };
 
 // Full-bleed, white-on-black statement page. The MOCA wordmark spans the full

@@ -4,6 +4,7 @@ export const metadata: Metadata = {
   title: "Soulweaver",
   description:
     "Awaken your NFTs. Soulweaver is AI-powered personality synthesis for NFT collections — portable SOUL.md identities, grounded in on-chain DNA and community lore, built on the Cortex knowledge graph by the Museum of Crypto Art.",
+  alternates: { canonical: "/soulweaver" },
 };
 
 const PIPELINE = [

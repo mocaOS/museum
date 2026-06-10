@@ -4,6 +4,8 @@ import { getAppSettings } from "@/lib/settings";
 import { setLocale as setI18nLocale } from "@/lib/i18n";
 import { MAX_UPLOAD_BYTES } from "@/lib/upload-limits";
 import ConfigBootstrap from "@/components/ConfigBootstrap";
+import JsonLd from "@/components/seo/JsonLd";
+import { organizationLd, webSiteLd } from "@/lib/seo";
 
 export const dynamic = "force-dynamic";
 
@@ -98,6 +100,8 @@ export default function RootLayout({
       style={{ ["--accent" as string]: settings.accentColor }}
     >
       <body className="antialiased">
+        <JsonLd data={organizationLd()} />
+        <JsonLd data={webSiteLd()} />
         <ConfigBootstrap config={initialConfig}>{children}</ConfigBootstrap>
       </body>
     </html>

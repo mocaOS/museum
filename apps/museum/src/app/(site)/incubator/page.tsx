@@ -4,6 +4,7 @@ import incubator from "@/content/incubator.json";
 export const metadata: Metadata = {
   title: "Incubator",
   description: incubator.intro,
+  alternates: { canonical: "/incubator" },
 };
 
 export default function IncubatorPage() {

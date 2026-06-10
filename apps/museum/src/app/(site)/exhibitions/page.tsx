@@ -12,6 +12,7 @@ export const metadata: Metadata = {
   title: "Exhibitions",
   description:
     "Step into immersive 3D rooms and curated shows from the MOCA universe.",
+  alternates: { canonical: "/exhibitions" },
 };
 
 export default async function ExhibitionsPage() {

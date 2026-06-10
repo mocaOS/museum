@@ -8,8 +8,13 @@ const STATIC_PATHS = [
   "/",
   "/collections",
   "/exhibitions",
+  "/exhibitions/world",
+  "/soulweaver",
   "/writings",
   "/timeline",
+  "/manifesto",
+  "/moca-live",
+  "/press-room",
   "/incubator",
   "/library",
 ];

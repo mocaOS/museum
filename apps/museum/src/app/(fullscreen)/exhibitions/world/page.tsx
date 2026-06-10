@@ -10,6 +10,7 @@ export const metadata: Metadata = {
   title: "World",
   description:
     "Build your own museum: place MOCA exhibition rooms into a shared world, hang artworks from the collection, and save your exhibits.",
+  alternates: { canonical: "/exhibitions/world" },
 };
 
 export default async function WorldPage() {
