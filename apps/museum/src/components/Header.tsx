@@ -5,10 +5,13 @@ import { t } from "@/lib/i18n";
 import { useLocale } from "@/lib/i18n-client";
 import { getCachedConfig } from "@/lib/config";
 
+// Keep in sync with the museum nav in components/site/SiteHeader.tsx
+// (plus "Home", since the Library has no other way back to the site).
 const NAV = [
   { href: "/", label: "Home" },
   { href: "/collections", label: "Collections" },
-  { href: "/exhibitions", label: "Exhibitions" },
+  { href: "/soulweaver", label: "Soulweaver" },
+  { href: "/exhibitions", label: "MOCA ROOMs" },
   { href: "/writings", label: "Writings" },
   { href: "/timeline", label: "Timeline" },
   { href: "https://codex.decc0s.com/", label: "Art DeCC0s", external: true },

@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import { ChatSession } from "@/types";
 import { t } from "@/lib/i18n";
 import { useLocale } from "@/lib/i18n-client";
@@ -56,6 +57,27 @@ export default function Sidebar({
 }: Props) {
   useLocale();
   const groups = groupSessions(sessions);
+
+  // Deleting is irreversible (localStorage-only history), so the trash icon
+  // arms on first click and deletes on the second; it disarms after 2.5 s.
+  const [armedId, setArmedId] = useState<string | null>(null);
+  const armTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handleDeleteClick = (id: string) => {
+    if (armedId === id) {
+      if (armTimerRef.current) clearTimeout(armTimerRef.current);
+      setArmedId(null);
+      onDeleteSession(id);
+      return;
+    }
+    setArmedId(id);
+    if (armTimerRef.current) clearTimeout(armTimerRef.current);
+    armTimerRef.current = setTimeout(() => setArmedId(null), 2500);
+  };
+  useEffect(() => {
+    return () => {
+      if (armTimerRef.current) clearTimeout(armTimerRef.current);
+    };
+  }, []);
 
   return (
     <>
@@ -163,23 +185,47 @@ export default function Sidebar({
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        onDeleteSession(session.id);
+                        handleDeleteClick(session.id);
                       }}
-                      className="opacity-0 group-hover:opacity-100 w-6 h-6 flex-shrink-0 flex items-center justify-center rounded transition-all"
-                      style={{ color: "var(--fg3)" }}
+                      className={`${
+                        armedId === session.id
+                          ? "opacity-100"
+                          : "opacity-0 group-hover:opacity-100"
+                      } w-6 h-6 flex-shrink-0 flex items-center justify-center rounded transition-all`}
+                      style={{
+                        color:
+                          armedId === session.id
+                            ? "var(--destructive)"
+                            : "var(--fg3)",
+                        background:
+                          armedId === session.id
+                            ? "color-mix(in oklch, var(--destructive) 15%, transparent)"
+                            : "transparent",
+                      }}
                       onMouseEnter={(e) => {
                         e.currentTarget.style.color = "var(--destructive)";
                       }}
                       onMouseLeave={(e) => {
-                        e.currentTarget.style.color = "var(--fg3)";
+                        if (armedId !== session.id)
+                          e.currentTarget.style.color = "var(--fg3)";
                       }}
-                      title={t("deleteChat")}
+                      title={
+                        armedId === session.id
+                          ? t("confirmDelete")
+                          : t("deleteChat")
+                      }
                     >
-                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M3 6h18" />
-                        <path d="M8 6V4a2 2 0 0 1 2 -2h4a2 2 0 0 1 2 2v2" />
-                        <path d="M19 6l-1 14a2 2 0 0 1 -2 2H8a2 2 0 0 1 -2 -2L5 6" />
-                      </svg>
+                      {armedId === session.id ? (
+                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M20 6L9 17l-5-5" />
+                        </svg>
+                      ) : (
+                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M3 6h18" />
+                          <path d="M8 6V4a2 2 0 0 1 2 -2h4a2 2 0 0 1 2 2v2" />
+                          <path d="M19 6l-1 14a2 2 0 0 1 -2 2H8a2 2 0 0 1 -2 -2L5 6" />
+                        </svg>
+                      )}
                     </button>
                   </div>
                 );

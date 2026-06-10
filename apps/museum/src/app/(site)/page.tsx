@@ -13,12 +13,20 @@ export const metadata: Metadata = {
   title: { absolute: "Museum of Crypto Art" },
   description: HOME_DESCRIPTION,
   alternates: { canonical: "/" },
+  // Note: a page-level `openGraph`/`twitter` REPLACES the root layout's whole
+  // object (Next.js metadata merging is shallow) — images must be restated.
   openGraph: {
     title: "Museum of Crypto Art",
     description: HOME_DESCRIPTION,
     url: "/",
+    images: ["/social.jpg"],
   },
-  twitter: { title: "Museum of Crypto Art", description: HOME_DESCRIPTION },
+  twitter: {
+    card: "summary_large_image",
+    title: "Museum of Crypto Art",
+    description: HOME_DESCRIPTION,
+    images: ["/social.jpg"],
+  },
 };
 
 const MODES = [

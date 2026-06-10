@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { Mode } from "@/types";
 import { t } from "@/lib/i18n";
 import { useLocale } from "@/lib/i18n-client";
@@ -26,20 +26,64 @@ export default function ChatInput({
 }: Props) {
   useLocale();
   const [input, setInput] = useState("");
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  // Auto-grow the textarea with its content, up to ~6 lines.
+  const resize = useCallback(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 144)}px`;
+  }, []);
 
   const handleSubmit = () => {
     if (!input.trim() || isLoading) return;
     onSend(input.trim());
     setInput("");
+    // Collapse back to a single line after sending.
+    requestAnimationFrame(resize);
   };
 
+  // Enter sends; Shift+Enter inserts a newline (multi-line questions).
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter") {
+    if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSubmit();
     }
   };
+
+  // Focus management: focus on mount (pointer devices only — avoid popping the
+  // keyboard on phones) and re-focus once an answer finishes streaming.
+  const wasLoading = useRef(false);
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.matchMedia("(pointer: fine)").matches) {
+      inputRef.current?.focus();
+    }
+  }, []);
+  useEffect(() => {
+    if (wasLoading.current && !isLoading) {
+      if (window.matchMedia("(pointer: fine)").matches) inputRef.current?.focus();
+    }
+    wasLoading.current = isLoading;
+  }, [isLoading]);
+
+  // Global shortcuts: "/" focuses the composer, Escape stops a running answer.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && isLoading) {
+        onStop();
+        return;
+      }
+      if (e.key !== "/" || e.metaKey || e.ctrlKey || e.altKey) return;
+      const target = e.target as HTMLElement | null;
+      const tag = target?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || target?.isContentEditable) return;
+      e.preventDefault();
+      inputRef.current?.focus();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [isLoading, onStop]);
 
   const canSend = !!input.trim() && !isLoading;
 
@@ -92,7 +136,7 @@ export default function ChatInput({
         {/* Glass composer row */}
         <div className="flex items-center gap-2">
           <div
-            className="flex-1 flex items-center gap-1 rounded-[14px] pl-3 pr-1.5 h-11 border transition-colors focus-within:border-[var(--ring)]"
+            className="flex-1 flex items-center gap-1 rounded-[14px] pl-3 pr-1.5 min-h-11 border transition-colors focus-within:border-[var(--ring)]"
             style={{
               background: "oklch(0.15 0 0 / 0.75)",
               backdropFilter: "blur(24px)",
@@ -113,18 +157,21 @@ export default function ChatInput({
               <path d="M21 15a2 2 0 0 1 -2 2h-14l-4 4v-16a2 2 0 0 1 2 -2h16a2 2 0 0 1 2 2z" />
             </svg>
 
-            <input
+            <textarea
               ref={inputRef}
-              type="text"
+              rows={1}
               value={input}
-              onChange={(e) => setInput(e.target.value)}
+              onChange={(e) => {
+                setInput(e.target.value);
+                resize();
+              }}
               onKeyDown={handleKeyDown}
               placeholder={
                 mode === "deep-research"
                   ? t("deepResearchPlaceholder")
                   : t("askAnything")
               }
-              className="flex-1 bg-transparent outline-none text-sm text-[var(--fg1)] placeholder:text-[var(--fg3)] px-2"
+              className="flex-1 resize-none bg-transparent outline-none text-sm leading-5 text-[var(--fg1)] placeholder:text-[var(--fg3)] px-2 py-[11px] max-h-36"
             />
 
             <span

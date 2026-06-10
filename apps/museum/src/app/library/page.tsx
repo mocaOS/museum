@@ -66,6 +66,13 @@ export default function LibraryPage() {
   const emptyTitle = "The MOCA Library";
   const emptyDescription =
     "Study and curate the past while querying the present. Learn about crypto art, the collection, and Web3 culture. Powered by Cortex.";
+  // Starter prompts — clicking one asks it immediately.
+  const suggestions = [
+    "How did crypto art begin?",
+    "What is the Genesis Collection?",
+    "Which artists shaped the early movement?",
+    "What does the MOCA manifesto stand for?",
+  ];
 
   const refreshSessions = useCallback(async () => {
     try {
@@ -384,6 +391,8 @@ export default function LibraryPage() {
           onSourceClick={setSelectedSource}
           emptyTitle={emptyTitle}
           emptyDescription={emptyDescription}
+          suggestions={suggestions}
+          onSuggestion={handleSend}
         />
       </main>
 

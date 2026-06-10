@@ -43,18 +43,20 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
 
   // Social/answer-engine card: lead with an actual work from the collection
   // (still poster, original-quality) instead of the generic site card.
-  let ogImage: string | undefined;
+  let ogImage = "/social.jpg";
   try {
-    const [first] = await listNfts({ slugs: [slug], page: 1 });
+    // Include child-collection slugs — some parents hold no works directly.
+    const slugs = [slug, ...(collection.child_collections ?? []).map((c) => c.slug)];
+    const [first] = await listNfts({ slugs, page: 1 });
     if (first) {
       const media = preferOriginalStill(
         pickPreviewMedia(first) ?? pickDisplayMedia(first),
         first.response_opensea
       );
-      ogImage = media?.url ?? undefined;
+      if (media?.url) ogImage = media.url;
     }
   } catch {
-    // fall back to the site-wide /social.jpg from the root layout
+    // keep the site-wide /social.jpg fallback
   }
 
   return {
@@ -62,14 +64,21 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
     description,
     // Canonicalize paginated/filtered variants (?page, ?search) to the base slug.
     alternates: { canonical },
+    // Page-level openGraph/twitter REPLACE the layout's (shallow merge), so an
+    // image must always be present here.
     openGraph: {
       title,
       description,
       url: canonical,
       type: "article",
-      ...(ogImage ? { images: [ogImage] } : {}),
+      images: [ogImage],
     },
-    twitter: { title, description, ...(ogImage ? { images: [ogImage] } : {}) },
+    twitter: {
+      card: "summary_large_image",
+      title,
+      description,
+      images: [ogImage],
+    },
   };
 }
 
