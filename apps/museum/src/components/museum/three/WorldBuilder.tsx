@@ -1,17 +1,22 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { Grid, Environment, Lightformer, Html, useGLTF, AdaptiveDpr } from "@react-three/drei";
 import * as THREE from "three";
 import type { NftView } from "@/lib/museum/media";
-import ArtworkPlane from "./ArtworkPlane";
+import ArtworkPlane, { DEFAULT_OVERRIDE } from "./ArtworkPlane";
 import ArtworkPicker from "./ArtworkPicker";
+import ExhibitsPanel from "./ExhibitsPanel";
+import { buildHyperfyExhibition, downloadHyperfyExhibition } from "./hyperfy-export";
 import { extractSlots, setPlaceholdersVisible, type RoomSlot } from "./slots";
 import {
   loadWorldLayout,
   saveWorldLayout,
   type Assignments,
+  type SlotOverride,
+  type SlotOverrides,
+  type WorldLayout,
 } from "./world-storage";
 
 export interface WorldRoom {
@@ -33,6 +38,10 @@ const TILE = 8;
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 const snap = (v: number) => Math.round(v / 2) * 2;
 
+const SCALE_STEP = 0.15;
+const MIN_ART_SCALE = 0.35;
+const MAX_ART_SCALE = 3;
+
 export interface CameraApi {
   focus: (p: THREE.Vector3) => void;
   /** Fly to stand in front of a wall slot, looking straight at it. */
@@ -50,16 +59,17 @@ export interface SlotWorld {
 }
 
 // --- Custom RTS / city-builder camera ---------------------------------------
-// Spring-arm rig: a ground `target` + yaw/pitch/distance. WASD/arrows pan,
-// Q/E rotate, wheel zoom, RMB-drag orbit, MMB-drag pan, screen-edge scroll.
+// Goal-damped spring-arm rig: every input (keys, wheel, drags, fly-to) writes a
+// *goal* target/yaw/pitch/distance; the frame loop exponentially damps the live
+// rig toward it. Direct control stays tight while zoom and fly-to glide —
+// standard RTS camera feel. Wheel zooms toward the cursor's ground point.
 function RTSControls({ apiRef }: { apiRef: React.MutableRefObject<CameraApi | null> }) {
   const { camera, gl, scene } = useThree();
   const ray = useRef(new THREE.Raycaster());
+  const groundPlane = useRef(new THREE.Plane(new THREE.Vector3(0, 1, 0), 0));
   const s = useRef({
-    target: new THREE.Vector3(0, 0, 0),
-    yaw: Math.PI / 4,
-    pitch: THREE.MathUtils.degToRad(20),
-    dist: 46,
+    cur: { target: new THREE.Vector3(0, 0, 0), yaw: Math.PI / 4, pitch: THREE.MathUtils.degToRad(20), dist: 46 },
+    goal: { target: new THREE.Vector3(0, 0, 0), yaw: Math.PI / 4, pitch: THREE.MathUtils.degToRad(20), dist: 46 },
     keys: new Set<string>(),
     drag: null as null | "rotate" | "pan",
     last: { x: 0, y: 0 },
@@ -68,19 +78,25 @@ function RTSControls({ apiRef }: { apiRef: React.MutableRefObject<CameraApi | nu
 
   useEffect(() => {
     apiRef.current = {
-      focus: (p) => s.current.target.lerp(new THREE.Vector3(p.x, 0, p.z), 1),
+      focus: (p) => {
+        const g = s.current.goal;
+        g.target.set(p.x, 0, p.z);
+        g.pitch = THREE.MathUtils.degToRad(24);
+        g.dist = Math.min(g.dist, 30);
+      },
       focusSlot: (pos, normal, size) => {
         // Aim the rig at the artwork itself (not the ground) and stand a short
         // distance out along the wall normal, roughly eye-level and head-on.
         const n = normal.clone().setY(0);
         if (n.lengthSq() < 1e-6) n.set(0, 0, 1);
         n.normalize();
-        s.current.target.copy(pos);
+        const g = s.current.goal;
+        g.target.copy(pos);
         // Camera offset = target + dir*dist where dir points from yaw/pitch.
         // We want to look along -normal, so place camera on the +normal side.
         const pitch = THREE.MathUtils.degToRad(6);
-        s.current.yaw = Math.atan2(n.x, n.z);
-        s.current.pitch = pitch;
+        g.yaw = Math.atan2(n.x, n.z);
+        g.pitch = pitch;
 
         const desired = clamp(size * 2.2, 4, 22);
 
@@ -89,9 +105,9 @@ function RTSControls({ apiRef }: { apiRef: React.MutableRefObject<CameraApi | nu
         // the slot and the desired camera point, pull the camera in to just
         // short of it so nothing ever blocks the view.
         const dir = new THREE.Vector3(
-          Math.sin(s.current.yaw) * Math.cos(pitch),
+          Math.sin(g.yaw) * Math.cos(pitch),
           Math.sin(pitch),
-          Math.cos(s.current.yaw) * Math.cos(pitch)
+          Math.cos(g.yaw) * Math.cos(pitch)
         ).normalize();
         // Start a touch out from the wall so we don't hit the slot's own frame.
         const start = pos.clone().addScaledVector(dir, 0.25);
@@ -110,16 +126,17 @@ function RTSControls({ apiRef }: { apiRef: React.MutableRefObject<CameraApi | nu
           });
         const MARGIN = 0.4;
         const blocked = hits.length ? Math.max(1.2, hits[0].distance + 0.25 - MARGIN) : desired;
-        s.current.dist = Math.min(desired, blocked);
+        g.dist = Math.min(desired, blocked);
       },
       reset: () => {
-        s.current.target.set(0, 0, 0);
-        s.current.yaw = Math.PI / 4;
-        s.current.pitch = THREE.MathUtils.degToRad(20);
-        s.current.dist = 46;
+        const g = s.current.goal;
+        g.target.set(0, 0, 0);
+        g.yaw = Math.PI / 4;
+        g.pitch = THREE.MathUtils.degToRad(20);
+        g.dist = 46;
       },
     };
-  }, [apiRef]);
+  }, [apiRef, scene]);
 
   useEffect(() => {
     const dom = gl.domElement;
@@ -137,7 +154,29 @@ function RTSControls({ apiRef }: { apiRef: React.MutableRefObject<CameraApi | nu
     const onKeyUp = (e: KeyboardEvent) => s.current.keys.delete(e.code);
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
-      s.current.dist = clamp(s.current.dist * (1 + Math.sign(e.deltaY) * 0.12), 8, 140);
+      const g = s.current.goal;
+      // Proportional to actual wheel delta (smooth on trackpads, ~8% per
+      // notch on a clicky wheel) instead of a fixed 14% per event. Min
+      // distance matches what the slot fly-to is allowed to reach, so manual
+      // zoom can get just as close to an artwork.
+      const lines = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY;
+      const factor = Math.exp(clamp(lines, -240, 240) * 0.0008);
+      const next = clamp(g.dist * factor, 1.2, 140);
+      // Zoom toward (or away from) the ground point under the cursor — the
+      // classic map-zoom feel — instead of zooming blindly at screen center.
+      const rect = dom.getBoundingClientRect();
+      const ndc = new THREE.Vector2(
+        ((e.clientX - rect.left) / rect.width) * 2 - 1,
+        -(((e.clientY - rect.top) / rect.height) * 2 - 1)
+      );
+      ray.current.setFromCamera(ndc, camera);
+      ray.current.far = Infinity;
+      const hit = new THREE.Vector3();
+      if (ray.current.ray.intersectPlane(groundPlane.current, hit)) {
+        const k = clamp(1 - next / g.dist, -0.6, 0.9);
+        g.target.lerp(new THREE.Vector3(hit.x, 0, hit.z), k);
+      }
+      g.dist = next;
     };
     const onDown = (e: PointerEvent) => {
       if (e.button === 2) s.current.drag = "rotate";
@@ -156,15 +195,16 @@ function RTSControls({ apiRef }: { apiRef: React.MutableRefObject<CameraApi | nu
         const dx = e.clientX - s.current.last.x;
         const dy = e.clientY - s.current.last.y;
         s.current.last = { x: e.clientX, y: e.clientY };
+        const g = s.current.goal;
         if (s.current.drag === "rotate") {
-          s.current.yaw -= dx * 0.005;
-          s.current.pitch = clamp(s.current.pitch + dy * 0.005, 0.2, 1.45);
+          g.yaw -= dx * 0.005;
+          g.pitch = clamp(g.pitch + dy * 0.005, 0.12, 1.45);
         } else {
-          const k = s.current.dist * 0.0016;
-          const yaw = s.current.yaw;
+          const k = s.current.cur.dist * 0.0016;
+          const yaw = s.current.cur.yaw;
           const f = new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw));
           const rt = new THREE.Vector3(Math.cos(yaw), 0, -Math.sin(yaw));
-          s.current.target.addScaledVector(rt, -dx * k).addScaledVector(f, dy * k);
+          g.target.addScaledVector(rt, -dx * k).addScaledVector(f, dy * k);
         }
       }
     };
@@ -189,31 +229,41 @@ function RTSControls({ apiRef }: { apiRef: React.MutableRefObject<CameraApi | nu
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
     };
-  }, [gl]);
+  }, [gl, camera]);
 
   useFrame((_, dt) => {
+    const { cur, goal: g } = s.current;
     const c = s.current;
-    const yaw = c.yaw;
+    const yaw = cur.yaw;
     const f = new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw));
     const rt = new THREE.Vector3(Math.cos(yaw), 0, -Math.sin(yaw));
-    const speed = c.dist * 1.1 * dt * (c.keys.has("ShiftLeft") || c.keys.has("ShiftRight") ? 2.2 : 1);
+    const speed = cur.dist * 1.1 * dt * (c.keys.has("ShiftLeft") || c.keys.has("ShiftRight") ? 2.2 : 1);
     const mv = new THREE.Vector3();
     if (c.keys.has("KeyW") || c.keys.has("ArrowUp")) mv.add(f);
     if (c.keys.has("KeyS") || c.keys.has("ArrowDown")) mv.sub(f);
     if (c.keys.has("KeyD") || c.keys.has("ArrowRight")) mv.add(rt);
     if (c.keys.has("KeyA") || c.keys.has("ArrowLeft")) mv.sub(rt);
     mv.addScaledVector(rt, c.edge.x).addScaledVector(f, -c.edge.y);
-    if (mv.lengthSq() > 0) c.target.addScaledVector(mv.normalize(), speed);
-    if (c.keys.has("KeyQ")) c.yaw += dt * 1.3;
-    if (c.keys.has("KeyE")) c.yaw -= dt * 1.3;
+    if (mv.lengthSq() > 0) g.target.addScaledVector(mv.normalize(), speed);
+    if (c.keys.has("KeyQ")) g.yaw += dt * 1.3;
+    if (c.keys.has("KeyE")) g.yaw -= dt * 1.3;
+
+    // Exponential damping toward the goal (frame-rate independent). Yaw takes
+    // the short way around the circle so fly-to never spins the long way.
+    const lam = 1 - Math.exp(-9 * dt);
+    cur.target.lerp(g.target, lam);
+    cur.dist += (g.dist - cur.dist) * lam;
+    cur.pitch += (g.pitch - cur.pitch) * lam;
+    const dyaw = Math.atan2(Math.sin(g.yaw - cur.yaw), Math.cos(g.yaw - cur.yaw));
+    cur.yaw += dyaw * lam;
 
     const offset = new THREE.Vector3(
-      Math.sin(c.yaw) * Math.cos(c.pitch),
-      Math.sin(c.pitch),
-      Math.cos(c.yaw) * Math.cos(c.pitch)
-    ).multiplyScalar(c.dist);
-    camera.position.lerp(c.target.clone().add(offset), 1 - Math.pow(0.001, dt));
-    camera.lookAt(c.target);
+      Math.sin(cur.yaw) * Math.cos(cur.pitch),
+      Math.sin(cur.pitch),
+      Math.cos(cur.yaw) * Math.cos(cur.pitch)
+    ).multiplyScalar(cur.dist);
+    camera.position.copy(cur.target.clone().add(offset));
+    camera.lookAt(cur.target);
   });
 
   return null;
@@ -280,26 +330,34 @@ function PlacedRoom({
   selected,
   curating,
   assignments,
+  overrides,
   activeSlotId,
   onSelect,
+  onFocus,
   onStartDrag,
   onSlotClick,
+  onArtSelect,
+  onOverrideChange,
   onSlotsReady,
 }: {
   placed: Placed;
   selected: boolean;
   curating: boolean;
   assignments: Assignments;
+  overrides: SlotOverrides;
   activeSlotId: string | null;
   onSelect: () => void;
+  onFocus: () => void;
   onStartDrag: () => void;
   onSlotClick: (slot: RoomSlot) => void;
+  /** Select a hung artwork's slot without flying the camera (direct click). */
+  onArtSelect: (slot: RoomSlot) => void;
+  onOverrideChange: (slotId: string, next: SlotOverride) => void;
   onSlotsReady: (uid: string, slots: SlotWorld[]) => void;
 }) {
   const { scene } = useGLTF(placed.room.modelUrl!, true, true);
   const cloned = useMemo(() => scene.clone(true), [scene]);
   const slots = useMemo(() => extractSlots(cloned), [cloned]);
-  const slotById = useMemo(() => new Map(slots.map((s) => [s.id, s])), [slots]);
 
   // Hide the placeholder quads in the model — we draw our own markers/artworks.
   useEffect(() => {
@@ -364,6 +422,10 @@ function PlacedRoom({
     <group
       position={placed.position}
       rotation={[0, placed.rotationY, 0]}
+      onDoubleClick={(e) => {
+        e.stopPropagation();
+        onFocus();
+      }}
       onPointerDown={(e) => {
         if (e.button !== 0) return;
         // While curating, let clicks fall through to slot markers (which sit
@@ -399,8 +461,13 @@ function PlacedRoom({
               position={slot.position.clone().add(facing)}
               quaternion={quat}
               art={art}
+              override={overrides[slot.id]}
+              editable={curating}
               selected={curating && activeSlotId === slot.id}
-              onSelect={curating ? () => onSlotClick(slot) : undefined}
+              onSelect={curating ? () => onArtSelect(slot) : undefined}
+              onOverrideChange={
+                curating ? (next) => onOverrideChange(slot.id, next) : undefined
+              }
             />
           );
         })}
@@ -458,60 +525,88 @@ export default function WorldBuilder({ rooms }: { rooms: WorldRoom[] }) {
     rotY: 0,
   });
   const [showHelp, setShowHelp] = useState(true);
+  const [exhibitsOpen, setExhibitsOpen] = useState(false);
   const draggingRef = useRef<string | null>(null);
   const camApi = useRef<CameraApi | null>(null);
   const counter = useRef(0);
 
   // --- Curate mode: hang artworks on a placed room's wall slots -------------
-  // assignments: placement uid → (slotId → artwork). Persisted to localStorage.
+  // assignments: placement uid → (slotId → artwork). overrides: placement uid →
+  // (slotId → move/resize adjustment). Both persisted to localStorage.
   const [assignments, setAssignments] = useState<Record<string, Assignments>>({});
+  const [overrides, setOverrides] = useState<Record<string, SlotOverrides>>({});
   const [curatingUid, setCuratingUid] = useState<string | null>(null);
   const [activeSlotId, setActiveSlotId] = useState<string | null>(null);
   // World-resolved slots per placed room (for the sidebar navigator + fly-to).
   const [roomSlots, setRoomSlots] = useState<Record<string, SlotWorld[]>>({});
   const [autoBusy, setAutoBusy] = useState(false);
-  const hydrated = useRef(false);
+  // State (not a ref) so the persist effect only runs in renders *after* the
+  // restored layout has flushed — a ref flips synchronously inside the hydrate
+  // effect and lets the very first persist pass save the initial empty state
+  // over the stored layout (StrictMode's double effect run then re-hydrates
+  // from the wiped storage and the layout is lost).
+  const [hydrated, setHydrated] = useState(false);
 
-  // Hydrate the saved layout once on mount (rooms come from the server props).
-  useEffect(() => {
-    const layout = loadWorldLayout();
-    if (!layout) {
-      hydrated.current = true;
-      return;
-    }
-    const restored: Placed[] = [];
-    const restoredAssign: Record<string, Assignments> = {};
-    let maxN = 0;
-    for (const p of layout.placements) {
-      const room = roomById.get(p.roomId);
-      if (!room?.modelUrl) continue;
-      restored.push({ uid: p.uid, room, position: p.position, rotationY: p.rotationY });
-      if (p.assignments && Object.keys(p.assignments).length) {
-        restoredAssign[p.uid] = p.assignments;
+  // Restore a layout (initial hydration or loading a saved exhibit).
+  const applyLayout = useCallback(
+    (layout: WorldLayout) => {
+      const restored: Placed[] = [];
+      const restoredAssign: Record<string, Assignments> = {};
+      const restoredOv: Record<string, SlotOverrides> = {};
+      let maxN = 0;
+      for (const p of layout.placements) {
+        const room = roomById.get(p.roomId);
+        if (!room?.modelUrl) continue;
+        restored.push({ uid: p.uid, room, position: p.position, rotationY: p.rotationY });
+        if (p.assignments && Object.keys(p.assignments).length) {
+          restoredAssign[p.uid] = p.assignments;
+        }
+        if (p.overrides && Object.keys(p.overrides).length) {
+          restoredOv[p.uid] = p.overrides;
+        }
+        const n = Number(p.uid.replace(/^p/, ""));
+        if (Number.isFinite(n)) maxN = Math.max(maxN, n + 1);
       }
-      const n = Number(p.uid.replace(/^p/, ""));
-      if (Number.isFinite(n)) maxN = Math.max(maxN, n + 1);
-    }
-    counter.current = maxN;
-    setPlaced(restored);
-    setAssignments(restoredAssign);
-    hydrated.current = true;
-  }, [roomById]);
+      counter.current = Math.max(counter.current, maxN);
+      setPlaced(restored);
+      setAssignments(restoredAssign);
+      setOverrides(restoredOv);
+      setSelected(null);
+      setPlacing(null);
+      setCuratingUid(null);
+      setActiveSlotId(null);
+    },
+    [roomById]
+  );
 
-  // Persist on any change to placements / assignments (after hydration).
-  useEffect(() => {
-    if (!hydrated.current) return;
-    saveWorldLayout({
-      version: 1,
+  // Snapshot the current working layout (persistence + exhibit saves).
+  const buildLayout = useCallback(
+    (): WorldLayout => ({
+      version: 2,
       placements: placed.map((p) => ({
         uid: p.uid,
         roomId: p.room.id,
         position: p.position,
         rotationY: p.rotationY,
         assignments: assignments[p.uid] || {},
+        overrides: overrides[p.uid] || {},
       })),
-    });
-  }, [placed, assignments]);
+    }),
+    [placed, assignments, overrides]
+  );
+
+  // Hydrate the saved layout once on mount (rooms come from the server props).
+  useEffect(() => {
+    const layout = loadWorldLayout();
+    if (layout) applyLayout(layout);
+    setHydrated(true);
+  }, [applyLayout]);
+
+  // Persist on any change to placements / assignments / overrides.
+  useEffect(() => {
+    if (!hydrated) return;
+    saveWorldLayout(buildLayout());
+  }, [hydrated, buildLayout]);
 
   const curatingRoom = curatingUid ? placed.find((p) => p.uid === curatingUid) : null;
   const curatingSlots = curatingUid ? roomSlots[curatingUid] || [] : [];
@@ -519,10 +614,19 @@ export default function WorldBuilder({ rooms }: { rooms: WorldRoom[] }) {
     ? curatingSlots.find((s) => s.id === activeSlotId) ?? null
     : null;
   const activeSlotLabel = activeSlot ? `Slot ${activeSlot.index}` : null;
+  const activeArt =
+    curatingUid && activeSlotId ? (assignments[curatingUid] || {})[activeSlotId] ?? null : null;
+  const activeOverride =
+    curatingUid && activeSlotId
+      ? (overrides[curatingUid] || {})[activeSlotId] ?? DEFAULT_OVERRIDE
+      : DEFAULT_OVERRIDE;
 
   // Fly the camera to stand head-on in front of a slot.
   const flyToSlot = (s: SlotWorld) => {
-    camApi.current?.focusSlot(s.position.clone(), s.normal.clone(), s.size);
+    const ovScale = curatingUid
+      ? ((overrides[curatingUid] || {})[s.id]?.scale ?? 1)
+      : 1;
+    camApi.current?.focusSlot(s.position.clone(), s.normal.clone(), s.size * ovScale);
   };
 
   const selectSlot = (slotId: string) => {
@@ -536,6 +640,7 @@ export default function WorldBuilder({ rooms }: { rooms: WorldRoom[] }) {
     setSelected(uid);
     setPlacing(null);
     setActiveSlotId(null);
+    setExhibitsOpen(false);
     const it = placed.find((p) => p.uid === uid);
     if (it && camApi.current) camApi.current.focus(new THREE.Vector3(...it.position));
   };
@@ -549,12 +654,28 @@ export default function WorldBuilder({ rooms }: { rooms: WorldRoom[] }) {
     setActiveSlotId(null);
   };
 
+  const setSlotOverride = (uid: string, slotId: string, next: SlotOverride) => {
+    setOverrides((prev) => ({
+      ...prev,
+      [uid]: { ...(prev[uid] || {}), [slotId]: next },
+    }));
+  };
+
+  const resetSlotOverride = (uid: string, slotId: string) => {
+    setOverrides((prev) => {
+      const forUid = { ...(prev[uid] || {}) };
+      delete forUid[slotId];
+      return { ...prev, [uid]: forUid };
+    });
+  };
+
   const clearSlot = (uid: string, slotId: string) => {
     setAssignments((prev) => {
       const next = { ...(prev[uid] || {}) };
       delete next[slotId];
       return { ...prev, [uid]: next };
     });
+    resetSlotOverride(uid, slotId);
   };
 
   // Auto-curate: fill every empty slot of the curated room with random works
@@ -579,7 +700,8 @@ export default function WorldBuilder({ rooms }: { rooms: WorldRoom[] }) {
         const data = (await res.json()) as { artworks: NftView[] };
         if (!data.artworks?.length) break;
         for (const a of data.artworks) {
-          if (!seen.has(a.id) && !a.isVideo) {
+          // Motion works are fine — they hang as live video textures.
+          if (!seen.has(a.id)) {
             seen.add(a.id);
             pool.push(a);
           }
@@ -622,6 +744,11 @@ export default function WorldBuilder({ rooms }: { rooms: WorldRoom[] }) {
             delete next[selected];
             return next;
           });
+          setOverrides((o) => {
+            const next = { ...o };
+            delete next[selected];
+            return next;
+          });
           if (curatingUid === selected) setCuratingUid(null);
           setSelected(null);
         }
@@ -632,6 +759,8 @@ export default function WorldBuilder({ rooms }: { rooms: WorldRoom[] }) {
         if (curatingUid) {
           setCuratingUid(null);
           setActiveSlotId(null);
+        } else if (exhibitsOpen) {
+          setExhibitsOpen(false);
         } else {
           setPlacing(null);
           setSelected(null);
@@ -644,7 +773,7 @@ export default function WorldBuilder({ rooms }: { rooms: WorldRoom[] }) {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [placing, selected, placed, curatingUid, activeSlotId]);
+  }, [placing, selected, placed, curatingUid, activeSlotId, exhibitsOpen]);
 
   const placeAt = (x: number, z: number) => {
     if (!placing) return;
@@ -732,10 +861,14 @@ export default function WorldBuilder({ rooms }: { rooms: WorldRoom[] }) {
                 selected={selected === p.uid}
                 curating={curatingUid === p.uid}
                 assignments={assignments[p.uid] || {}}
+                overrides={overrides[p.uid] || {}}
                 activeSlotId={curatingUid === p.uid ? activeSlotId : null}
                 onSelect={() => setSelected(p.uid)}
+                onFocus={() => camApi.current?.focus(new THREE.Vector3(...p.position))}
                 onStartDrag={() => (draggingRef.current = p.uid)}
                 onSlotClick={(slot) => selectSlot(slot.id)}
+                onArtSelect={(slot) => setActiveSlotId(slot.id)}
+                onOverrideChange={(slotId, next) => setSlotOverride(p.uid, slotId, next)}
                 onSlotsReady={(uid, slots) =>
                   setRoomSlots((prev) =>
                     prev[uid] === slots ? prev : { ...prev, [uid]: slots }
@@ -763,6 +896,26 @@ export default function WorldBuilder({ rooms }: { rooms: WorldRoom[] }) {
             setCuratingUid(null);
             setActiveSlotId(null);
           }}
+        />
+      )}
+
+      {/* Saved exhibits library */}
+      {exhibitsOpen && !curatingUid && (
+        <ExhibitsPanel
+          getLayout={buildLayout}
+          hasContent={placed.length > 0}
+          onLoad={(layout) => {
+            if (
+              placed.length > 0 &&
+              !window.confirm("Load this exhibit? Your current world will be replaced (save it first if you want to keep it).")
+            ) {
+              return;
+            }
+            applyLayout(layout);
+            setExhibitsOpen(false);
+            camApi.current?.reset();
+          }}
+          onClose={() => setExhibitsOpen(false)}
         />
       )}
 
@@ -834,7 +987,65 @@ export default function WorldBuilder({ rooms }: { rooms: WorldRoom[] }) {
             style={{ background: "var(--accent)", color: "var(--accent-fg)" }}
           >
             Curating “{curatingRoom.room.title}” ·{" "}
-            {activeSlotId ? "pick a work from the panel" : "click a glowing slot"} · Esc to finish
+            {activeArt
+              ? "drag to move · corner dot to resize"
+              : activeSlotId
+                ? "pick a work from the panel"
+                : "click a glowing slot"}{" "}
+            · Esc to finish
+          </div>
+        </div>
+      )}
+
+      {/* Per-artwork toolbar (curate mode, selected hung work) */}
+      {curatingUid && activeSlotId && activeArt && (
+        <div className="pointer-events-none absolute inset-x-0 bottom-5 flex justify-center">
+          <div
+            className="pointer-events-auto flex items-center gap-1 rounded-full border px-2 py-1 text-xs"
+            style={{ background: "oklch(0.14 0 0 / 0.88)", borderColor: "var(--border)", backdropFilter: "blur(12px)" }}
+          >
+            <span className="max-w-44 truncate px-2" style={{ color: "var(--fg2)" }}>
+              {activeArt.name || "Untitled"}
+            </span>
+            <span className="h-4 w-px" style={{ background: "var(--border)" }} />
+            <Btn
+              onClick={() =>
+                setSlotOverride(curatingUid, activeSlotId, {
+                  ...activeOverride,
+                  scale: clamp(activeOverride.scale - SCALE_STEP, MIN_ART_SCALE, MAX_ART_SCALE),
+                })
+              }
+              disabled={activeOverride.scale <= MIN_ART_SCALE}
+            >
+              − Smaller
+            </Btn>
+            <span
+              className="w-12 text-center"
+              style={{ color: "var(--fg3)", fontFamily: "var(--font-mono)" }}
+            >
+              {Math.round(activeOverride.scale * 100)}%
+            </span>
+            <Btn
+              onClick={() =>
+                setSlotOverride(curatingUid, activeSlotId, {
+                  ...activeOverride,
+                  scale: clamp(activeOverride.scale + SCALE_STEP, MIN_ART_SCALE, MAX_ART_SCALE),
+                })
+              }
+              disabled={activeOverride.scale >= MAX_ART_SCALE}
+            >
+              + Larger
+            </Btn>
+            <span className="h-4 w-px" style={{ background: "var(--border)" }} />
+            <Btn onClick={() => resetSlotOverride(curatingUid, activeSlotId)}>Reset</Btn>
+            <Btn
+              onClick={() => {
+                clearSlot(curatingUid, activeSlotId);
+                setActiveSlotId(null);
+              }}
+            >
+              Remove
+            </Btn>
           </div>
         </div>
       )}
@@ -846,6 +1057,24 @@ export default function WorldBuilder({ rooms }: { rooms: WorldRoom[] }) {
           style={{ background: "oklch(0.14 0 0 / 0.82)", borderColor: "var(--border)", backdropFilter: "blur(12px)" }}
         >
           <Btn onClick={() => camApi.current?.reset()}>Reset view</Btn>
+          <Btn onClick={() => setExhibitsOpen((v) => !v)} active={exhibitsOpen} disabled={!!curatingUid}>
+            Exhibits
+          </Btn>
+          <Btn
+            onClick={() =>
+              downloadHyperfyExhibition(
+                buildHyperfyExhibition({
+                  name: `MOCA exhibition ${new Date().toLocaleDateString()}`,
+                  placed,
+                  assignments,
+                  overrides,
+                })
+              )
+            }
+            disabled={!placed.length}
+          >
+            Export
+          </Btn>
           <span className="mx-1 h-4 w-px" style={{ background: "var(--border)" }} />
           {curatingUid ? (
             <>
@@ -883,7 +1112,21 @@ export default function WorldBuilder({ rooms }: { rooms: WorldRoom[] }) {
           >
             Remove
           </Btn>
-          <Btn onClick={() => { setPlaced([]); setSelected(null); }} disabled={!placed.length}>Clear</Btn>
+          <Btn
+            onClick={() => {
+              if (window.confirm("Clear the whole world? (Saved exhibits are kept.)")) {
+                setPlaced([]);
+                setAssignments({});
+                setOverrides({});
+                setSelected(null);
+                setCuratingUid(null);
+                setActiveSlotId(null);
+              }
+            }}
+            disabled={!placed.length}
+          >
+            Clear
+          </Btn>
           <span className="mx-1 h-4 w-px" style={{ background: "var(--border)" }} />
           <Btn onClick={() => setShowHelp((v) => !v)} active={showHelp}>Controls</Btn>
         </div>
@@ -901,13 +1144,16 @@ export default function WorldBuilder({ rooms }: { rooms: WorldRoom[] }) {
             ["Q / E", "Rotate camera"],
             ["Right-drag", "Orbit"],
             ["Middle-drag", "Pan"],
-            ["Scroll", "Zoom"],
+            ["Scroll", "Zoom to cursor"],
             ["Screen edges", "Edge-scroll"],
             ["Shift", "Move faster"],
             ["Click tray → click", "Place room"],
             ["Drag room", "Move"],
+            ["Double-click room", "Focus"],
             ["Select → Curate", "Hang artworks"],
             ["Click slot → pick", "Fill slot"],
+            ["Drag artwork", "Move on wall"],
+            ["Corner dot", "Resize artwork"],
             ["R", "Rotate piece / ghost"],
             ["F", "Focus selected"],
             ["Del", "Remove selected / slot"],

@@ -1,0 +1,85 @@
+---
+title: How the system works
+description: The architecture behind the MOCA API
+---
+
+import { Callout } from "zudoku/ui/Callout";
+
+The MOCA API is the public face of the museum's tech stack. Understanding the
+pieces helps you predict freshness, latency, and media behavior.
+
+```
+                        ┌──────────────────────────────┐
+  your software ──────▶ │  MOCA API  (/v1, API keys)   │
+                        │  api.moca.qwellco.de         │
+                        └──────┬──────────────┬────────┘
+                               │              │ aggregates (cached ~5 min)
+                  ┌────────────▼───┐   ┌──────▼─────────────┐
+                  │ MOCA Directus  │   │ DeCC0s Directus    │
+                  │ collections,   │   │ api.decc0s.com     │
+                  │ nfts, rooms    │   │ 10,000 codex items │
+                  └────────────────┘   └────────────────────┘
+```
+
+## The museum CMS
+
+Collections, artworks, and 3D rooms live in the museum's Directus instance.
+Artwork records are continuously enriched from OpenSea (metadata, media URLs,
+listings) by background jobs, and a curation pipeline re-probes media against
+the **original files** so dimensions describe the artwork, not a CDN
+thumbnail.
+
+## Media normalization
+
+NFT media URLs rot: hosts die, CDNs re-encode, originals move. Every artwork
+response goes through a normalization layer:
+
+1. **Dead-host revival** — URLs on dead hosts (e.g. `openseauserdata.com`)
+   are swapped for live equivalents from the work's marketplace record.
+2. **Original-file preference** — OpenSea's conversion CDN serves ≤500px
+   variants that are frequently square-cropped. Where the original file
+   survives, `media.url` points at it instead.
+3. **Trustworthy ratios** — `ratio` is only computed from dimensions that
+   describe the real artwork. A square that's actually a crop never reaches
+   you as `ratio: 1`; unknown stays `1` and the media file itself is the
+   source of truth.
+4. **IPFS resolution** — `ipfs://` URIs arrive resolved to a public gateway.
+
+<Callout type="note" title="Recommended client behavior" icon>
+  Treat `width`/`height`/`ratio` as a strong hint for layout, then (if your
+  renderer allows) let the decoded file's true pixel size win. That's exactly
+  what the museum's own 3D world builder does.
+</Callout>
+
+## 3D rooms
+
+Rooms are GLB files authored for the museum's exhibition system. Each model
+carries placeholder meshes named `Slot_001 … Slot_NNN` (material
+`Slot Placeholder`): flat quads on the walls whose transforms define where —
+and at what size — artworks hang. The `slots` field on the room record tells
+you how many to expect. You can build your own gallery experience from the
+same models the museum uses at
+[museumofcryptoart.com/exhibitions/world](https://museumofcryptoart.com/exhibitions/world).
+
+## Art DeCC0s aggregation
+
+The DeCC0s knowledge base — 10,000 richly-written agent personas — lives on
+its own Directus instance ([docs.decc0s.com](https://docs.decc0s.com)). The
+MOCA API aggregates it:
+
+- responses are cached server-side for ~5 minutes
+- Directus file UUIDs are resolved to absolute `*_url` asset links
+- the multi-hundred-KB persona blobs (`agent_profiles`, `moltbot`) only ship
+  when you ask for them (`include=profiles`)
+- each token's **codex lore document** can be embedded with `include=codex`
+
+You can always go straight to the DeCC0s API with its own conventions; the
+MOCA API exists so most integrations only need one key and one base URL.
+
+## Freshness summary
+
+| Data | Typical freshness |
+| --- | --- |
+| Collections, rooms | Hours (editorial changes) |
+| Artworks | Hours (background OpenSea sync) |
+| DeCC0s | ≤5 minutes behind api.decc0s.com |

@@ -7,9 +7,9 @@ import type { WorldRoom } from "@/components/museum/three/WorldBuilder";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "World (experimental)",
+  title: "World",
   description:
-    "Place MOCA exhibition rooms into a shared world and explore them from above — an experimental RTS-style 3D mode.",
+    "Build your own museum: place MOCA exhibition rooms into a shared world, hang artworks from the collection, and save your exhibits.",
 };
 
 export default async function WorldPage() {
@@ -27,7 +27,7 @@ export default async function WorldPage() {
   }));
 
   return (
-    <div className="relative" style={{ height: "calc(100dvh - 4rem)" }}>
+    <div className="relative h-full">
       <div className="absolute left-4 top-3 z-20">
         <Link
           href="/exhibitions"
@@ -36,14 +36,6 @@ export default async function WorldPage() {
         >
           ← Exhibitions
         </Link>
-      </div>
-      <div className="absolute right-4 top-3 z-20">
-        <span
-          className="rounded-full border px-3 py-1 text-[10px] uppercase tracking-[0.12em]"
-          style={{ background: "oklch(0.14 0 0 / 0.8)", borderColor: "var(--border)", color: "var(--fg3)" }}
-        >
-          Experimental
-        </span>
       </div>
       <WorldClient rooms={worldRooms} />
     </div>

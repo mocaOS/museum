@@ -62,6 +62,47 @@ auto-discovers them from `EXTENSIONS_PATH` via the `directus:extension` field in
 | `applications` | `POST /applications/start`, `POST /applications/stop`, `GET /applications/url` | Auth'd (ethereum-address ownership). Creates/restarts/stops a Coolify app for agent deployment (nixpacks, port 3005, random `agents-*` subdomain), polls deploy status, returns URL + live logs. |
 | `codex` | `GET /codex/:token_id` | Returns the Art DeCC0 character codex JSON from `CODEX_DIR/Art_DeCC0_<padded>.codex.json` (default `./codex`). |
 | `listings` | `GET /listings` | Returns `settings.adoption_details` (parsed JSON: tokenId + price). |
+| `v1` | `GET /v1/*` | **The public MOCA API for integrators** (see below). |
+
+### The MOCA API (`src/v1/`)
+
+The unified public API: museum collections / artworks / 3D rooms plus the Art
+DeCC0s knowledge base aggregated from `https://api.decc0s.com` — one surface,
+one key. Documented at **`apps/docs`** (Zudoku site → docs.museumofcryptoart.com);
+the OpenAPI spec there (`apps/docs/apis/moca-v1.json`) is the response-shape
+source of truth.
+
+- **Routes**: `GET /v1` (public index), then key-gated: `/v1/collections[/:slug]`,
+  `/v1/artworks[/:id]` (media normalized like the museum frontend — dead-host
+  revival, original-file preference over square-cropped i2c.seadn.io variants,
+  trusted ratios — `src/v1/media.ts`), `/v1/rooms`, `/v1/decc0s[/:id]`
+  (aggregated + cached 5 min, `include=profiles,codex` for the heavy blobs /
+  lore file — `src/v1/decc0s.ts`), `/v1/search?q=`, **the Library**
+  (`POST /v1/library/ask`, `POST /v1/library/ask/stream` (SSE passthrough),
+  `POST /v1/library/search`, `GET /v1/library/collections` — proxies MOCA's
+  Cortex instance with a server-held read-only key, `src/v1/cortex.ts`), and
+  **Souls** (`GET /v1/souls/:chainId/:contractAddress[/:tokenId]` — Soulweaver's
+  EIP-191-signed SOUL identity files for web3/agent integrators,
+  `src/v1/souls.ts`; ERC-8004/8183/8257 patterns documented in apps/docs
+  `pages/web3.mdx`), and **ephemeral presence** (`GET /v1/presence/stream`
+  SSE + `POST /v1/presence/ping` — public, in-memory broadcast for the docs
+  chat widget, NOTHING persisted by design — `src/v1/presence.ts`).
+- **Auth** (`src/v1/auth.ts`): keys in the **`moca_api_keys`** collection
+  (admin-managed; generate with `echo "moca_$(openssl rand -hex 24)"`), sent
+  as `X-API-Key` or `Authorization: Bearer`. In-memory key cache (60 s) +
+  sliding-window rate limit (`MOCA_API_RATE_LIMIT`, default 120 req/min/key),
+  throttled `last_used` stamping.
+- **Envelope**: Directus-style `{ data, meta? }` / `{ errors: [...] }` —
+  matches the DeCC0s docs conventions.
+- **Env**: optional `MOCA_API_RATE_LIMIT`, `DECC0S_API_URL` (defaults to
+  `https://api.decc0s.com`), `CORTEX_API_URL` + `CORTEX_API_KEY` (read-only;
+  unset → `/v1/library/*` answers 503), `SOULWEAVER_API_URL` +
+  `SOULWEAVER_API_HEADERS` (defaults to the public deployment at
+  `https://soulweaver.museumofcryptoart.com`; override for self-hosted);
+  reuses `PUBLIC_URL` for asset links and `CODEX_DIR` for codex documents.
+- **Deploying a schema change**: the `moca_api_keys` collection ships as
+  directus-sync snapshot files — run `npx directus-sync push` after deploying,
+  then create the first key item in the Directus admin UI.
 
 ### `extensions/directus-extension-raw-query` (third-party, creazy231)
 

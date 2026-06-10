@@ -17,12 +17,15 @@ interface ArtworksResponse {
   perPage: number;
 }
 
-/** Small still thumbnail for a grid card (cheap proxied webp). */
+/** Small thumbnail for a grid card: cheap proxied webp, or mp4 for motion works. */
 function thumbUrl(art: NftView): string {
   const still = art.preview ?? art.display;
   const raw = resolveMediaUrl(still?.url);
   if (!raw) return "";
-  return proxiedUrl(raw, { width: 240, format: "webp", q: 70 });
+  return proxiedUrl(
+    raw,
+    art.isVideo ? { width: 480, format: "mp4", q: 70 } : { width: 240, format: "webp", q: 70 }
+  );
 }
 
 /**
@@ -192,12 +195,24 @@ export default function ArtworkPicker({
                 title={`${art.name || "Untitled"}${art.artist_name ? ` · ${art.artist_name}` : ""}`}
               >
                 <div className="aspect-square overflow-hidden" style={{ background: "var(--muted)" }}>
-                  {t ? (
+                  {t && art.isVideo ? (
+                    // Motion works have no still poster — show the clip itself,
+                    // muted and looping, like the gallery grids do.
+                    <video
+                      src={t}
+                      muted
+                      loop
+                      autoPlay
+                      playsInline
+                      preload="metadata"
+                      className="h-full w-full object-cover"
+                    />
+                  ) : t ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={t} alt={art.name || "Artwork"} loading="lazy" className="h-full w-full object-cover" />
                   ) : (
                     <div className="flex h-full items-center justify-center text-[10px]" style={{ color: "var(--fg3)" }}>
-                      {art.isVideo ? "video" : "no preview"}
+                      no preview
                     </div>
                   )}
                 </div>

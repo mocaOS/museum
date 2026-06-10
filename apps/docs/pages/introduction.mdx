@@ -1,0 +1,55 @@
+---
+title: MOCA API
+description: The unified public API of the Museum of Crypto Art
+---
+
+import { Callout } from "zudoku/ui/Callout";
+
+Welcome to the **MOCA API** — the unified public interface of the
+[Museum of Crypto Art](https://museumofcryptoart.com). One API key gives your
+software structured access to the whole MOCA universe:
+
+| Surface | What you get |
+| --- | --- |
+| **Collections** | The museum's published collections and their hierarchy |
+| **Artworks** | Every artwork with normalized, *original-ratio* media URLs |
+| **Rooms** | The 3D exhibition architecture as GLB models with artwork slots |
+| **Art DeCC0s** | The 10,000-entity DeCC0s knowledge base, aggregated from [api.decc0s.com](https://docs.decc0s.com) |
+| **Search** | One query across all of the above |
+| **Library** | RAG Q&A and hybrid search over the museum's knowledge base — answers with citations ([guide](/library)) |
+| **Souls** | EIP-191-signed agent identity documents per NFT, ready for ERC-8004/8183/8257 ([guide](/web3)) |
+| **Hyperfy** | Spawn curated exhibitions into walkable multiplayer worlds ([guide](/hyperfy)) |
+| **Skills** | Ground-truth `SKILL.md` files + [`llms.txt`](/llms.txt) for your AI agents ([handbook](/skills)) |
+
+## Base URL
+
+```
+https://api.moca.qwellco.de/v1
+```
+
+## Design principles
+
+**One key, one surface.** The MOCA API aggregates several backends — the
+museum's Directus CMS and the Art DeCC0s knowledge base — behind a single
+authenticated endpoint, so you never juggle multiple credentials or base URLs.
+
+**The artwork, not a thumbnail.** Historic NFT pipelines are littered with
+square-cropped CDN variants. The MOCA API resolves every artwork to its
+**original file** where one survives, revives dead hosts, and only reports an
+aspect `ratio` it can actually trust. Render `media.url` at `ratio` and you're
+showing the work the way the artist made it.
+
+**Familiar conventions.** Responses use the Directus-style envelope —
+`{ "data": …, "meta": … }` on success, `{ "errors": [...] }` on failure — the
+same conventions as the [DeCC0s API](https://docs.decc0s.com), so moving
+between the two feels seamless.
+
+<Callout type="tip" title="Get started in two minutes" icon>
+  Grab your key and make your first call in the [Quickstart](/quickstart).
+</Callout>
+
+## Need an API key?
+
+API keys are issued by the MOCA team. Reach out through
+[museumofcryptoart.com](https://museumofcryptoart.com) and tell us what you're
+building — we love seeing the collection travel.

@@ -1,0 +1,1952 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "MOCA API",
+    "version": "1.0.0",
+    "description": "The unified public API of the **Museum of Crypto Art** \u2014 collections, artworks (with original-ratio media), 3D exhibition rooms, and the **Art DeCC0s** knowledge base, aggregated behind a single API key.\n\nAll endpoints (except the index) require a MOCA API key sent as `X-API-Key: <key>` or `Authorization: Bearer <key>`.\n\nResponses use the Directus-style envelope: `{ \"data\": \u2026, \"meta\": \u2026 }` on success and `{ \"errors\": [{ \"message\", \"extensions\": { \"code\" } }] }` on failure.",
+    "contact": {
+      "name": "Museum of Crypto Art",
+      "url": "https://museumofcryptoart.com"
+    }
+  },
+  "servers": [
+    {
+      "url": "https://api.moca.qwellco.de",
+      "description": "Production"
+    }
+  ],
+  "security": [
+    {
+      "ApiKeyAuth": []
+    },
+    {
+      "BearerAuth": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "Meta",
+      "description": "API index and service information"
+    },
+    {
+      "name": "Collections",
+      "description": "Published museum collections"
+    },
+    {
+      "name": "Artworks",
+      "description": "Artworks across all museum collections, with normalized media"
+    },
+    {
+      "name": "Rooms",
+      "description": "3D exhibition room architecture (GLB models)"
+    },
+    {
+      "name": "DeCC0s",
+      "description": "The Art DeCC0s knowledge base, aggregated from api.decc0s.com"
+    },
+    {
+      "name": "Search",
+      "description": "Unified search across the whole museum"
+    },
+    {
+      "name": "Library",
+      "description": "The MOCA Library \u2014 RAG Q&A and search over the museum's knowledge base (powered by Cortex)"
+    },
+    {
+      "name": "Souls",
+      "description": "Signed agent identity documents (SOUL files) for NFTs, served by Soulweaver \u2014 built for ERC-8004 / ERC-8183 / ERC-8257 integrations"
+    },
+    {
+      "name": "Presence",
+      "description": "Ephemeral presence for the Library \u2014 public, nothing persisted server-side"
+    }
+  ],
+  "paths": {
+    "/v1": {
+      "get": {
+        "tags": [
+          "Meta"
+        ],
+        "operationId": "getIndex",
+        "summary": "API index",
+        "description": "Service information and the list of available endpoints. The only route that works without an API key.",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Service info",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string"
+                        },
+                        "version": {
+                          "type": "string"
+                        },
+                        "description": {
+                          "type": "string"
+                        },
+                        "documentation": {
+                          "type": "string"
+                        },
+                        "authentication": {
+                          "type": "string"
+                        },
+                        "endpoints": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/collections": {
+      "get": {
+        "tags": [
+          "Collections"
+        ],
+        "operationId": "listCollections",
+        "summary": "List collections",
+        "description": "All published top-level museum collections, each with its child collections.",
+        "responses": {
+          "200": {
+            "description": "Collections",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Collection"
+                      }
+                    }
+                  }
+                },
+                "example": {
+                  "data": [
+                    {
+                      "id": 1,
+                      "name": "Genesis Collection",
+                      "title": "The Genesis Collection",
+                      "description": "The founding artworks of the museum.",
+                      "slug": "genesis",
+                      "parent_collection": null,
+                      "child_collections": [
+                        {
+                          "id": 4,
+                          "name": "Genesis II",
+                          "slug": "genesis-ii"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      }
+    },
+    "/v1/collections/{slug}": {
+      "get": {
+        "tags": [
+          "Collections"
+        ],
+        "operationId": "getCollection",
+        "summary": "Get a collection",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "genesis"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Collection",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/Collection"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      }
+    },
+    "/v1/artworks": {
+      "get": {
+        "tags": [
+          "Artworks"
+        ],
+        "operationId": "listArtworks",
+        "summary": "List / search artworks",
+        "description": "Paged artworks across the museum. Media is normalized server-side: dead URLs are revived, OpenSea's square-cropped CDN variants are swapped for the **original files**, and `ratio` only ever derives from trustworthy dimensions \u2014 render `media.url` at `ratio` and you are showing the artwork the way the artist made it.",
+        "parameters": [
+          {
+            "name": "collection",
+            "in": "query",
+            "description": "Comma-separated collection slug(s) to scope the query.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "genesis"
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "description": "Match against artwork title or artist name.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "butterfly"
+          },
+          {
+            "$ref": "#/components/parameters/Page"
+          },
+          {
+            "$ref": "#/components/parameters/Limit"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Artworks",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Artwork"
+                      }
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/PageMeta"
+                    }
+                  }
+                },
+                "example": {
+                  "data": [
+                    {
+                      "id": 3643,
+                      "name": "Tree of Origins",
+                      "artist_name": "Example Artist",
+                      "collection": "genesis",
+                      "media": {
+                        "url": "https://ipfs.pixura.io/ipfs/QmfHBdQHPYKC3P2CdotUxDZzC1AAUWnLks6U7SBWz1RbGD",
+                        "type": "image",
+                        "content_type": "image/png",
+                        "width": 1026,
+                        "height": 1431
+                      },
+                      "animation": null,
+                      "ratio": 0.717,
+                      "opensea_url": "https://opensea.io/assets/ethereum/0x41a3\u2026/12"
+                    }
+                  ],
+                  "meta": {
+                    "total": 5210,
+                    "page": 1,
+                    "limit": 25
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      }
+    },
+    "/v1/artworks/{id}": {
+      "get": {
+        "tags": [
+          "Artworks"
+        ],
+        "operationId": "getArtwork",
+        "summary": "Get an artwork",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "example": 3643
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Artwork",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/Artwork"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      }
+    },
+    "/v1/rooms": {
+      "get": {
+        "tags": [
+          "Rooms"
+        ],
+        "operationId": "listRooms",
+        "summary": "List 3D rooms",
+        "description": "The museum's 3D exhibition architecture. Each room ships a GLB model (`model_url`) whose `Slot_001\u2026Slot_NNN` placeholder meshes mark wall positions for hanging artworks \u2014 the same convention the museum's own world builder uses.",
+        "responses": {
+          "200": {
+            "description": "Rooms",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Room"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      }
+    },
+    "/v1/decc0s": {
+      "get": {
+        "tags": [
+          "DeCC0s"
+        ],
+        "operationId": "listDecc0s",
+        "summary": "List / search DeCC0s",
+        "description": "The 10,000 Art DeCC0 entities, aggregated live from the DeCC0s knowledge base (api.decc0s.com) with a short server-side cache. List responses return a lightweight field set; use `fields` to choose your own, or fetch `/v1/decc0s/{id}` for the full record.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Page"
+          },
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "description": "Full-text search across the knowledge base.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "Cairo"
+          },
+          {
+            "name": "fields",
+            "in": "query",
+            "description": "Comma-separated field selection (the heavyweight `agent_profiles` / `moltbot` blobs are list-excluded regardless).",
+            "schema": {
+              "type": "string"
+            },
+            "example": "id,name,description,owner"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "DeCC0s",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Decc0Summary"
+                      }
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/Decc0ListMeta"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "502": {
+            "$ref": "#/components/responses/Upstream"
+          }
+        }
+      }
+    },
+    "/v1/decc0s/{id}": {
+      "get": {
+        "tags": [
+          "DeCC0s"
+        ],
+        "operationId": "getDecc0",
+        "summary": "Get a DeCC0",
+        "description": "One Art DeCC0 entity by token id (1\u201310000). Add `include=profiles` for the full agent persona blobs (`agent_profiles`, `moltbot` \u2014 hundreds of KB), and `include=codex` to embed the character's codex lore document.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 10000
+            },
+            "example": 1
+          },
+          {
+            "name": "include",
+            "in": "query",
+            "description": "Comma-separated extras: `profiles`, `codex`.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "profiles,codex"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "DeCC0 entity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/Decc0Detail"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "502": {
+            "$ref": "#/components/responses/Upstream"
+          }
+        }
+      }
+    },
+    "/v1/search": {
+      "get": {
+        "tags": [
+          "Search"
+        ],
+        "operationId": "search",
+        "summary": "Unified search",
+        "description": "One query across artworks, collections, and DeCC0s \u2014 grouped results, capped per group.",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "butterfly"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Max results per group (1\u201325).",
+            "schema": {
+              "type": "integer",
+              "default": 10,
+              "minimum": 1,
+              "maximum": 25
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Grouped results",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "artworks": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/Artwork"
+                          }
+                        },
+                        "collections": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/Collection"
+                          }
+                        },
+                        "decc0s": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/Decc0Summary"
+                          }
+                        }
+                      }
+                    },
+                    "meta": {
+                      "type": "object",
+                      "properties": {
+                        "query": {
+                          "type": "string"
+                        },
+                        "limit": {
+                          "type": "integer"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      }
+    },
+    "/v1/library/ask": {
+      "post": {
+        "tags": [
+          "Library"
+        ],
+        "operationId": "libraryAsk",
+        "summary": "Ask the Library",
+        "description": "RAG Q&A over the MOCA knowledge base: hybrid retrieval, optional knowledge-graph context, cited sources. For token-by-token output use the streaming variant.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "question"
+                ],
+                "properties": {
+                  "question": {
+                    "type": "string",
+                    "description": "The question to ask the Library"
+                  },
+                  "collection_id": {
+                    "type": "string",
+                    "description": "Scope to one Library collection (see GET /v1/library/collections)"
+                  },
+                  "top_k": {
+                    "type": "integer",
+                    "default": 5,
+                    "minimum": 1,
+                    "maximum": 20
+                  },
+                  "use_graph": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Include knowledge-graph context"
+                  },
+                  "use_agentic": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Deep-research mode: multi-step agent reasoning (slower, more thorough)"
+                  },
+                  "conversation_history": {
+                    "type": "array",
+                    "description": "Prior turns for follow-up questions (last 20 kept)",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "role": {
+                          "type": "string",
+                          "enum": [
+                            "user",
+                            "assistant"
+                          ]
+                        },
+                        "content": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "example": {
+                "question": "What is the significance of the Genesis Collection?",
+                "top_k": 5
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Answer with citations",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/LibraryAnswer"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "502": {
+            "$ref": "#/components/responses/Upstream"
+          },
+          "503": {
+            "description": "This surface is not configured on the deployment",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/library/ask/stream": {
+      "post": {
+        "tags": [
+          "Library"
+        ],
+        "operationId": "libraryAskStream",
+        "summary": "Ask the Library (streaming)",
+        "description": "Same request as `/v1/library/ask`, answered as **Server-Sent Events**. Each `data:` line is a JSON object: `{\"content\": \"\u2026\"}` token chunks, one `{\"sources\": [...]}` event, optional `{\"thinking\": \"\u2026\"}` / `{\"sub_questions\": [...]}` (agentic mode), `{\"graph_context\": {...}}`, and a final `{\"done\": true}`. Deep-research streams can run for minutes \u2014 disable proxy buffering.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "question"
+                ],
+                "properties": {
+                  "question": {
+                    "type": "string",
+                    "description": "The question to ask the Library"
+                  },
+                  "collection_id": {
+                    "type": "string",
+                    "description": "Scope to one Library collection (see GET /v1/library/collections)"
+                  },
+                  "top_k": {
+                    "type": "integer",
+                    "default": 5,
+                    "minimum": 1,
+                    "maximum": 20
+                  },
+                  "use_graph": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Include knowledge-graph context"
+                  },
+                  "use_agentic": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Deep-research mode: multi-step agent reasoning (slower, more thorough)"
+                  },
+                  "conversation_history": {
+                    "type": "array",
+                    "description": "Prior turns for follow-up questions (last 20 kept)",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "role": {
+                          "type": "string",
+                          "enum": [
+                            "user",
+                            "assistant"
+                          ]
+                        },
+                        "content": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "SSE stream (`text/event-stream`)",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "string",
+                  "example": "data: {\"content\": \"The Genesis\"}\n\ndata: {\"done\": true}\n\n"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "502": {
+            "$ref": "#/components/responses/Upstream"
+          },
+          "503": {
+            "description": "This surface is not configured on the deployment",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/library/search": {
+      "post": {
+        "tags": [
+          "Library"
+        ],
+        "operationId": "librarySearch",
+        "summary": "Search the Library",
+        "description": "Hybrid retrieval (vector + keyword + graph) without answer generation \u2014 returns scored excerpts. Cheaper and faster than ask; ideal for building your own UX on top.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "query"
+                ],
+                "properties": {
+                  "query": {
+                    "type": "string"
+                  },
+                  "top_k": {
+                    "type": "integer",
+                    "default": 5,
+                    "minimum": 1,
+                    "maximum": 25
+                  },
+                  "collection_id": {
+                    "type": "string"
+                  }
+                }
+              },
+              "example": {
+                "query": "cryptoart history 2018",
+                "top_k": 5
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Scored excerpts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "query": {
+                          "type": "string"
+                        },
+                        "results": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/LibrarySource"
+                          }
+                        },
+                        "total_results": {
+                          "type": "integer"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "502": {
+            "$ref": "#/components/responses/Upstream"
+          },
+          "503": {
+            "description": "This surface is not configured on the deployment",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/library/collections": {
+      "get": {
+        "tags": [
+          "Library"
+        ],
+        "operationId": "libraryCollections",
+        "summary": "List Library collections",
+        "description": "The knowledge-base collections available to ask/search against (use their `id` as `collection_id`).",
+        "responses": {
+          "200": {
+            "description": "Collections",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "description": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "document_count": {
+                            "type": "integer"
+                          },
+                          "entity_count": {
+                            "type": "integer"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "502": {
+            "$ref": "#/components/responses/Upstream"
+          },
+          "503": {
+            "description": "This surface is not configured on the deployment",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/souls/{chainId}/{contractAddress}": {
+      "get": {
+        "tags": [
+          "Souls"
+        ],
+        "operationId": "listSouls",
+        "summary": "List souls of a collection",
+        "description": "Paginated SOUL files generated for a collection's tokens.",
+        "parameters": [
+          {
+            "name": "chainId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "example": 1,
+            "description": "EVM chain id (1 = Ethereum mainnet)"
+          },
+          {
+            "name": "contractAddress",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^0x[0-9a-fA-F]{40}$"
+            },
+            "description": "ERC-721 contract address"
+          },
+          {
+            "$ref": "#/components/parameters/Page"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 50,
+              "minimum": 1,
+              "maximum": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Souls with pagination",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "502": {
+            "$ref": "#/components/responses/Upstream"
+          },
+          "503": {
+            "description": "This surface is not configured on the deployment",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/souls/{chainId}/{contractAddress}/{tokenId}": {
+      "get": {
+        "tags": [
+          "Souls"
+        ],
+        "operationId": "getSoul",
+        "summary": "Get a token's SOUL file",
+        "description": "The latest SOUL file for one NFT, including the **EIP-191 verification block** \u2014 recover the signer from `verification.message` and compare to `soul.signerAddress` to prove the identity document is authentic. See the [Web3 & agents guide](/web3) for ERC-8004 / ERC-8183 / ERC-8257 integration patterns.",
+        "parameters": [
+          {
+            "name": "chainId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "example": 1,
+            "description": "EVM chain id (1 = Ethereum mainnet)"
+          },
+          {
+            "name": "contractAddress",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^0x[0-9a-fA-F]{40}$"
+            },
+            "description": "ERC-721 contract address"
+          },
+          {
+            "name": "tokenId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "1"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "SOUL file with verification block",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/Soul"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "502": {
+            "$ref": "#/components/responses/Upstream"
+          },
+          "503": {
+            "description": "This surface is not configured on the deployment",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/presence/stream": {
+      "get": {
+        "tags": [
+          "Presence"
+        ],
+        "operationId": "presenceStream",
+        "summary": "Presence feed (SSE)",
+        "security": [],
+        "description": "Server-Sent Events feed of Library activity. **Nothing is persisted** \u2014 you only receive events broadcast while connected (the docs chat shows this as 'searched since you arrived'). Events: `{\"type\":\"hello\",\"here\":n}` on connect, `{\"type\":\"arrived\"|\"left\",\"here\":n}`, and `{\"type\":\"library-search\",\"handle\":\"\u2026\",\"at\":ms}` when someone pings. Questions are never broadcast \u2014 only the chosen handle.",
+        "responses": {
+          "200": {
+            "description": "SSE stream",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "string",
+                  "example": "data: {\"type\":\"library-search\",\"handle\":\"0xabc\u2026\",\"at\":1765400000000}\n\n"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Presence is at capacity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/presence/ping": {
+      "post": {
+        "tags": [
+          "Presence"
+        ],
+        "operationId": "presencePing",
+        "summary": "Announce a Library search",
+        "security": [],
+        "description": "Broadcast the *fact* of a Library search to everyone currently listening \u2014 fire it when you ask. Send only a display handle (wallet address, name, or nothing \u2192 'anon'); never the question. Rate-limited per IP.",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "handle": {
+                    "type": "string",
+                    "maxLength": 48,
+                    "description": "Display handle shown to listeners. Optional."
+                  }
+                }
+              },
+              "example": {
+                "handle": "0xd0ee\u2026dc6a"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Broadcast",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "ok": {
+                          "type": "boolean"
+                        },
+                        "here": {
+                          "type": "integer"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "ApiKeyAuth": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-API-Key",
+        "description": "Your MOCA API key."
+      },
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Your MOCA API key as a bearer token."
+      }
+    },
+    "parameters": {
+      "Page": {
+        "name": "page",
+        "in": "query",
+        "description": "1-based page number.",
+        "schema": {
+          "type": "integer",
+          "default": 1,
+          "minimum": 1
+        }
+      },
+      "Limit": {
+        "name": "limit",
+        "in": "query",
+        "description": "Page size (1\u2013100).",
+        "schema": {
+          "type": "integer",
+          "default": 25,
+          "minimum": 1,
+          "maximum": 100
+        }
+      }
+    },
+    "responses": {
+      "Unauthorized": {
+        "description": "Missing, invalid, or revoked API key",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            },
+            "example": {
+              "errors": [
+                {
+                  "message": "Invalid or revoked API key.",
+                  "extensions": {
+                    "code": "UNAUTHORIZED"
+                  }
+                }
+              ]
+            }
+          }
+        }
+      },
+      "NotFound": {
+        "description": "Resource not found",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            }
+          }
+        }
+      },
+      "BadRequest": {
+        "description": "Invalid request parameters",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            }
+          }
+        }
+      },
+      "RateLimited": {
+        "description": "Rate limit exceeded (default 120 requests/minute per key). Check `Retry-After` and the `X-RateLimit-*` headers.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            }
+          }
+        }
+      },
+      "Upstream": {
+        "description": "The DeCC0s upstream is temporarily unavailable",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "ErrorEnvelope": {
+        "type": "object",
+        "properties": {
+          "errors": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "message": {
+                  "type": "string"
+                },
+                "extensions": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "PageMeta": {
+        "type": "object",
+        "properties": {
+          "total": {
+            "type": "integer",
+            "description": "Total matching items"
+          },
+          "page": {
+            "type": "integer"
+          },
+          "limit": {
+            "type": "integer"
+          }
+        }
+      },
+      "Collection": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "title": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "slug": {
+            "type": "string",
+            "description": "Use as the `collection` filter on /v1/artworks"
+          },
+          "parent_collection": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "child_collections": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "integer"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "slug": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "Media": {
+        "type": "object",
+        "description": "A renderable media variant with a resolved https URL.",
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "Direct URL (IPFS already resolved to a gateway)"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "image",
+              "video",
+              "svg",
+              "model",
+              "text"
+            ]
+          },
+          "content_type": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "example": "image/png"
+          },
+          "width": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "height": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        }
+      },
+      "Artwork": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "artist_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "collection": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "OpenSea collection slug"
+          },
+          "media": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Media"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Best still image \u2014 original file preferred over CDN crops"
+          },
+          "animation": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Media"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Motion variant (video) when the work has one"
+          },
+          "ratio": {
+            "type": "number",
+            "description": "Trustworthy aspect ratio (width/height); 1 when unknown. Never derived from a square CDN crop."
+          },
+          "opensea_url": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "Room": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "title": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "architect": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "series": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "slots": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Number of artwork wall slots in the GLB"
+          },
+          "token_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "image_url": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Preview image (Directus asset URL, supports ?width=&format= transforms)"
+          },
+          "model_url": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "GLB model download URL"
+          }
+        }
+      },
+      "Decc0Summary": {
+        "type": "object",
+        "description": "Lightweight DeCC0 list item. `*_url` fields are resolved asset URLs added by the aggregation layer.",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "Token id (1\u201310000)"
+          },
+          "name": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "ancestor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "decc0_type": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "dna1": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "dna2": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "dna3": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "dna4": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "cultural_affiliation": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "philosophical_affiliation": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "artstyle_loved": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "owner": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Ethereum address"
+          },
+          "soul": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "multiplicity": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "thumbnail_url": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "thumbnail_character_url": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "thumbnail_background_url": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "image_ipfs_url": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "ipfs:// URI of the final artwork"
+          },
+          "timestamp_created": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        }
+      },
+      "Decc0Detail": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Decc0Summary"
+          },
+          {
+            "type": "object",
+            "description": "Full knowledge-base record (biography, personality, writing style, geography, \u2026). With `include=profiles` it also carries `agent_profiles` and `moltbot`; with `include=codex` it embeds `codex_document`.",
+            "properties": {
+              "biography": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "characterization": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "confession": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "agent_profiles": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "description": "Only with include=profiles"
+              },
+              "moltbot": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "description": "Only with include=profiles"
+              },
+              "codex_document": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "description": "Only with include=codex; null when no codex file exists for this token"
+              }
+            }
+          }
+        ]
+      },
+      "Decc0ListMeta": {
+        "type": "object",
+        "properties": {
+          "total": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "filtered": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "page": {
+            "type": "integer"
+          },
+          "limit": {
+            "type": "integer"
+          }
+        }
+      },
+      "LibrarySource": {
+        "type": "object",
+        "properties": {
+          "document_id": {
+            "type": "string"
+          },
+          "chunk_id": {
+            "type": "string"
+          },
+          "content": {
+            "type": "string",
+            "description": "The cited excerpt"
+          },
+          "score": {
+            "type": "number"
+          },
+          "metadata": {
+            "type": "object",
+            "properties": {
+              "filename": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "LibraryAnswer": {
+        "type": "object",
+        "properties": {
+          "question": {
+            "type": "string"
+          },
+          "answer": {
+            "type": "string"
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LibrarySource"
+            }
+          },
+          "graph_context": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "description": "Entities/relationships used (when use_graph)"
+          }
+        }
+      },
+      "Soul": {
+        "type": "object",
+        "description": "A SOUL file: a portable, signed agent identity document for one NFT.",
+        "properties": {
+          "soul": {
+            "type": "object",
+            "properties": {
+              "content": {
+                "type": "string",
+                "description": "The SOUL.md markdown"
+              },
+              "version": {
+                "type": "integer"
+              },
+              "contentHash": {
+                "type": "string",
+                "description": "keccak256 of the content"
+              },
+              "signature": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "EIP-191 personal_sign signature"
+              },
+              "signerAddress": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "ipfsCid": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "ipfsUrl": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "createdAt": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          },
+          "nft": {
+            "type": "object",
+            "properties": {
+              "tokenId": {
+                "type": "string"
+              },
+              "name": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "imageUrl": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "ownerAddress": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          },
+          "collection": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "contractAddress": {
+                "type": "string"
+              },
+              "chainId": {
+                "type": "integer"
+              }
+            }
+          },
+          "verification": {
+            "type": "object",
+            "description": "How to verify authenticity",
+            "properties": {
+              "message": {
+                "type": "string",
+                "description": "The signed message: {keccak256}|{chainId}:{contract}:{tokenId}|codex-v{version}"
+              },
+              "howToVerify": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

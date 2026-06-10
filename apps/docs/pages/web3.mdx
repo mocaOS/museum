@@ -1,0 +1,124 @@
+---
+title: Web3 & agents
+description: SOUL files, signature verification, and the ERC-8004 / ERC-8183 / ERC-8257 agent stack
+---
+
+import { Callout } from "zudoku/ui/Callout";
+
+The MOCA ecosystem treats NFTs as **agents-in-waiting**: every Art DeCC0 (and
+any collection onboarded through [Soulweaver](https://soulweaver.museumofcryptoart.com))
+carries a generated personality codex and a portable identity document — the
+**SOUL file**. This page is for builders wiring those identities into the
+emerging onchain agent stack.
+
+## SOUL files
+
+A SOUL file is a markdown identity document (identity, appearance, voice,
+personality, behavioral directives) generated from the token's onchain traits
+plus community lore, then:
+
+- hashed with **keccak256** (`contentHash`)
+- signed by the platform key via **EIP-191** `personal_sign` (`signature`, `signerAddress`)
+- pinned to **IPFS** (`ipfsCid`) so it outlives any single server
+
+Fetch one through the MOCA API:
+
+```bash
+curl -H "X-API-Key: moca_YOUR_KEY" \
+  "https://api.moca.qwellco.de/v1/souls/1/0xCONTRACT/42"
+```
+
+## Verifying authenticity
+
+Every response includes a `verification` block. The signed message binds the
+content hash to the token's onchain coordinates and codex version:
+
+```
+{contentHash}|{chainId}:{contractAddress}:{tokenId}|codex-v{version}
+```
+
+Verification with [viem](https://viem.sh):
+
+```ts
+import { recoverMessageAddress, keccak256, toBytes } from "viem";
+
+const { data } = await getSoul(1, contract, tokenId);
+
+// 1. The content actually hashes to the committed hash
+const hash = keccak256(toBytes(data.soul.content));
+if (hash !== data.soul.contentHash) throw new Error("content tampered");
+
+// 2. The EIP-191 signature recovers to the platform signer
+const signer = await recoverMessageAddress({
+  message: data.verification.message,
+  signature: data.soul.signature,
+});
+if (signer.toLowerCase() !== data.soul.signerAddress.toLowerCase()) {
+  throw new Error("bad signature");
+}
+```
+
+Two checks, no trust in the API required — the same verification works
+against the IPFS copy.
+
+## The onchain agent stack
+
+Three draft ERCs define how agent identities like SOULs plug into open
+economies. SOUL files were designed with all three in mind:
+
+### ERC-8004 — Trustless Agents
+
+An identity / reputation / validation registry triad: agents are
+discoverable onchain (ERC-721-based identity), accumulate client feedback,
+and can have work validated. **Integration pattern:** register an agent whose
+metadata points at the SOUL file's IPFS CID — the EIP-191 signature chain
+proves the personality document belongs to that token. Soulweaver reserves
+`mintedAgentId` per SOUL and `agentRegistryAddress` per collection for
+exactly this registration.
+
+### ERC-8183 — Agentic Commerce
+
+Job escrow with evaluator attestation (Open → Funded → Submitted → Terminal).
+**Integration pattern:** when a SOUL-derived agent takes work, the job's
+descriptor references the agent's identity (8004 id or SOUL coordinates), so
+clients know *who* they hired — voice, values, and capabilities are all in
+the SOUL document.
+
+### ERC-8257 — Agent Tool Registry
+
+A minimal onchain registry of agent tools with predicate-based access
+control and manifest-hash commitments. **Integration pattern:** the MOCA API
+itself is a natural tool entry — a manifest describing these endpoints,
+priced and access-controlled onchain, lets 8257-aware agents discover and
+query the museum autonomously.
+
+<Callout type="note" title="Drafts move" icon>
+  All three ERCs are Standards-Track drafts; interfaces may shift. The stable
+  ground today is the SOUL file format and its EIP-191 verification chain —
+  build on those, and treat registry integration as a thin layer on top.
+</Callout>
+
+## Building an agent from a soul
+
+The fastest path to a *running* agent, no chain required:
+
+```ts
+const { data } = await getSoul(1, DECC0S_CONTRACT, tokenId);
+
+const agent = await llm.chat({
+  system: data.soul.content,        // the SOUL.md IS the system prompt
+  messages: [{ role: "user", content: "Introduce yourself." }],
+});
+```
+
+Pair it with the [Library](/library) (`/v1/library/ask`) for grounded museum
+knowledge, and `/v1/decc0s/:id?include=profiles` for structured persona data
+(adjectives, lore, writing style) when you need more than markdown.
+
+## Ownership-aware experiences
+
+Souls are public; *control* is onchain. To gate actions to the current
+holder, read `ownerOf(tokenId)` from the contract (the soul response also
+carries a cached `ownerAddress`) and have the user prove the address with a
+standard wallet signature — the usual SIWE flow. The MOCA API deliberately
+stays read-only: writes belong to your contracts and your users' wallets.

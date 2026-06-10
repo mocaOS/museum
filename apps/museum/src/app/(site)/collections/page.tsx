@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { listTopCollections, listCollectionPreviews } from "@/lib/museum/directus";
-import { pickDisplayMedia, pickPreviewMedia } from "@/lib/museum/media";
+import { pickDisplayMedia, pickPreviewMedia, preferOriginalStill } from "@/lib/museum/media";
 import CollectionCard from "@/components/museum/CollectionCard";
 
 // Directus reads are cached hourly in the data layer (see lib/museum/directus.ts),
@@ -25,7 +25,9 @@ export default async function CollectionsPage() {
       const slugs = [c.slug, ...(c.child_collections || []).map((cc) => cc.slug)];
       const nfts = await listCollectionPreviews(slugs, 12);
       // Prefer a still poster so video works don't autoplay in the overview.
-      return nfts.map((n) => pickPreviewMedia(n) ?? pickDisplayMedia(n));
+      return nfts.map((n) =>
+        preferOriginalStill(pickPreviewMedia(n) ?? pickDisplayMedia(n), n.response_opensea)
+      );
     })
   );
 

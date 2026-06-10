@@ -8,7 +8,7 @@ Museum of Crypto Art (MOCA) — an open-source, AI-powered museum tech stack. Tu
 
 ### Frontends & domains
 
-- **`apps/museum`** (`moca-museum`) — **Next.js 16** app. This is the **current public-facing site served at `museumofcryptoart.com`**. It renders the galleries/collections/exhibitions (live from Directus), static content (writings/timeline/incubator from `src/content/*.json`), and the **Library** — an anonymous, single-read-only-key chat front-end for the Cortex RAG backend (`library.moca.qwellco.de`). See `apps/museum/CLAUDE.md` for its full architecture. It is **self-contained** — NOT a Turborepo workspace, with its own `Dockerfile`/`docker-compose.yml`, deployed standalone on Coolify (port 3331).
+- **`apps/museum`** (`moca-museum`) — **Next.js 16** app. This is the **current public-facing site served at `museumofcryptoart.com`**. It renders the galleries/collections/exhibitions (live from Directus) including the **3D exhibition world builder** at `/exhibitions/world` (place rooms, hang/curate artworks, save exhibits to localStorage), static content (writings/timeline/incubator from `src/content/*.json`), and the **Library** — an anonymous, single-read-only-key chat front-end for the Cortex RAG backend (`library.moca.qwellco.de`). See `apps/museum/CLAUDE.md` for its full architecture. It is **self-contained** — NOT a Turborepo workspace, with its own `Dockerfile`/`docker-compose.yml`, deployed standalone on Coolify (port 3331).
 - **`apps/web`** (`web`) — **Nuxt 3** frontend (Vue 3.5, TailwindCSS v4, shadcn-nuxt, TanStack Vue Query). The earlier frontend, mapped to `v2.museumofcryptoart.com` (see `packages/config`). Part of the Turborepo workspace; this is what `yarn dev:web` runs.
 
 When someone says "the museum site" / `museumofcryptoart.com`, they mean **`apps/museum`** (Next.js).
@@ -92,6 +92,29 @@ No unified test runner exists at the root. The moca-agent app has its own test s
 Defined in root package.json: `apps/api`, `apps/api/extensions/*`, `apps/web`, `apps/moca-agent`, `packages/*`.
 
 **`apps/museum` is intentionally NOT a workspace** — it is a self-contained Next.js app with its own lockfile and dependencies (so its `next@16` doesn't collide with `next-auth`'s `next@13` peer in `apps/web`). Install and build it standalone from inside `apps/museum` (see below), not via root `turbo`.
+
+### apps/docs — MOCA API documentation (Zudoku)
+
+Standalone [Zudoku](https://zudoku.dev) site documenting the **public MOCA API**
+(`/v1` on the Directus backend): guides (auth, quickstart, architecture,
+integration recipes) + interactive API reference generated from
+`apps/docs/apis/moca-v1.json` (OpenAPI 3.1, the response-shape source of truth).
+Not a workspace — `npm install && npm run build` inside `apps/docs`; ships via
+its own `Dockerfile` (static nginx) on Coolify. Same framework as the Art
+DeCC0s docs (docs.decc0s.com) for a consistent integrator experience. Also ships
+agent-first entry points: `llms.txt` / `llms-full.txt` (Zudoku-generated) and the
+**MOCA Skills** handbook (`public/SKILL.md` + `public/skills/*/SKILL.md`,
+cortexskills.org-style), plus the floating Library chat widget
+(`src/LibraryWidget.tsx` — localStorage-only history, ephemeral `/v1/presence`).
+
+### apps/hyperfy — exhibitions as walkable worlds
+
+Tooling that spawns world-builder exhibitions (exported `*.moca-exhibition.json`,
+device-local until the curator acts) into self-hosted [Hyperfy](https://github.com/hyperfy-xyz/hyperfy)
+worlds: `spawn-exhibition.mjs` (drives Hyperfy's node client; rooms + artworks via
+the shared `Slot_NNN` convention), `docker-compose.worlds.yml` (multi-world
+hosting template), `harvest-hyperfy-docs.mjs` (ingests Hyperfy docs into the
+Library so agents can help build worlds). See `apps/hyperfy/README.md`.
 
 ### Directus backend (`apps/api`)
 

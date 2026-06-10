@@ -1,0 +1,116 @@
+---
+title: The Library (RAG)
+description: Ask questions against the museum's knowledge base
+---
+
+import { Callout } from "zudoku/ui/Callout";
+
+The **MOCA Library** is the museum's knowledge base — writings, curated lore,
+artist interviews, historical documents — indexed by
+[Cortex](https://cortex.eco) into a hybrid vector + knowledge-graph retrieval
+system. The MOCA API exposes its read surface, so your software can ask
+grounded, **cited** questions about crypto art without running any RAG
+infrastructure of your own.
+
+## Ask a question
+
+```bash
+curl -X POST "https://api.moca.qwellco.de/v1/library/ask" \
+  -H "X-API-Key: moca_YOUR_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{ "question": "What is the significance of the Genesis Collection?" }'
+```
+
+The answer arrives with its receipts:
+
+```json
+{
+  "data": {
+    "answer": "Based on the available reference material, …",
+    "sources": [
+      {
+        "document_id": "…",
+        "content": "the cited excerpt…",
+        "score": 0.92,
+        "metadata": { "filename": "moca-history.md" }
+      }
+    ]
+  }
+}
+```
+
+**Options:** `collection_id` scopes the question to one Library collection
+(`GET /v1/library/collections` lists them), `top_k` controls retrieval depth,
+`use_graph: false` skips knowledge-graph context for faster answers, and
+`conversation_history` carries prior turns for follow-ups.
+
+## Streaming (SSE)
+
+For chat UX, `POST /v1/library/ask/stream` answers as Server-Sent Events:
+
+```ts
+const res = await fetch(`${BASE}/library/ask/stream`, {
+  method: "POST",
+  headers: { "X-API-Key": KEY, "Content-Type": "application/json" },
+  body: JSON.stringify({ question, use_agentic: true }),
+});
+const reader = res.body!.getReader();
+const decoder = new TextDecoder();
+let buffer = "";
+while (true) {
+  const { done, value } = await reader.read();
+  if (done) break;
+  buffer += decoder.decode(value, { stream: true });
+  for (const frame of buffer.split("\n\n")) {
+    if (!frame.startsWith("data: ")) continue;
+    const event = JSON.parse(frame.slice(6));
+    if (event.content) process.stdout.write(event.content); // token
+    if (event.thinking) console.log("[thinking]", event.thinking);
+    if (event.sources) renderCitations(event.sources);
+    if (event.done) return;
+  }
+  buffer = buffer.slice(buffer.lastIndexOf("\n\n") + 2);
+}
+```
+
+Event types you'll see: `{content}` token chunks, one `{sources: [...]}`,
+`{graph_context}` (entities/relationships used), and — in **deep research
+mode** (`use_agentic: true`) — `{thinking}` steps and `{sub_questions}`.
+Research streams legitimately run for minutes; don't buffer them through
+proxies.
+
+<Callout type="tip" title="Search without generation" icon>
+  `POST /v1/library/search` runs the same hybrid retrieval but skips the LLM —
+  scored excerpts only, fast and cheap. Perfect when you want to build your
+  own presentation (or feed your own model).
+</Callout>
+
+## The chat in these docs
+
+The floating **Ask the Library** window (bottom-right of every page here) is
+this API, eating its own dog food — with a deliberate privacy model:
+
+- **Your conversations never leave your device.** History lives in your
+  browser's localStorage; there are no accounts and no server-side history.
+- **Presence is ephemeral.** The little list of handles that "searched since
+  you arrived" comes from `/v1/presence` — an in-memory broadcast that the
+  server relays and forgets. You only experience what happens while you (or
+  your agent) are present; nothing is stored, nothing can be replayed.
+- **Only handles travel.** When you ask, the widget pings presence with your
+  chosen handle (or "anon") — never the question itself.
+
+Agents are first-class citizens here: point yours at
+[`/skills/library/SKILL.md`](/skills/library/SKILL.md) and it can ask the
+Library, watch presence, and collaborate with the humans in the room on
+integrations.
+
+## What's in the Library?
+
+```bash
+curl -H "X-API-Key: moca_YOUR_KEY" \
+  "https://api.moca.qwellco.de/v1/library/collections"
+```
+
+Each collection reports its document and entity counts. Want something
+indexed that isn't there? Talk to the MOCA team — the Library grows by
+curation.

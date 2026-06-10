@@ -1,0 +1,65 @@
+# MOCA × Hyperfy — host multiple walkable exhibition worlds.
+#
+# Each world is one Hyperfy server with its own folder (SQLite db + assets).
+# Visitors walk in via the browser; curators spawn their exhibitions with
+# spawn-exhibition.mjs. Add a service per world you want to host and point a
+# (sub)domain at its port via your proxy (Coolify/Traefik handles TLS).
+#
+# Setup:
+#   git clone https://github.com/hyperfy-xyz/hyperfy
+#   cd hyperfy && cp .env.example .env       # set ADMIN_CODE per world below!
+#   docker compose -f ../museum/apps/hyperfy/docker-compose.worlds.yml up -d
+#
+# IMPORTANT: set ADMIN_CODE on every world — a blank code makes every visitor
+# a builder, which is fine for a sandbox and chaos for a public exhibition.
+
+services:
+  world-genesis:
+    build: ../../../hyperfy # path to your hyperfy clone
+    restart: unless-stopped
+    ports:
+      - "3401:3000"
+    environment:
+      WORLD: world
+      PORT: 3000
+      ADMIN_CODE: ${GENESIS_ADMIN_CODE:?set me}
+      JWT_SECRET: ${GENESIS_JWT_SECRET:?set me}
+      PUBLIC_WS_URL: wss://genesis.worlds.museumofcryptoart.com/ws
+      PUBLIC_API_URL: https://genesis.worlds.museumofcryptoart.com/api
+      ASSETS_BASE_URL: https://genesis.worlds.museumofcryptoart.com/assets
+    volumes:
+      - ./worlds/genesis:/app/world
+
+  world-decc0s:
+    build: ../../../hyperfy
+    restart: unless-stopped
+    ports:
+      - "3402:3000"
+    environment:
+      WORLD: world
+      PORT: 3000
+      ADMIN_CODE: ${DECC0S_ADMIN_CODE:?set me}
+      JWT_SECRET: ${DECC0S_JWT_SECRET:?set me}
+      PUBLIC_WS_URL: wss://decc0s.worlds.museumofcryptoart.com/ws
+      PUBLIC_API_URL: https://decc0s.worlds.museumofcryptoart.com/api
+      ASSETS_BASE_URL: https://decc0s.worlds.museumofcryptoart.com/assets
+    volumes:
+      - ./worlds/decc0s:/app/world
+
+  # Community worlds: copy a block per curator/show. Each world is isolated —
+  # its own db, assets, admin code — so curators can't step on each other.
+  world-community:
+    build: ../../../hyperfy
+    restart: unless-stopped
+    ports:
+      - "3403:3000"
+    environment:
+      WORLD: world
+      PORT: 3000
+      ADMIN_CODE: ${COMMUNITY_ADMIN_CODE:?set me}
+      JWT_SECRET: ${COMMUNITY_JWT_SECRET:?set me}
+      PUBLIC_WS_URL: wss://community.worlds.museumofcryptoart.com/ws
+      PUBLIC_API_URL: https://community.worlds.museumofcryptoart.com/api
+      ASSETS_BASE_URL: https://community.worlds.museumofcryptoart.com/assets
+    volumes:
+      - ./worlds/community:/app/world

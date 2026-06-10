@@ -103,6 +103,8 @@ interface OpenseaMediaUrls {
   animation_url?: string;
   display_image_url?: string;
   image_url?: string;
+  original_image_url?: string;
+  original_animation_url?: string;
 }
 
 /** A live OpenSea CDN URL from the raw response, preferring motion or still. */
@@ -120,6 +122,48 @@ export function reviveMedia(media: MediaInfo | null, responseOpensea: unknown): 
   if (!media || !isDeadMediaUrl(media.url)) return media;
   const live = openseaLiveUrl(responseOpensea, mediaKind(media) !== "video");
   return live ? { ...media, url: live } : media;
+}
+
+// OpenSea's conversion CDN (i2c.seadn.io) serves ≤500px variants that are
+// frequently square-CROPPED — a 1026×1431 portrait comes back 500×500. The
+// historical media_info/display_media_info blobs were probed from those
+// variants, so both their URLs and their stored dimensions describe the crop,
+// not the artwork. response_opensea.original_image_url (OpenSea API v2) keeps
+// the untouched original file.
+const CONVERSION_CDN_HOSTS = ["i2c.seadn.io"];
+
+/** The artwork's original still-image URL, when OpenSea kept one we can use. */
+function openseaOriginalStill(responseOpensea: unknown): string | undefined {
+  const o = responseOpensea as OpenseaMediaUrls | null;
+  const u = o?.original_image_url;
+  if (!u || isDeadMediaUrl(u)) return undefined;
+  // Originals can be any file type; the still pipeline can only render
+  // raster/vector images, so skip obvious motion/model/html originals.
+  if (/\.(mp4|webm|mov|avi|glb|gltf|html?|js)(\?|$)/i.test(u)) return undefined;
+  return u;
+}
+
+/**
+ * Swap a conversion-CDN still for the artwork's original file so the museum
+ * never displays a square cutout. Square stored dimensions are dropped (they
+ * measured the crop); trusted non-square ones are kept.
+ */
+export function preferOriginalStill(
+  media: MediaInfo | null,
+  responseOpensea: unknown
+): MediaInfo | null {
+  if (!media) return null;
+  const kind = mediaKind(media);
+  if (kind !== "image" && kind !== "gif") return media;
+  const original = openseaOriginalStill(responseOpensea);
+  if (!original || original === media.url) return media;
+  if (!CONVERSION_CDN_HOSTS.some((h) => (media.url || "").includes(h))) return media;
+  const square = !!media.width && media.width === media.height;
+  return {
+    ...media,
+    url: original,
+    ...(square ? { width: undefined, height: undefined } : {}),
+  };
 }
 
 /**
@@ -199,10 +243,26 @@ export function mediaRatio(...candidates: (MediaInfo | null | undefined)[]): num
 }
 
 /**
+ * Null out dimensions that describe a conversion-CDN square (likely a crop of
+ * a non-square original) so they never feed an aspect ratio. Renderers that
+ * get no trusted ratio fall back to measuring the real pixels (3D planes) or
+ * native sizing (lightbox), which is always correct.
+ */
+function trustedDims(m: MediaInfo | null | undefined): MediaInfo | null {
+  if (!m?.width || !m?.height) return null;
+  if (m.width === m.height && CONVERSION_CDN_HOSTS.some((h) => (m.url || "").includes(h))) {
+    return null;
+  }
+  return m;
+}
+
+/**
  * A still, raster texture URL for rendering a work onto a 3D plane. Prefers the
- * image preview; routes through the transform-in proxy (revives dead URLs +
- * sizes to a power-of-two-ish WebP). Returns "" when no still image exists
- * (e.g. video-only works) so callers can show a placeholder.
+ * image preview and routes through our same-origin `/api/museum/texture` proxy
+ * — THREE.TextureLoader requires CORS on every redirect hop, which third-party
+ * media hosts don't reliably provide, so the app streams the bytes itself
+ * (optimizing via transform-in server-side where possible). Returns "" when no
+ * still image exists (e.g. video-only works) so callers can show a placeholder.
  */
 export function artworkTextureUrl(view: NftView, size = 1024): string {
   const still =
@@ -213,7 +273,26 @@ export function artworkTextureUrl(view: NftView, size = 1024): string {
         : null;
   const raw = resolveMediaUrl(still?.url);
   if (!raw) return "";
-  return proxiedUrl(raw, { width: size, format: "webp", q: 82 });
+  if (raw.startsWith("data:") || raw.startsWith("/")) return raw;
+  return `/api/museum/texture?src=${encodeURIComponent(raw)}&w=${size}`;
+}
+
+/**
+ * A playable, CORS-safe video URL for rendering a motion work onto a 3D plane
+ * (THREE.VideoTexture). Routed through the transform-in proxy (sends CORS,
+ * resizes, serves mp4) like MediaView's gallery videos. Returns "" for
+ * non-video works so callers use the still texture instead.
+ */
+export function artworkVideoUrl(view: NftView, size = 1024): string {
+  const motion =
+    view.display && mediaKind(view.display) === "video"
+      ? view.display
+      : view.preview && mediaKind(view.preview) === "video"
+        ? view.preview
+        : null;
+  const raw = resolveMediaUrl(motion?.url);
+  if (!raw) return "";
+  return proxiedUrl(raw, { width: size, format: "mp4", q: 75 });
 }
 
 /** Resolve an NFT's media to a client-safe NftView (run on the server). */
@@ -226,8 +305,11 @@ export function toNftView(nft: {
   media_info?: unknown;
   response_opensea?: unknown;
 }): NftView {
-  const display = pickDisplayMedia(nft);
-  const preview = pickPreviewMedia(nft) ?? display;
+  // Stills are upgraded from the conversion-CDN crop to the original file;
+  // motion media (display) passes through preferOriginalStill unchanged.
+  const display = preferOriginalStill(pickDisplayMedia(nft), nft.response_opensea);
+  const preview =
+    preferOriginalStill(pickPreviewMedia(nft), nft.response_opensea) ?? display;
   return {
     id: nft.id,
     name: nft.name,
@@ -235,7 +317,14 @@ export function toNftView(nft: {
     preview,
     display,
     isVideo: mediaKind(display) === "video",
-    ratio: mediaRatio(preview, display),
+    // media_info first: after the fix-square-media-info migration it carries
+    // the original file's true dimensions. Conversion-CDN squares are never
+    // trusted for ratio (they're usually crops).
+    ratio: mediaRatio(
+      trustedDims(nft.media_info as MediaInfo),
+      trustedDims(preview),
+      trustedDims(display)
+    ),
   };
 }
 

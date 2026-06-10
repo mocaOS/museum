@@ -6,7 +6,8 @@ import { useState } from "react";
 
 const NAV = [
   { href: "/collections", label: "Collections" },
-  { href: "/exhibitions", label: "Exhibitions" },
+  { href: "/soulweaver", label: "Soulweaver" },
+  { href: "/exhibitions", label: "MOCA ROOMs" },
   { href: "/writings", label: "Writings" },
   { href: "/timeline", label: "Timeline" },
   { href: "https://museumofcrypto.substack.com/", label: "Newsletter", external: true },

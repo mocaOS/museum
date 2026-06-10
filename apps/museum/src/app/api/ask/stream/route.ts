@@ -4,6 +4,21 @@ import { injectCortexAnalytics } from "@/lib/cortex-analytics";
 
 export const dynamic = "force-dynamic";
 
+// The Library proxy is anonymous and public by design; CORS lets trusted
+// sibling surfaces (the API docs' chat widget at docs.museumofcryptoart.com)
+// use it from the browser. There is no auth to leak — the Cortex key stays
+// server-side either way.
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type",
+  "Access-Control-Max-Age": "86400",
+};
+
+export async function OPTIONS() {
+  return new Response(null, { status: 204, headers: CORS_HEADERS });
+}
+
 /**
  * SSE streaming proxy. The public Library uses one read-only Cortex key
  * (CORTEX_API_KEY) for everyone — no auth, no per-user keys.
@@ -62,6 +77,7 @@ export async function POST(request: Request) {
         "Cache-Control": "no-cache, no-transform",
         Connection: "keep-alive",
         "X-Accel-Buffering": "no",
+        ...CORS_HEADERS,
       },
     });
   } catch (err) {

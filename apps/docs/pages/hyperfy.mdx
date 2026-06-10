@@ -1,0 +1,89 @@
+---
+title: Exhibitions in Hyperfy
+description: Spawn curated museum exhibitions into walkable multiplayer worlds
+---
+
+import { Callout } from "zudoku/ui/Callout";
+import { Stepper } from "zudoku/ui/Stepper";
+
+Anyone can curate a museum at
+[museumofcryptoart.com/exhibitions/world](https://museumofcryptoart.com/exhibitions/world)
+— place 3D rooms, hang artworks, resize and arrange them. With the
+[Hyperfy](https://github.com/hyperfy-xyz/hyperfy) integration, that curation
+becomes a **walkable, multiplayer world** people can actually visit.
+
+<Callout type="note" title="The privacy contract" icon>
+  Curation data never leaves the curator's device. The world builder stores
+  everything in browser localStorage; "Export" writes a
+  `*.moca-exhibition.json` file to disk. A Hyperfy world only ever sees an
+  exhibition when the curator explicitly runs the spawner against it — that
+  is the upload moment, and it's theirs.
+</Callout>
+
+## From curation to world
+
+<Stepper>
+
+1. **Curate & export**
+
+   Build the exhibition in the world builder, then hit **Export**. The file
+   carries room GLB references, placements, and every hung artwork with
+   CORS-enabled texture URLs, true ratios, video URLs, and your move/resize
+   adjustments.
+
+1. **Prepare Hyperfy (once)**
+
+   ```bash
+   git clone https://github.com/hyperfy-xyz/hyperfy && cd hyperfy
+   npm install && npm run node-client:build
+   ```
+
+1. **Spawn**
+
+   ```bash
+   node spawn-exhibition.mjs my-show.moca-exhibition.json \
+     --hyperfy ../hyperfy \
+     --url https://your-world.example.com \
+     --admin-code YOUR_CODE
+   ```
+
+   Every room uploads as a Hyperfy app; a generated script finds the same
+   `Slot_NNN` placeholder nodes the museum uses and hangs the art — images
+   as unlit planes at true aspect ratio, motion works as live spatial video.
+
+1. **Walk in**
+
+   Open the world in a browser. It's multiplayer — bring people.
+
+</Stepper>
+
+The spawner and templates live in the museum monorepo under `apps/hyperfy`.
+
+## Hosting many worlds
+
+Each Hyperfy world is one lightweight server with its own database, assets,
+and admin code — perfect isolation per exhibition or curator.
+`apps/hyperfy/docker-compose.worlds.yml` is the template: copy a service
+block per world, point subdomains at the ports, hand each curator their
+code. The museum hosts worlds for curated shows; self-hosters need nothing
+but Docker.
+
+## The slot convention (build your own renderer)
+
+Rooms from `GET /v1/rooms` are GLBs whose `Slot_001…Slot_NNN` placeholder
+quads define where art hangs — transform = anchor, bounding box = frame
+size, `slots` field = count. Hide the placeholder, place the work at its
+transform, fit preserving `ratio`. That single convention powers the museum
+site, the Hyperfy integration, and whatever you build next.
+
+## Agents that know Hyperfy
+
+Run `apps/hyperfy/harvest-hyperfy-docs.mjs` to ingest the official
+[docs.hyperfy.xyz](https://docs.hyperfy.xyz) content into the
+[Library](/library). From then on `/v1/library/ask` — and the chat widget on
+this very site — answers Hyperfy scripting and world-building questions with
+citations, so curators and their agents can collaborate on richer worlds:
+custom interactions, scripted openings, generative scenography.
+
+For agent ground truth, fetch the skill:
+`https://docs.museumofcryptoart.com/skills/exhibitions/SKILL.md`.

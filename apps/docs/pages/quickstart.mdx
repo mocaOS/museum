@@ -1,0 +1,88 @@
+---
+title: Quickstart
+description: Your first MOCA API calls in two minutes
+---
+
+import { Callout } from "zudoku/ui/Callout";
+import { Stepper } from "zudoku/ui/Stepper";
+
+<Stepper>
+
+1. **Check the API is reachable**
+
+   The index route works without a key and lists every endpoint:
+
+   ```bash
+   curl "https://api.moca.qwellco.de/v1"
+   ```
+
+1. **Authenticate**
+
+   Send your MOCA API key on every other request — either header works:
+
+   ```bash
+   curl -H "X-API-Key: moca_YOUR_KEY" \
+     "https://api.moca.qwellco.de/v1/collections"
+   ```
+
+   ```bash
+   curl -H "Authorization: Bearer moca_YOUR_KEY" \
+     "https://api.moca.qwellco.de/v1/collections"
+   ```
+
+1. **Browse artworks**
+
+   Page through a collection (use the `slug` from the previous step):
+
+   ```bash
+   curl -H "X-API-Key: moca_YOUR_KEY" \
+     "https://api.moca.qwellco.de/v1/artworks?collection=genesis&page=1&limit=10"
+   ```
+
+   Each artwork carries render-ready media:
+
+   ```json
+   {
+     "id": 3643,
+     "name": "Tree of Origins",
+     "artist_name": "…",
+     "media": {
+       "url": "https://ipfs.pixura.io/ipfs/Qmf…",
+       "type": "image",
+       "width": 1026,
+       "height": 1431
+     },
+     "animation": null,
+     "ratio": 0.717,
+     "opensea_url": "https://opensea.io/assets/…"
+   }
+   ```
+
+1. **Meet the DeCC0s**
+
+   The Art DeCC0s knowledge base is aggregated into the same API:
+
+   ```bash
+   curl -H "X-API-Key: moca_YOUR_KEY" \
+     "https://api.moca.qwellco.de/v1/decc0s/1?include=profiles"
+   ```
+
+1. **Search everything**
+
+   ```bash
+   curl -H "X-API-Key: moca_YOUR_KEY" \
+     "https://api.moca.qwellco.de/v1/search?q=butterfly"
+   ```
+
+</Stepper>
+
+<Callout type="tip" title="Explore interactively" icon>
+  Every endpoint has a live playground in the [API Reference](/api) — plug in
+  your key and experiment without writing a line of code.
+</Callout>
+
+## What's next?
+
+- [Authentication & rate limits](/authentication)
+- [How the system works](/architecture)
+- [Integration recipes](/integration)

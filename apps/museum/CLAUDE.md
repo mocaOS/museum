@@ -70,6 +70,58 @@ backend agent skills to read.
 - The scope indicator in `ChatInput` shows the resolved collection name or
   "Searching across all collections".
 
+## Exhibitions & the 3D world builder
+
+`/exhibitions` lists the museum's 3D rooms (Directus `rooms` collection, GLB models)
+with a per-room viewer; `/exhibitions/world` is the **world builder** — an RTS-style
+mode where visitors place rooms onto a shared ground plane, hang artworks from the
+collection on wall slots, adjust each piece, and save named exhibits. All client-side,
+no accounts. Code lives in `src/components/museum/three/`:
+
+- **`WorldBuilder.tsx`** — the builder scene: goal-damped RTS camera (WASD/edge pan,
+  Q/E rotate, wheel **zoom-to-cursor**, RMB orbit, MMB pan, double-click room to
+  focus), room placement/dragging/rotation, curate mode, exhibits UI, keyboard map.
+- **`ArtworkPlane.tsx`** — one hung work: textured plane + matte frame, sized to the
+  work's true aspect ratio (read from the loaded texture's pixels, falling back to
+  catalog `ratio`). In curate mode supports drag-to-move along the wall plane and a
+  corner-handle resize; both write a per-slot override `{dx, dy, scale}`.
+- **`ArtworkPicker.tsx`** — in-canvas search/browse panel (`/api/museum/artworks`,
+  `/api/museum/collections`), scoped by collection, click to hang.
+- **`ExhibitsPanel.tsx`** — save/load/update/delete named exhibits.
+- **`slots.ts`** — slot extraction from room GLBs. Authoring convention: every room
+  model carries `Slot_001…Slot_NNN` placeholder quads (material "Slot Placeholder");
+  their transforms/bboxes define hang position, orientation, and frame size.
+- **`world-storage.ts`** — localStorage persistence. Working layout under
+  `moca-world-layout-v1` (payload is **v2**: placements + assignments + slot
+  overrides; v1 payloads migrate on load). Named exhibits under
+  `moca-world-exhibits-v1`. Same localStorage-only convention as chat history.
+- **`Room3DViewer.tsx` / `RoomsBrowser.tsx`** — the single-room lightbox viewer
+  (auto-framing, fog, emissive/neon handling, UnrealBloom).
+
+**Texture loading (don't regress this).** Artwork textures load through the
+same-origin route **`/api/museum/texture?src=…&w=…`**, never directly from media
+hosts: `THREE.TextureLoader` needs CORS on *every* redirect hop, and the
+transform-in proxy 302s anything it can't transform back to origin hosts that
+mostly don't send CORS (plain `<img>` thumbnails are unaffected — which is why the
+picker can work while GL textures fail). The route fetches transform-in server-side
+(WebP resize + dead-URL revival) with a direct-origin fallback, blocks SSRF
+targets, and caches hard. Motion-only works (no still poster) hang as live
+`THREE.VideoTexture`s — muted, looped mp4 via transform-in (`artworkVideoUrl`).
+Related gotcha: any r3f material that carries a `map` must set `color="#ffffff"`
+explicitly — conditional JSX branches reconcile the same material instance and a
+stale dark `color` multiplies the texture to black.
+
+**Square-crop media (original-vs-CDN).** OpenSea's conversion CDN
+(`i2c.seadn.io`) serves ≤500px variants that are frequently square-CROPPED, and
+the historical `nfts.media_info` blobs were probed from them — so both stored
+URLs and stored dimensions can describe a crop, not the artwork.
+`preferOriginalStill()` in `src/lib/museum/media.ts` swaps those stills for
+`response_opensea.original_image_url` at render time and refuses to trust
+square conversion-CDN dimensions for aspect ratios (`trustedDims`). The
+permanent data fix is `apps/migration/fix-square-media-info.ts`, which
+re-probes `media_info` from the original file (dry-run by default; `--write`
+needs `DIRECTUS_API_KEY`).
+
 ## Tech Stack
 
 - Next.js 16.1.7 (Turbopack, `output: "standalone"`)

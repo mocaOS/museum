@@ -1,0 +1,148 @@
+---
+title: Integration recipes
+description: Patterns for building MOCA into your own software
+---
+
+import { Callout } from "zudoku/ui/Callout";
+
+All examples assume your key is available server-side as `MOCA_API_KEY`.
+
+## A tiny typed client (TypeScript)
+
+```ts
+const BASE = "https://api.moca.qwellco.de/v1";
+
+async function moca<T>(path: string, params?: Record<string, string>): Promise<T> {
+  const url = new URL(BASE + path);
+  for (const [k, v] of Object.entries(params ?? {})) url.searchParams.set(k, v);
+  const res = await fetch(url, {
+    headers: { "X-API-Key": process.env.MOCA_API_KEY! },
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    throw new Error(body?.errors?.[0]?.message ?? `MOCA API ${res.status}`);
+  }
+  return (await res.json()).data as T;
+}
+
+// Usage
+const collections = await moca<Collection[]>("/collections");
+const artworks = await moca<Artwork[]>("/artworks", {
+  collection: "genesis",
+  limit: "50",
+});
+```
+
+## Rendering artworks correctly
+
+The cardinal rule: **respect the ratio**. Works are portraits, panoramas,
+videos — never assume squares.
+
+```tsx
+function ArtworkFigure({ art }: { art: Artwork }) {
+  if (art.animation) {
+    return (
+      <video
+        src={art.animation.url}
+        muted loop autoPlay playsInline
+        style={{ aspectRatio: art.ratio }}
+      />
+    );
+  }
+  if (!art.media) return null;
+  return (
+    <figure>
+      {/* width/height (when present) give the browser layout hints;
+          the decoded file's own ratio always wins visually. */}
+      <img
+        src={art.media.url}
+        width={art.media.width}
+        height={art.media.height}
+        alt={art.name ?? "Artwork"}
+        loading="lazy"
+        style={{ maxWidth: "100%", height: "auto" }}
+      />
+      <figcaption>
+        {art.name} {art.artist_name ? `— ${art.artist_name}` : ""}
+      </figcaption>
+    </figure>
+  );
+}
+```
+
+<Callout type="caution" title="Media can be heavy" icon>
+  `media.url` points at **original files** — sometimes multi-megabyte PNGs or
+  IPFS-hosted assets. For thumbnails, resize through your own image proxy or
+  CDN rather than shipping originals to every visitor.
+</Callout>
+
+## Python
+
+```python
+import os, requests
+
+BASE = "https://api.moca.qwellco.de/v1"
+HEADERS = {"X-API-Key": os.environ["MOCA_API_KEY"]}
+
+def artworks(collection: str | None = None, page: int = 1, limit: int = 25):
+    params = {"page": page, "limit": limit}
+    if collection:
+        params["collection"] = collection
+    r = requests.get(f"{BASE}/artworks", headers=HEADERS, params=params, timeout=30)
+    r.raise_for_status()
+    body = r.json()
+    return body["data"], body["meta"]
+
+works, meta = artworks(collection="genesis")
+print(f"{meta['total']} works; first: {works[0]['name']} ({works[0]['ratio']:.2f})")
+```
+
+## Paging through everything
+
+```ts
+async function* allArtworks(collection?: string) {
+  for (let page = 1; ; page++) {
+    const res = await fetch(
+      `${BASE}/artworks?limit=100&page=${page}` +
+        (collection ? `&collection=${collection}` : ""),
+      { headers: { "X-API-Key": process.env.MOCA_API_KEY! } }
+    );
+    const { data, meta } = await res.json();
+    yield* data;
+    if (page * meta.limit >= meta.total) break;
+  }
+}
+```
+
+At 100 items/request and 120 requests/minute, a full catalog sync stays
+comfortably inside the rate limit. Cache the result — the catalog changes on
+the timescale of hours, not seconds.
+
+## Building agents on DeCC0s
+
+Each DeCC0 is a fully-written character: biography, voice, personality,
+philosophy. `include=profiles` adds ready-to-use agent persona blobs:
+
+```ts
+const decc0 = await moca<Decc0Detail>(`/decc0s/1`, { include: "profiles,codex" });
+
+const systemPrompt = [
+  `You are ${decc0.name?.[0]}, ${decc0.description}`,
+  ...(decc0.biography ?? []),
+  decc0.writing_flavor,
+].join("\n");
+// decc0.agent_profiles / decc0.moltbot carry structured persona versions,
+// decc0.codex_document the character's lore file.
+```
+
+## Hanging art in your own 3D space
+
+1. `GET /v1/rooms` → pick a room, download `model_url` (GLB).
+2. Find meshes named `Slot_001…Slot_NNN` — their transforms are wall anchors,
+   their bounding boxes the frame size.
+3. `GET /v1/artworks` → fit each work into a slot preserving `ratio`
+   (letterbox inside the slot rectangle).
+4. For video works, use the `animation.url` as a video texture — muted and
+   looping.
+
+That's the entire recipe behind the museum's own world builder.

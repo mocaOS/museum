@@ -1,0 +1,46 @@
+---
+title: MOCA Skills
+description: Ground-truth skill files your AI agents fetch before building
+---
+
+import { Callout } from "zudoku/ui/Callout";
+
+AI models hallucinate APIs they half-remember. **MOCA Skills** fixes that:
+curated, always-current `SKILL.md` files your agents fetch over plain HTTP
+before writing an integration — the same pattern as
+[ethskills.com](https://ethskills.com/) and
+[cortexskills.org](https://cortexskills.org/), bringing everything MOCA
+under one umbrella.
+
+## How to use
+
+Tell your agent (Claude, Cursor, ChatGPT, your own):
+
+> Read `https://docs.museumofcryptoart.com/SKILL.md`, then fetch the skills
+> relevant to the task before writing any code.
+
+## The skills
+
+| Skill | URL | Teaches |
+| --- | --- | --- |
+| **Index** | [`/SKILL.md`](/SKILL.md) | Orientation + the whole map |
+| API fundamentals | [`/skills/api/SKILL.md`](/skills/api/SKILL.md) | Auth, envelope, limits, every endpoint |
+| Artworks & media | [`/skills/artworks/SKILL.md`](/skills/artworks/SKILL.md) | Original-ratio rendering rules |
+| Art DeCC0s | [`/skills/decc0s/SKILL.md`](/skills/decc0s/SKILL.md) | Personas, profiles, agent recipes |
+| The Library | [`/skills/library/SKILL.md`](/skills/library/SKILL.md) | RAG ask/stream/search + presence |
+| Souls & web3 | [`/skills/souls/SKILL.md`](/skills/souls/SKILL.md) | SOUL verification, ERC-8004/8183/8257 |
+| Exhibitions & Hyperfy | [`/skills/exhibitions/SKILL.md`](/skills/exhibitions/SKILL.md) | Slot convention, spawning worlds |
+
+## Machine-readable docs
+
+- [`/llms.txt`](/llms.txt) — index of these docs for LLMs
+- [`/llms-full.txt`](/llms-full.txt) — the complete documentation in one file
+- [`/api`](/api) — interactive OpenAPI reference
+
+<Callout type="tip" title="One umbrella, many ecosystems" icon>
+  Sibling knowledge layers your agents can combine with MOCA Skills:
+  [docs.decc0s.com/llms-full.txt](https://docs.decc0s.com/llms-full.txt),
+  [docs.cortex.eco/llms-full.txt](https://docs.cortex.eco/llms-full.txt),
+  [cortexskills.org](https://cortexskills.org/), and
+  [ethskills.com](https://ethskills.com/).
+</Callout>

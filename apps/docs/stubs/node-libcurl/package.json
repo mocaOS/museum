@@ -1,0 +1,6 @@
+{
+  "name": "node-libcurl",
+  "version": "0.0.0-stub",
+  "description": "Empty stand-in. The monorepo root hoists the real node-libcurl (a native module) where Zudoku's @whatwg-node/fetch ponyfill would pick it up via parent-directory resolution and break the rollup build on the .node binding. The ponyfill only uses libcurl when resolvable, so an empty module here makes it fall back to plain fetch.",
+  "main": "index.js"
+}

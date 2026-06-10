@@ -61,12 +61,6 @@ export default async function ExhibitionsPage() {
           style={{ background: "var(--accent)", color: "var(--accent-fg)" }}
         >
           Enter the World
-          <span
-            className="rounded-full px-1.5 py-0.5 text-[9px] uppercase tracking-wide"
-            style={{ background: "oklch(0 0 0 / 0.2)" }}
-          >
-            beta
-          </span>
         </Link>
       </header>
 

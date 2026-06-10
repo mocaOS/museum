@@ -1,0 +1,70 @@
+---
+title: Authentication
+description: API keys, headers, and rate limits
+---
+
+import { Callout } from "zudoku/ui/Callout";
+
+## API keys
+
+Every MOCA API request (except `GET /v1`) requires a key. Keys look like
+`moca_` followed by 48 hex characters and are issued by the MOCA team —
+request one via [museumofcryptoart.com](https://museumofcryptoart.com).
+
+Send the key with either header:
+
+```bash
+# Option A — dedicated header
+curl -H "X-API-Key: moca_YOUR_KEY" https://api.moca.qwellco.de/v1/artworks
+
+# Option B — bearer token
+curl -H "Authorization: Bearer moca_YOUR_KEY" https://api.moca.qwellco.de/v1/artworks
+```
+
+<Callout type="caution" title="Keep keys server-side" icon>
+  Treat your key like a password: call the MOCA API from your backend, not
+  from browser code, or anyone reading your site's source can lift it. If a
+  key leaks, contact the MOCA team — keys can be revoked and reissued at any
+  time without affecting other integrators.
+</Callout>
+
+## Error responses
+
+Authentication failures return `401` with the standard error envelope:
+
+```json
+{
+  "errors": [
+    {
+      "message": "Invalid or revoked API key.",
+      "extensions": { "code": "UNAUTHORIZED" }
+    }
+  ]
+}
+```
+
+| Status | Code | Meaning |
+| --- | --- | --- |
+| `401` | `UNAUTHORIZED` | Key missing, unknown, or revoked |
+| `404` | `NOT_FOUND` | Resource doesn't exist |
+| `429` | `RATE_LIMITED` | Too many requests — back off |
+| `502` | `UPSTREAM` | The DeCC0s upstream is temporarily unavailable |
+
+## Rate limits
+
+Each key may make **120 requests per minute** (sliding window). Every
+response carries your current budget:
+
+```
+X-RateLimit-Limit: 120
+X-RateLimit-Remaining: 87
+```
+
+When you exceed the limit you receive `429` with a `Retry-After: 60` header.
+Honour it — repeated hammering doesn't reset the window.
+
+<Callout type="tip" title="Cache on your side" icon>
+  Museum data changes slowly. Collections, rooms, and DeCC0 records are safe
+  to cache for minutes to hours; artwork lists for at least a few minutes.
+  A small cache typically keeps even busy integrations far under the limit.
+</Callout>

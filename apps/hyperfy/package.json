@@ -1,0 +1,11 @@
+{
+  "name": "moca-hyperfy",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "MOCA × Hyperfy: spawn museum exhibitions into self-hosted Hyperfy worlds, host multiple walkable worlds, and feed Hyperfy knowledge to the MOCA Library agents.",
+  "scripts": {
+    "spawn": "node spawn-exhibition.mjs",
+    "harvest-docs": "node harvest-hyperfy-docs.mjs"
+  }
+}

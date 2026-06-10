@@ -17,6 +17,12 @@ interface Props {
    * portrait/wide works are never cropped.
    */
   fitToBox?: boolean;
+  /**
+   * Reports the decoded media's real pixel dimensions. Catalog width/height
+   * can describe a square CDN crop (see media.ts), so callers that size boxes
+   * to the artwork's true ratio should prefer this over metadata.
+   */
+  onDimensions?: (width: number, height: number) => void;
 }
 
 // Renders any MOCA artwork media type: image, gif, video, 3D model, svg,
@@ -29,6 +35,7 @@ export default function MediaView({
   fit = "contain",
   interactive = false,
   fitToBox = false,
+  onDimensions,
 }: Props) {
   const [loaded, setLoaded] = useState(false);
   const [rawFallback, setRawFallback] = useState(false);
@@ -92,7 +99,11 @@ export default function MediaView({
         loop
         playsInline
         controls={interactive}
-        onLoadedData={() => setLoaded(true)}
+        onLoadedData={(e) => {
+          setLoaded(true);
+          const v = e.currentTarget;
+          if (v.videoWidth && v.videoHeight) onDimensions?.(v.videoWidth, v.videoHeight);
+        }}
         onError={() => {
           if (!rawFallback) setRawFallback(true);
           else setLoaded(true);
@@ -117,7 +128,11 @@ export default function MediaView({
         src={rawUrl}
         alt={label}
         loading="lazy"
-        onLoad={() => setLoaded(true)}
+        onLoad={(e) => {
+          setLoaded(true);
+          const i = e.currentTarget;
+          if (i.naturalWidth && i.naturalHeight) onDimensions?.(i.naturalWidth, i.naturalHeight);
+        }}
         onError={() => setLoaded(true)}
         className={sizeClass}
       />
@@ -133,7 +148,11 @@ export default function MediaView({
         src={src}
         alt={label}
         loading="lazy"
-        onLoad={() => setLoaded(true)}
+        onLoad={(e) => {
+          setLoaded(true);
+          const i = e.currentTarget;
+          if (i.naturalWidth && i.naturalHeight) onDimensions?.(i.naturalWidth, i.naturalHeight);
+        }}
         onError={() => {
           if (!rawFallback) setRawFallback(true);
           else setLoaded(true);

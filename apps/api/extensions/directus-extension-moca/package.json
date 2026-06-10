@@ -58,6 +58,11 @@
         "type": "endpoint",
         "name": "listings",
         "source": "src/listings/index.ts"
+      },
+      {
+        "type": "endpoint",
+        "name": "v1",
+        "source": "src/v1/index.ts"
       }
     ],
     "host": "^10.10.0"

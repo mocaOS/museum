@@ -1,0 +1,28 @@
+{
+  "collection": "moca_api_keys",
+  "meta": {
+    "accountability": "all",
+    "archive_app_filter": true,
+    "archive_field": "status",
+    "archive_value": "revoked",
+    "collapse": "open",
+    "collection": "moca_api_keys",
+    "color": "#FFA439",
+    "display_template": "{{name}}",
+    "group": null,
+    "hidden": false,
+    "icon": "key",
+    "item_duplication_fields": null,
+    "note": "API keys for the public MOCA API (/v1). Admin-managed; keys are sent by integrators as X-API-Key.",
+    "preview_url": null,
+    "singleton": false,
+    "sort": null,
+    "sort_field": null,
+    "translations": null,
+    "unarchive_value": "active",
+    "versioning": false
+  },
+  "schema": {
+    "name": "moca_api_keys"
+  }
+}

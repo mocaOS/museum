@@ -1,0 +1,69 @@
+{
+  "collection": "moca_api_keys",
+  "field": "status",
+  "type": "string",
+  "meta": {
+    "collection": "moca_api_keys",
+    "conditions": null,
+    "display": "labels",
+    "display_options": {
+      "choices": [
+        {
+          "text": "Active",
+          "value": "active",
+          "foreground": "#FFFFFF",
+          "background": "#2ECDA7"
+        },
+        {
+          "text": "Revoked",
+          "value": "revoked",
+          "foreground": "#FFFFFF",
+          "background": "#E35169"
+        }
+      ]
+    },
+    "field": "status",
+    "group": null,
+    "hidden": false,
+    "interface": "select-dropdown",
+    "note": null,
+    "options": {
+      "choices": [
+        {
+          "text": "Active",
+          "value": "active"
+        },
+        {
+          "text": "Revoked",
+          "value": "revoked"
+        }
+      ]
+    },
+    "readonly": false,
+    "required": false,
+    "sort": 4,
+    "special": null,
+    "translations": null,
+    "validation": null,
+    "validation_message": null,
+    "width": "full"
+  },
+  "schema": {
+    "name": "status",
+    "table": "moca_api_keys",
+    "data_type": "character varying",
+    "default_value": "active",
+    "max_length": 255,
+    "numeric_precision": null,
+    "numeric_scale": null,
+    "is_nullable": false,
+    "is_unique": false,
+    "is_indexed": false,
+    "is_primary_key": false,
+    "is_generated": false,
+    "generation_expression": null,
+    "has_auto_increment": false,
+    "foreign_key_table": null,
+    "foreign_key_column": null
+  }
+}

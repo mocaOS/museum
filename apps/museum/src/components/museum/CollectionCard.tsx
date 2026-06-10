@@ -41,6 +41,10 @@ export default function CollectionCard({
   const [hover, setHover] = useState(false);
   const [pos, setPos] = useState({ x: 0, y: 0 });
   const [mounted, setMounted] = useState(false);
+  // Real decoded pixel ratio per piece, reported by MediaView once the card's
+  // media loads. Catalog dims can describe a square CDN crop, so measured
+  // pixels win for the floating preview's box shape.
+  const [measured, setMeasured] = useState<Record<number, number>>({});
   useEffect(() => setMounted(true), []);
 
   const media = valid[idx] ?? null;
@@ -55,7 +59,9 @@ export default function CollectionCard({
   };
 
   // Floating preview: true aspect ratio, capped to a comfortable size.
-  const ratio = media?.width && media?.height ? media.width / media.height : 1;
+  const ratio =
+    measured[idx] ??
+    (media?.width && media?.height ? media.width / media.height : 1);
   const MAX = 400;
   const pw = ratio >= 1 ? MAX : Math.round(MAX * ratio);
   const ph = ratio >= 1 ? Math.round(MAX / ratio) : MAX;
@@ -80,7 +86,14 @@ export default function CollectionCard({
 
       <div className={`pointer-events-none overflow-hidden ${aspect}`} style={{ background: "var(--muted)" }}>
         {media ? (
-          <MediaView key={idx} media={media} alt={title} fit="cover" className="h-full w-full" />
+          <MediaView
+            key={idx}
+            media={media}
+            alt={title}
+            fit="cover"
+            className="h-full w-full"
+            onDimensions={(w, h) => setMeasured((m) => (m[idx] ? m : { ...m, [idx]: w / h }))}
+          />
         ) : (
           <div className="flex h-full items-center justify-center text-xs" style={{ color: "var(--fg3)" }}>
             {title}

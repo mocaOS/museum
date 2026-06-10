@@ -1,0 +1,43 @@
+{
+  "collection": "moca_api_keys",
+  "field": "name",
+  "type": "string",
+  "meta": {
+    "collection": "moca_api_keys",
+    "conditions": null,
+    "display": null,
+    "display_options": null,
+    "field": "name",
+    "group": null,
+    "hidden": false,
+    "interface": "input",
+    "note": "Who/what this key is for (integrator, project).",
+    "options": null,
+    "readonly": false,
+    "required": true,
+    "sort": 2,
+    "special": null,
+    "translations": null,
+    "validation": null,
+    "validation_message": null,
+    "width": "full"
+  },
+  "schema": {
+    "name": "name",
+    "table": "moca_api_keys",
+    "data_type": "character varying",
+    "default_value": null,
+    "max_length": 255,
+    "numeric_precision": null,
+    "numeric_scale": null,
+    "is_nullable": false,
+    "is_unique": false,
+    "is_indexed": false,
+    "is_primary_key": false,
+    "is_generated": false,
+    "generation_expression": null,
+    "has_auto_increment": false,
+    "foreign_key_table": null,
+    "foreign_key_column": null
+  }
+}
