@@ -1,5 +1,5 @@
 import type { MetadataRoute } from "next";
-import { listTopCollections } from "@/lib/museum/directus";
+import { listRooms, listTopCollections } from "@/lib/museum/directus";
 
 // Regenerate hourly so newly published collections surface without a redeploy.
 export const revalidate = 3600;
@@ -53,5 +53,19 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     // leave collectionEntries empty
   }
 
-  return [...staticEntries, ...collectionEntries];
+  // Room detail pages (/exhibitions/rooms/[id]) — same best-effort policy.
+  let roomEntries: MetadataRoute.Sitemap = [];
+  try {
+    const rooms = await listRooms();
+    roomEntries = rooms.map((room) => ({
+      url: `${siteUrl}/exhibitions/rooms/${room.id}`,
+      lastModified,
+      changeFrequency: "monthly",
+      priority: 0.5,
+    }));
+  } catch {
+    // leave roomEntries empty
+  }
+
+  return [...staticEntries, ...collectionEntries, ...roomEntries];
 }

@@ -95,8 +95,16 @@ no accounts. Code lives in `src/components/museum/three/`:
   `moca-world-layout-v1` (payload is **v2**: placements + assignments + slot
   overrides; v1 payloads migrate on load). Named exhibits under
   `moca-world-exhibits-v1`. Same localStorage-only convention as chat history.
-- **`Room3DViewer.tsx` / `RoomsBrowser.tsx`** — the single-room lightbox viewer
-  (auto-framing, fog, emissive/neon handling, UnrealBloom).
+- **`RoomStage.tsx` / `RoomDetail.tsx`** — the ultra-HQ single-room viewer behind
+  `/exhibitions/rooms/[id]` (replaced the old `Room3DViewer` lightbox): auto-framing
+  + cinematic dolly-in, emissive/neon handling, radius-scaled key-light shadows,
+  blurred MeshReflectorMaterial floor + baked ContactShadows, MSAA HalfFloat
+  composer (UnrealBloom threshold 1.0 + vignette), PerformanceMonitor-driven
+  adaptive DPR, poster/progress veil, ←/→ keyboard walk with wrap-around and
+  idle-time GLB preload of the neighbouring rooms.
+- **`RoomsBrowser.tsx`** — the searchable rooms grid on `/exhibitions`
+  (client-side search over title/architect/series + series filter chips); each
+  card links to its detail page.
 
 **Texture loading (don't regress this).** Artwork textures load through the
 same-origin route **`/api/museum/texture?src=…&w=…`**, never directly from media

@@ -24,14 +24,11 @@ export default async function ExhibitionsPage() {
     architect: r.architect,
     description: r.description,
     series: r.series,
+    slots: r.slots,
     modelUrl: r.model ? assetUrl(r.model) : undefined,
     // Grid card: exact 4:3 WebP thumbnail (the card is object-cover 4:3).
     imageUrl: r.image
       ? assetUrl(r.image, { width: 800, height: 600, fit: "cover", quality: 72, format: "webp" })
-      : undefined,
-    // Lightbox: larger WebP, full frame (no crop), still a fraction of the original.
-    imageLargeUrl: r.image
-      ? assetUrl(r.image, { width: 1600, quality: 82, format: "webp" })
       : undefined,
   }));
 
