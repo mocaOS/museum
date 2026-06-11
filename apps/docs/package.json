@@ -4,7 +4,10 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "sync-spec": "cp apis/moca-v1.json public/openapi.json",
+    "predev": "npm run sync-spec",
     "dev": "zudoku dev",
+    "prebuild": "npm run sync-spec",
     "build": "zudoku build",
     "preview": "zudoku preview"
   },
