@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { Metadata } from "next";
-import { listTopCollections, listCollectionPreviews } from "@/lib/museum/directus";
+import { listTopCollections, listCollectionPreviews, listRooms, assetUrl } from "@/lib/museum/directus";
 import { pickDisplayMedia, pickPreviewMedia, preferOriginalStill } from "@/lib/museum/media";
 import CollectionCard from "@/components/museum/CollectionCard";
 import { pageMetadata } from "@/lib/seo";
@@ -33,9 +33,54 @@ const MODES = [
   },
 ];
 
+// The universe rail under the hero — one card per main-nav product. The
+// DeCC0s card uses the character grid (its hero is a 3.5:1 banner that
+// crops badly); the ROOMs card image is resolved from the room catalog.
+const PRODUCTS = [
+  {
+    href: "/decc0s",
+    title: "Art DeCC0s",
+    desc: "10,000 unique 1/1 characters bred from the entire history of art. Fully CC0.",
+    image: "/decc0s/examples.jpg",
+  },
+  {
+    href: "/soulweaver",
+    title: "Soulweaver",
+    desc: "Awaken your NFTs — AI personality synthesis, portable SOUL.md identities.",
+    image: "/soulweaver/hero.jpg",
+  },
+  {
+    href: "/cortex",
+    title: "Cortex",
+    desc: "The memory layer for AI agents — documents become a living knowledge graph.",
+    image: "/cortex/hero.jpg",
+  },
+  {
+    href: "/rooms",
+    title: "MOCA ROOMs",
+    desc: "Immersive 3D rooms built to hold the collection in space.",
+    image: null as string | null,
+  },
+];
+
 export default async function HomePage() {
   const collections = await listTopCollections();
   const featured = collections.slice(0, 6);
+
+  // ROOMs card cover: first room in the catalog that has a poster still.
+  let roomsImage: string | null = null;
+  try {
+    const rooms = await listRooms();
+    const cover = rooms.find((r) => r.image);
+    if (cover?.image) {
+      roomsImage = assetUrl(cover.image, { width: 1200, quality: 80, format: "webp" });
+    }
+  } catch {
+    // catalog unreachable — the card falls back to its title placeholder
+  }
+  const products = PRODUCTS.map((p) =>
+    p.href === "/rooms" ? { ...p, image: roomsImage } : p
+  );
   const previewSets = await Promise.all(
     featured.map(async (c) => {
       const slugs = [c.slug, ...(c.child_collections || []).map((cc) => cc.slug)];
@@ -96,6 +141,48 @@ export default async function HomePage() {
               Explore the collections →
             </Link>
           </div>
+        </div>
+      </section>
+
+      {/* The MOCA universe — one card per main-nav product */}
+      <section className="mx-auto max-w-7xl px-5 pb-14 sm:px-8">
+        <h2 className="mb-5 text-sm uppercase tracking-[0.12em]" style={{ color: "var(--fg3)" }}>
+          The MOCA universe
+        </h2>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {products.map((p) => (
+            <Link
+              key={p.href}
+              href={p.href}
+              className="group overflow-hidden rounded-[var(--radius-xl)] border transition-transform duration-200 hover:-translate-y-1"
+              style={{ borderColor: "var(--border)", background: "var(--card)" }}
+            >
+              <div className="aspect-[16/10] overflow-hidden" style={{ background: "var(--muted)" }}>
+                {p.image ? (
+                  <img
+                    src={p.image}
+                    alt={p.title}
+                    className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
+                  />
+                ) : (
+                  <div className="flex h-full items-center justify-center text-xs" style={{ color: "var(--fg3)" }}>
+                    {p.title}
+                  </div>
+                )}
+              </div>
+              <div className="p-4">
+                <div className="flex items-center justify-between text-base font-medium" style={{ color: "var(--fg1)" }}>
+                  {p.title}
+                  <span className="transition-transform group-hover:translate-x-1" style={{ color: "var(--accent)" }} aria-hidden>
+                    →
+                  </span>
+                </div>
+                <p className="mt-1.5 line-clamp-2 text-sm" style={{ color: "var(--fg2)" }}>
+                  {p.desc}
+                </p>
+              </div>
+            </Link>
+          ))}
         </div>
       </section>
 

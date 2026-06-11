@@ -15,7 +15,7 @@ Base URL for all skills: `https://docs.museumofcryptoart.com`
 | API fundamentals | `/skills/api/SKILL.md` | Auth, envelope, rate limits, every endpoint |
 | Artworks & media | `/skills/artworks/SKILL.md` | Collections, artworks, original-ratio media handling |
 | Art DeCC0s | `/skills/decc0s/SKILL.md` | The 10,000-entity knowledge base, personas, codex docs |
-| The Library | `/skills/library/SKILL.md` | RAG ask/stream/search with citations |
+| Library Cortex | `/skills/library/SKILL.md` | RAG ask/stream/search with citations |
 | Souls & web3 | `/skills/souls/SKILL.md` | SOUL files, EIP-191 verification, ERC-8004/8183/8257 |
 | Exhibitions & Hyperfy | `/skills/exhibitions/SKILL.md` | 3D rooms, slot convention, spawning walkable worlds |
 
@@ -33,7 +33,7 @@ Base URL for all skills: `https://docs.museumofcryptoart.com`
 The **MOCA API** (`https://api.moca.qwellco.de/v1`) is one key-gated surface
 over the whole museum: collections, artworks (original files, trusted
 ratios), 3D exhibition rooms (GLB + `Slot_NNN` convention), the Art DeCC0s
-knowledge base, the Library (RAG with citations), and Souls (signed agent
+knowledge base, Library Cortex (RAG with citations), and Souls (signed agent
 identities). Responses use `{ "data": …, "meta": … }`; errors use
 `{ "errors": [{ "message", "extensions": { "code" } }] }`. Send your key as
 `X-API-Key`. Request keys from the MOCA team.

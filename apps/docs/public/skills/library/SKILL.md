@@ -1,4 +1,4 @@
-# Skill: The Library (RAG)
+# Skill: Library Cortex
 
 Cited Q&A and hybrid search over the museum's knowledge base (Cortex).
 
