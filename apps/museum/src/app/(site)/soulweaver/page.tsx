@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import ComingSoonButton from "@/components/site/ComingSoonButton";
 
 export const metadata: Metadata = {
   title: "Soulweaver",
@@ -91,15 +92,7 @@ export default function SoulweaverPage() {
             open to any collection.
           </p>
           <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-            <a
-              href="https://soulweaver.museumofcryptoart.com"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex h-11 items-center rounded-[var(--radius)] px-6 text-sm font-medium transition-transform active:scale-[0.98]"
-              style={{ background: "var(--accent)", color: "var(--accent-fg)" }}
-            >
-              Launch Soulweaver
-            </a>
+            <ComingSoonButton label="Launch Soulweaver" />
             <a
               href="https://docs.museumofcryptoart.com/web3"
               target="_blank"
@@ -269,15 +262,7 @@ export default function SoulweaverPage() {
             agents through the MOCA API.
           </p>
           <div className="mt-7 flex flex-wrap items-center justify-center gap-3">
-            <a
-              href="https://soulweaver.museumofcryptoart.com"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex h-11 items-center rounded-[var(--radius)] px-6 text-sm font-medium transition-transform active:scale-[0.98]"
-              style={{ background: "var(--accent)", color: "var(--accent-fg)" }}
-            >
-              Launch Soulweaver
-            </a>
+            <ComingSoonButton label="Launch Soulweaver" />
             <a
               href="https://docs.museumofcryptoart.com"
               target="_blank"
@@ -285,7 +270,7 @@ export default function SoulweaverPage() {
               className="flex h-11 items-center rounded-[var(--radius)] border px-6 text-sm font-medium"
               style={{ borderColor: "var(--border)", color: "var(--fg1)" }}
             >
-              MOCA API docs
+              MOCA Docs
             </a>
           </div>
         </section>

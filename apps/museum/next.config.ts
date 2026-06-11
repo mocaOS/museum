@@ -14,6 +14,9 @@ const nextConfig: NextConfig = {
     return [
       { source: "/galleries", destination: "/collections", permanent: true },
       { source: "/galleries/:slug", destination: "/collections/:slug", permanent: true },
+      { source: "/exhibitions", destination: "/rooms", permanent: true },
+      { source: "/exhibitions/world", destination: "/rooms/world", permanent: true },
+      { source: "/exhibitions/rooms/:id", destination: "/rooms/:id", permanent: true },
     ];
   },
   experimental: {

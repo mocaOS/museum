@@ -36,8 +36,8 @@ const MODES = [
     desc: "Browse the permanent collection — genesis works and the artists who shaped crypto art.",
   },
   {
-    href: "/exhibitions",
-    title: "Exhibitions",
+    href: "/rooms",
+    title: "MOCA ROOMs",
     desc: "Step inside immersive 3D rooms built to hold the collection in space.",
   },
   {

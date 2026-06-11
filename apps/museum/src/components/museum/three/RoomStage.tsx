@@ -31,7 +31,7 @@ import { ShaderPass } from "three/examples/jsm/postprocessing/ShaderPass.js";
 import { VignetteShader } from "three/examples/jsm/shaders/VignetteShader.js";
 
 /**
- * RoomStage — the ultra-HQ single-room viewer behind /exhibitions/rooms/[id].
+ * RoomStage — the ultra-HQ single-room viewer behind /rooms/[id].
  *
  * In contrast to the world builder (many rooms, draw-call budget first), this
  * stage spends its whole budget on one model: a blurred reflective floor,

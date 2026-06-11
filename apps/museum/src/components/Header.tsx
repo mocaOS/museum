@@ -7,19 +7,20 @@ import { getCachedConfig } from "@/lib/config";
 
 // Keep in sync with the museum nav in components/site/SiteHeader.tsx
 // (plus "Home", since the Library has no other way back to the site).
+// `right: true` places an item in the right-hand group, next to "Library".
 const NAV = [
   { href: "/", label: "Home" },
-  { href: "/collections", label: "Collections" },
+  { href: "/decc0s", label: "Art DeCC0s" },
   { href: "/soulweaver", label: "Soulweaver" },
-  { href: "/exhibitions", label: "MOCA ROOMs" },
-  { href: "/writings", label: "Writings" },
-  { href: "/timeline", label: "Timeline" },
-  { href: "https://codex.decc0s.com/", label: "Art DeCC0s", external: true },
-  { href: "https://vibe.museumofcryptoart.com/", label: "Vibe Studio", external: true },
+  { href: "/cortex", label: "Cortex" },
+  { href: "/rooms", label: "ROOMs" },
+  { href: "/collections", label: "Collections", right: true },
+  { href: "/writings", label: "Writings", right: true },
+  { href: "/timeline", label: "Timeline", right: true },
 ];
 
-const internalNav = NAV.filter((item) => !item.external);
-const externalNav = NAV.filter((item) => item.external);
+const leftNav = NAV.filter((item) => !item.right);
+const rightNav = NAV.filter((item) => item.right);
 
 export default function Header({
   logoUrl,
@@ -60,7 +61,7 @@ export default function Header({
         </Link>
         {/* Museum menubar — navigate out of the Library back into the museum */}
         <nav className="ml-2 hidden items-center gap-1 sm:flex">
-          {internalNav.map((item) => (
+          {leftNav.map((item) => (
             <Link
               key={item.href}
               href={item.href}
@@ -75,17 +76,15 @@ export default function Header({
 
       <div className="flex items-center gap-1">
         <nav className="hidden items-center gap-1 sm:flex">
-          {externalNav.map((item) => (
-            <a
+          {rightNav.map((item) => (
+            <Link
               key={item.href}
               href={item.href}
-              target="_blank"
-              rel="noopener noreferrer"
               className="rounded-[var(--radius)] px-3 py-1.5 text-sm transition-colors"
               style={{ color: "var(--fg2)" }}
             >
               {item.label}
-            </a>
+            </Link>
           ))}
           <span
             className="rounded-[var(--radius)] px-3 py-1.5 text-sm"

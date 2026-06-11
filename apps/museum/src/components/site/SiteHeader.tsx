@@ -4,14 +4,16 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 
+// `right: true` places an item in the right-hand group, just left of the
+// "Enter the Library" CTA. Vibe Studio lives in the footer (and on /decc0s).
 const NAV = [
-  { href: "/collections", label: "Collections" },
+  { href: "/decc0s", label: "Art DeCC0s" },
   { href: "/soulweaver", label: "Soulweaver" },
-  { href: "/exhibitions", label: "MOCA ROOMs" },
-  { href: "/writings", label: "Writings" },
-  { href: "/timeline", label: "Timeline" },
-  { href: "https://codex.decc0s.com/", label: "Art DeCC0s", external: true },
-  { href: "https://vibe.museumofcryptoart.com/", label: "Vibe Studio", external: true },
+  { href: "/cortex", label: "Cortex" },
+  { href: "/rooms", label: "ROOMs" },
+  { href: "/collections", label: "Collections", right: true },
+  { href: "/writings", label: "Writings", right: true },
+  { href: "/timeline", label: "Timeline", right: true },
 ];
 
 export default function SiteHeader({ logoUrl = "/logo.svg" }: { logoUrl?: string }) {
@@ -21,37 +23,25 @@ export default function SiteHeader({ logoUrl = "/logo.svg" }: { logoUrl?: string
   const isActive = (href: string) =>
     pathname === href || pathname.startsWith(`${href}/`);
 
-  const internalNav = NAV.filter((item) => !item.external);
-  const externalNav = NAV.filter((item) => item.external);
+  const leftNav = NAV.filter((item) => !item.right);
+  const rightNav = NAV.filter((item) => item.right);
 
-  const renderDesktopItem = (item: (typeof NAV)[number]) =>
-    item.external ? (
-      <a
-        key={item.href}
-        href={item.href}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="rounded-[var(--radius)] px-3.5 py-2 text-sm transition-colors"
-        style={{ color: "var(--fg2)" }}
-      >
-        {item.label}
-      </a>
-    ) : (
-      <Link
-        key={item.href}
-        href={item.href}
-        className="relative rounded-[var(--radius)] px-3.5 py-2 text-sm transition-colors"
-        style={{ color: isActive(item.href) ? "var(--fg1)" : "var(--fg2)" }}
-      >
-        {item.label}
-        {isActive(item.href) && (
-          <span
-            className="absolute inset-x-3 -bottom-px h-px"
-            style={{ background: "var(--accent)" }}
-          />
-        )}
-      </Link>
-    );
+  const renderDesktopItem = (item: (typeof NAV)[number]) => (
+    <Link
+      key={item.href}
+      href={item.href}
+      className="relative rounded-[var(--radius)] px-3.5 py-2 text-sm transition-colors"
+      style={{ color: isActive(item.href) ? "var(--fg1)" : "var(--fg2)" }}
+    >
+      {item.label}
+      {isActive(item.href) && (
+        <span
+          className="absolute inset-x-3 -bottom-px h-px"
+          style={{ background: "var(--accent)" }}
+        />
+      )}
+    </Link>
+  );
 
   return (
     <header
@@ -71,13 +61,13 @@ export default function SiteHeader({ logoUrl = "/logo.svg" }: { logoUrl?: string
             <img src={logoUrl} alt="Museum of Crypto Art" className="h-7 w-auto" />
           </Link>
           <nav className="ml-3 hidden items-center gap-1 sm:flex">
-            {internalNav.map(renderDesktopItem)}
+            {leftNav.map(renderDesktopItem)}
           </nav>
         </div>
 
-        {/* Right: external links + Library CTA */}
+        {/* Right: secondary pages + Library CTA */}
         <nav className="hidden items-center gap-1 sm:flex">
-          {externalNav.map(renderDesktopItem)}
+          {rightNav.map(renderDesktopItem)}
           <Link
             href="/library"
             className="ml-2 flex h-9 items-center rounded-[var(--radius)] px-4 text-sm font-medium transition-transform active:scale-[0.98]"
@@ -106,31 +96,17 @@ export default function SiteHeader({ logoUrl = "/logo.svg" }: { logoUrl?: string
           className="border-t px-5 py-3 sm:hidden"
           style={{ borderColor: "var(--border)" }}
         >
-          {NAV.map((item) =>
-            item.external ? (
-              <a
-                key={item.href}
-                href={item.href}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={() => setOpen(false)}
-                className="block rounded-[var(--radius)] px-3 py-2.5 text-sm"
-                style={{ color: "var(--fg2)" }}
-              >
-                {item.label}
-              </a>
-            ) : (
-              <Link
-                key={item.href}
-                href={item.href}
-                onClick={() => setOpen(false)}
-                className="block rounded-[var(--radius)] px-3 py-2.5 text-sm"
-                style={{ color: isActive(item.href) ? "var(--fg1)" : "var(--fg2)" }}
-              >
-                {item.label}
-              </Link>
-            )
-          )}
+          {NAV.map((item) => (
+            <Link
+              key={item.href}
+              href={item.href}
+              onClick={() => setOpen(false)}
+              className="block rounded-[var(--radius)] px-3 py-2.5 text-sm"
+              style={{ color: isActive(item.href) ? "var(--fg1)" : "var(--fg2)" }}
+            >
+              {item.label}
+            </Link>
+          ))}
         </nav>
       )}
     </header>

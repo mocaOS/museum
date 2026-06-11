@@ -10,7 +10,7 @@ export const metadata: Metadata = {
   title: "World",
   description:
     "Build your own museum: place MOCA exhibition rooms into a shared world, hang artworks from the collection, and save your exhibits.",
-  alternates: { canonical: "/exhibitions/world" },
+  alternates: { canonical: "/rooms/world" },
 };
 
 export default async function WorldPage() {
@@ -31,11 +31,11 @@ export default async function WorldPage() {
     <div className="relative h-full">
       <div className="absolute left-4 top-3 z-20">
         <Link
-          href="/exhibitions"
+          href="/rooms"
           className="flex h-8 items-center gap-1.5 rounded-full border px-3 text-xs"
           style={{ background: "oklch(0.14 0 0 / 0.8)", borderColor: "var(--border)", color: "var(--fg1)", backdropFilter: "blur(12px)" }}
         >
-          ← Exhibitions
+          ← MOCA ROOMs
         </Link>
       </div>
       <WorldClient rooms={worldRooms} />

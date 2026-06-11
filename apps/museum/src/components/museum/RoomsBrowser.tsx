@@ -15,44 +15,44 @@ export interface RoomView {
 }
 
 /**
- * Searchable rooms grid on /exhibitions. Every card links to the HQ detail
- * viewer at /exhibitions/rooms/[id]. Filtering is all client-side — the full
+ * Searchable rooms grid on /rooms. Every card links to the HQ detail
+ * viewer at /rooms/[id]. Filtering is all client-side — the full
  * catalogue is already server-rendered, so search costs nothing and stays
  * snappy via useDeferredValue (typing never blocks on re-filtering).
  */
 export default function RoomsBrowser({ rooms }: { rooms: RoomView[] }) {
   const [query, setQuery] = useState("");
-  const [series, setSeries] = useState<string | null>(null);
+  const [architect, setArchitect] = useState<string | null>(null);
   const deferredQuery = useDeferredValue(query);
 
-  const seriesOptions = useMemo(() => {
+  const architectOptions = useMemo(() => {
     const seen = new Set<string>();
     const out: string[] = [];
     for (const r of rooms) {
-      const s = r.series?.trim();
-      if (s && !seen.has(s)) {
-        seen.add(s);
-        out.push(s);
+      const a = r.architect?.trim();
+      if (a && !seen.has(a)) {
+        seen.add(a);
+        out.push(a);
       }
     }
-    return out;
+    return out.sort((a, b) => a.localeCompare(b));
   }, [rooms]);
 
   const filtered = useMemo(() => {
     const q = deferredQuery.trim().toLowerCase();
     return rooms.filter((r) => {
-      if (series && (r.series?.trim() ?? "") !== series) return false;
+      if (architect && (r.architect?.trim() ?? "") !== architect) return false;
       if (!q) return true;
       return [r.title, r.architect, r.series].some((v) =>
         v?.toLowerCase().includes(q),
       );
     });
-  }, [rooms, deferredQuery, series]);
+  }, [rooms, deferredQuery, architect]);
 
   if (!rooms.length) {
     return (
       <div className="py-20 text-center text-sm" style={{ color: "var(--fg2)" }}>
-        No exhibitions are open right now. Check back soon.
+        No rooms are open right now. Check back soon.
       </div>
     );
   }
@@ -95,19 +95,19 @@ export default function RoomsBrowser({ rooms }: { rooms: RoomView[] }) {
           </span>
         </div>
 
-        {seriesOptions.length > 1 && (
+        {architectOptions.length > 1 && (
           <div className="flex flex-wrap gap-1.5">
-            <SeriesChip active={series === null} onClick={() => setSeries(null)}>
+            <FilterChip active={architect === null} onClick={() => setArchitect(null)}>
               All
-            </SeriesChip>
-            {seriesOptions.map((s) => (
-              <SeriesChip
-                key={s}
-                active={series === s}
-                onClick={() => setSeries(series === s ? null : s)}
+            </FilterChip>
+            {architectOptions.map((a) => (
+              <FilterChip
+                key={a}
+                active={architect === a}
+                onClick={() => setArchitect(architect === a ? null : a)}
               >
-                {s}
-              </SeriesChip>
+                {a}
+              </FilterChip>
             ))}
           </div>
         )}
@@ -118,7 +118,7 @@ export default function RoomsBrowser({ rooms }: { rooms: RoomView[] }) {
           {filtered.map((room) => (
             <Link
               key={room.id}
-              href={`/exhibitions/rooms/${room.id}`}
+              href={`/rooms/${room.id}`}
               className="group overflow-hidden rounded-[var(--radius-xl)] border text-left transition-transform duration-200 hover:-translate-y-1"
               style={{ borderColor: "var(--border)", background: "var(--card)" }}
             >
@@ -187,7 +187,7 @@ export default function RoomsBrowser({ rooms }: { rooms: RoomView[] }) {
           <button
             onClick={() => {
               setQuery("");
-              setSeries(null);
+              setArchitect(null);
             }}
             className="mt-3 text-xs underline-offset-2 hover:underline"
             style={{ color: "var(--fg3)" }}
@@ -200,7 +200,7 @@ export default function RoomsBrowser({ rooms }: { rooms: RoomView[] }) {
   );
 }
 
-function SeriesChip({
+function FilterChip({
   active,
   onClick,
   children,

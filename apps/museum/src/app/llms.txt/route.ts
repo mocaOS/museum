@@ -40,8 +40,10 @@ Key facts:
 ## Explore
 
 - [Collections](${SITE_URL}/collections): The permanent collection, organized by sub-collection, with artist attribution for every work.
-- [MOCA ROOMs](${SITE_URL}/exhibitions): Immersive 3D exhibition rooms; includes a world builder for curating walkable exhibitions.
+- [MOCA ROOMs](${SITE_URL}/rooms): Immersive 3D exhibition rooms; includes a world builder for curating walkable exhibitions.
 - [Soulweaver](${SITE_URL}/soulweaver): AI-powered personality synthesis for NFT collections — portable SOUL.md identities grounded in on-chain DNA and community lore.
+- [Art DeCC0s](${SITE_URL}/decc0s): 10,000 unique 1/1 characters bred from the history of art, each backed by a 10,000+ word personality in the Codex. Fully CC0.
+- [Cortex](${SITE_URL}/cortex): The memory layer for AI agents — documents become a living knowledge graph; the stack beneath Soulweaver and the Library.
 - [Library](${SITE_URL}/library): Ask anything about crypto art history; answers cite sources from the MOCA Cortex knowledge graph.
 ${collectionsSection}
 ## Study
@@ -61,7 +63,8 @@ ${collectionsSection}
 
 ## Optional
 
-- [Art DeCC0s](https://codex.decc0s.com): 10,000 AI-native characters born from the museum's collection.
+- [The DeCC0s Codex](https://codex.decc0s.com): Browse all 10,000 Art DeCC0s and their written minds.
+- [The Vibe Studio](https://vibe.museumofcryptoart.com): MOCA's city center — adopt, teach, and deploy DeCC0 agents.
 - [Newsletter](https://museumofcrypto.substack.com): Long-form essays and museum news.
 `;
 

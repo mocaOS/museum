@@ -7,9 +7,11 @@ export const revalidate = 3600;
 const STATIC_PATHS = [
   "/",
   "/collections",
-  "/exhibitions",
-  "/exhibitions/world",
+  "/rooms",
+  "/rooms/world",
   "/soulweaver",
+  "/decc0s",
+  "/cortex",
   "/writings",
   "/timeline",
   "/manifesto",
@@ -53,12 +55,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     // leave collectionEntries empty
   }
 
-  // Room detail pages (/exhibitions/rooms/[id]) — same best-effort policy.
+  // Room detail pages (/rooms/[id]) — same best-effort policy.
   let roomEntries: MetadataRoute.Sitemap = [];
   try {
     const rooms = await listRooms();
     roomEntries = rooms.map((room) => ({
-      url: `${siteUrl}/exhibitions/rooms/${room.id}`,
+      url: `${siteUrl}/rooms/${room.id}`,
       lastModified,
       changeFrequency: "monthly",
       priority: 0.5,

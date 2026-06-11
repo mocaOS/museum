@@ -9,13 +9,13 @@ import RoomsBrowser, { type RoomView } from "@/components/museum/RoomsBrowser";
 export const revalidate = 3600;
 
 export const metadata: Metadata = {
-  title: "Exhibitions",
+  title: "MOCA ROOMs",
   description:
     "Step into immersive 3D rooms and curated shows from the MOCA universe.",
-  alternates: { canonical: "/exhibitions" },
+  alternates: { canonical: "/rooms" },
 };
 
-export default async function ExhibitionsPage() {
+export default async function RoomsPage() {
   const rooms = await listRooms();
 
   const views: RoomView[] = rooms.map((r) => ({
@@ -46,7 +46,7 @@ export default async function ExhibitionsPage() {
             className="text-4xl font-semibold sm:text-5xl"
             style={{ color: "var(--fg1)", letterSpacing: "-0.02em" }}
           >
-            Exhibitions
+            MOCA ROOMs
           </h1>
           <p className="mt-4 text-base" style={{ color: "var(--fg2)" }}>
             Step inside the architecture of the museum — explorable 3D rooms
@@ -54,11 +54,11 @@ export default async function ExhibitionsPage() {
           </p>
         </div>
         <Link
-          href="/exhibitions/world"
+          href="/rooms/world"
           className="flex h-11 items-center gap-2 rounded-[var(--radius)] px-5 text-sm font-medium transition-transform active:scale-[0.98]"
           style={{ background: "var(--accent)", color: "var(--accent-fg)" }}
         >
-          Enter the World
+          Exhibition Builder (Beta)
         </Link>
       </header>
 

@@ -72,8 +72,8 @@ backend agent skills to read.
 
 ## Exhibitions & the 3D world builder
 
-`/exhibitions` lists the museum's 3D rooms (Directus `rooms` collection, GLB models)
-with a per-room viewer; `/exhibitions/world` is the **world builder** — an RTS-style
+`/rooms` lists the museum's 3D rooms (Directus `rooms` collection, GLB models)
+with a per-room viewer; `/rooms/world` is the **world builder** — an RTS-style
 mode where visitors place rooms onto a shared ground plane, hang artworks from the
 collection on wall slots, adjust each piece, and save named exhibits. All client-side,
 no accounts. Code lives in `src/components/museum/three/`:
@@ -96,14 +96,14 @@ no accounts. Code lives in `src/components/museum/three/`:
   overrides; v1 payloads migrate on load). Named exhibits under
   `moca-world-exhibits-v1`. Same localStorage-only convention as chat history.
 - **`RoomStage.tsx` / `RoomDetail.tsx`** — the ultra-HQ single-room viewer behind
-  `/exhibitions/rooms/[id]` (replaced the old `Room3DViewer` lightbox): auto-framing
+  `/rooms/[id]` (replaced the old `Room3DViewer` lightbox): auto-framing
   + cinematic dolly-in, emissive/neon handling, radius-scaled key-light shadows,
   blurred MeshReflectorMaterial floor + baked ContactShadows, MSAA HalfFloat
   composer (UnrealBloom threshold 1.0 + vignette), PerformanceMonitor-driven
   adaptive DPR, poster/progress veil, ←/→ keyboard walk with wrap-around and
   idle-time GLB preload of the neighbouring rooms.
-- **`RoomsBrowser.tsx`** — the searchable rooms grid on `/exhibitions`
-  (client-side search over title/architect/series + series filter chips); each
+- **`RoomsBrowser.tsx`** — the searchable rooms grid on `/rooms`
+  (client-side search over title/architect/series + architect filter chips); each
   card links to its detail page.
 
 **Texture loading (don't regress this).** Artwork textures load through the

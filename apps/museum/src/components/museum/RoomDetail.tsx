@@ -48,9 +48,9 @@ export default function RoomDetail({
   // Keyboard walk-through: arrows move between rooms, Escape returns to the grid.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") router.push("/exhibitions");
-      if (e.key === "ArrowLeft" && prev) router.push(`/exhibitions/rooms/${prev.id}`);
-      if (e.key === "ArrowRight" && next) router.push(`/exhibitions/rooms/${next.id}`);
+      if (e.key === "Escape") router.push("/rooms");
+      if (e.key === "ArrowLeft" && prev) router.push(`/rooms/${prev.id}`);
+      if (e.key === "ArrowRight" && next) router.push(`/rooms/${next.id}`);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -153,7 +153,7 @@ export default function RoomDetail({
       {/* Top chrome: back to the grid (left), room counter + walk arrows (right). */}
       <div className="pointer-events-none absolute inset-x-0 top-0 z-30 flex items-center justify-between p-3 sm:p-4">
         <Link
-          href="/exhibitions"
+          href="/rooms"
           className="pointer-events-auto flex h-8 items-center gap-1.5 rounded-full border px-3 text-xs"
           style={{
             background: "oklch(0.14 0 0 / 0.8)",
@@ -263,7 +263,7 @@ function Chip({ children }: { children: React.ReactNode }) {
 function NeighborLink({ room, side }: { room: RoomNeighbor; side: "left" | "right" }) {
   return (
     <Link
-      href={`/exhibitions/rooms/${room.id}`}
+      href={`/rooms/${room.id}`}
       aria-label={side === "left" ? `Previous room: ${room.title}` : `Next room: ${room.title}`}
       title={room.title}
       className="flex h-8 w-8 items-center justify-center rounded-full border"
