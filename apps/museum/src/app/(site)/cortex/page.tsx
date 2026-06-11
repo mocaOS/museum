@@ -219,16 +219,29 @@ export default function CortexPage() {
               you ask it is answered by Cortex, in production, today.
             </p>
           </div>
-          <div
-            className="overflow-hidden rounded-[var(--radius-xl)] border"
-            style={{ borderColor: "var(--border)" }}
-          >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src="/cortex/library.jpg"
-              alt="The Museum of Crypto Art inside the Cortex city — the Library runs on Cortex in production."
-              className="h-auto w-full"
-            />
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div
+              className="overflow-hidden rounded-[var(--radius-xl)] border"
+              style={{ borderColor: "var(--border)" }}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="/cortex/library.jpg"
+                alt="The Museum of Crypto Art inside the Cortex city — the Library runs on Cortex in production."
+                className="h-auto w-full"
+              />
+            </div>
+            <div
+              className="overflow-hidden rounded-[var(--radius-xl)] border"
+              style={{ borderColor: "var(--border)" }}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="/cortex/library2.jpg"
+                alt="Inside the MOCA Library — the Cortex-powered knowledge assistant."
+                className="h-auto w-full"
+              />
+            </div>
           </div>
           <div className="mt-8 grid gap-4 lg:grid-cols-3">
             {ECOSYSTEM.map((e) => (

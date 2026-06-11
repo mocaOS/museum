@@ -15,24 +15,6 @@ export const metadata: Metadata = pageMetadata({
   absoluteTitle: true,
 });
 
-const MODES = [
-  {
-    href: "/collections",
-    title: "Collections",
-    desc: "Browse the permanent collection — genesis works and the artists who shaped crypto art.",
-  },
-  {
-    href: "/rooms",
-    title: "MOCA ROOMs",
-    desc: "Step inside immersive 3D rooms built to hold the collection in space.",
-  },
-  {
-    href: "/library",
-    title: "Library",
-    desc: "Study and curate the past while querying the present. Learn about crypto art, the collection, and Web3 culture. Powered by Cortex.",
-  },
-];
-
 // The universe rail under the hero — one card per main-nav product. The
 // DeCC0s card uses the character grid (its hero is a 3.5:1 banner that
 // crops badly); the ROOMs card image is resolved from the room catalog.
@@ -225,29 +207,6 @@ export default async function HomePage() {
         </p>
       </section>
 
-      {/* Three modes */}
-      <section className="mx-auto max-w-7xl px-5 py-14 sm:px-8">
-        <div className="grid gap-4 sm:grid-cols-3">
-          {MODES.map((m) => (
-            <Link
-              key={m.href}
-              href={m.href}
-              className="group rounded-[var(--radius-xl)] border p-6 transition-colors"
-              style={{ borderColor: "var(--border)", background: "var(--card)" }}
-            >
-              <div className="flex items-center justify-between text-lg font-medium" style={{ color: "var(--fg1)" }}>
-                {m.title}
-                <span className="transition-transform group-hover:translate-x-1" style={{ color: "var(--accent)" }} aria-hidden>
-                  →
-                </span>
-              </div>
-              <p className="mt-2 text-sm" style={{ color: "var(--fg2)" }}>
-                {m.desc}
-              </p>
-            </Link>
-          ))}
-        </div>
-      </section>
     </>
   );
 }
