@@ -191,15 +191,38 @@ function AutoFrame({
 
 /**
  * Eases the camera from the pulled-back intro position to the framed distance.
- * Controls are held disabled for the ~1.5s glide so damping doesn't fight the
- * dolly, then re-enabled (OrbitControls re-reads the camera on update()).
+ * Controls are held disabled during the glide so damping doesn't fight the
+ * dolly — but any gesture on the canvas (pointer down, wheel) interrupts the
+ * cinematic and hands control over immediately. The listeners run in the
+ * capture phase so OrbitControls is already re-enabled when the same event
+ * reaches its own handlers, meaning the interrupting gesture itself orbits.
  */
 function IntroDolly({
   target,
 }: {
   target: React.MutableRefObject<FrameTarget | null>;
 }) {
-  const { camera, controls } = useThree();
+  const { camera, controls, gl } = useThree();
+
+  useEffect(() => {
+    const el = gl.domElement;
+    const interrupt = () => {
+      const t = target.current;
+      if (!t || t.settled) return;
+      t.settled = true;
+      const ctl = controls as unknown as { enabled: boolean; update: () => void } | null;
+      if (ctl) {
+        ctl.enabled = true;
+        ctl.update();
+      }
+    };
+    el.addEventListener("pointerdown", interrupt, true);
+    el.addEventListener("wheel", interrupt, true);
+    return () => {
+      el.removeEventListener("pointerdown", interrupt, true);
+      el.removeEventListener("wheel", interrupt, true);
+    };
+  }, [gl, controls, target]);
 
   useFrame((_, dt) => {
     const t = target.current;
