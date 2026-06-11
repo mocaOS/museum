@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { listTopCollections, listCollectionPreviews } from "@/lib/museum/directus";
 import { pickDisplayMedia, pickPreviewMedia, preferOriginalStill } from "@/lib/museum/media";
 import CollectionCard from "@/components/museum/CollectionCard";
+import { pageMetadata } from "@/lib/seo";
 
 // Directus reads are cached hourly in the data layer (see lib/museum/directus.ts),
 // so this page no longer hits the CMS on every request. The route itself still
@@ -9,12 +10,12 @@ import CollectionCard from "@/components/museum/CollectionCard";
 // env); this revalidate takes effect if that constraint is ever lifted.
 export const revalidate = 3600;
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMetadata({
   title: "Collections",
   description:
     "Explore the MOCA permanent collection — genesis works, curated collections, and the artists who shaped crypto art.",
-  alternates: { canonical: "/collections" },
-};
+  path: "/collections",
+});
 
 export default async function CollectionsPage() {
   const collections = await listTopCollections();

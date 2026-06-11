@@ -2,18 +2,19 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { listRooms, assetUrl } from "@/lib/museum/directus";
 import RoomsBrowser, { type RoomView } from "@/components/museum/RoomsBrowser";
+import { pageMetadata } from "@/lib/seo";
 
 // Rooms are cached hourly in the data layer (lib/museum/directus.ts), so the CMS
 // isn't hit per request. Route stays dynamic via the root layout (runtime
 // branding env); this revalidate applies if that constraint is lifted.
 export const revalidate = 3600;
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMetadata({
   title: "MOCA ROOMs",
   description:
     "Step into immersive 3D rooms and curated shows from the MOCA universe.",
-  alternates: { canonical: "/rooms" },
-};
+  path: "/rooms",
+});
 
 export default async function RoomsPage() {
   const rooms = await listRooms();

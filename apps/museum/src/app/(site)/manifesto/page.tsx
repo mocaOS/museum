@@ -1,12 +1,13 @@
 import type { Metadata } from "next";
 import manifesto from "@/content/manifesto.json";
+import { pageMetadata } from "@/lib/seo";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMetadata({
   title: "Manifesto",
   description:
     "The Museum of Crypto Art manifesto — our mission to preserve the truth and define the crypto art movement.",
-  alternates: { canonical: "/manifesto" },
-};
+  path: "/manifesto",
+});
 
 // Full-bleed, white-on-black statement page. The MOCA wordmark spans the full
 // container width in white (forced via a brightness/invert filter on the

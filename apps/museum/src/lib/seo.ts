@@ -10,6 +10,8 @@
  * Builders return plain objects; render them with <JsonLd data={...} />.
  */
 
+import type { Metadata } from "next";
+
 export const SITE_NAME = "Museum of Crypto Art";
 
 export function getSiteUrl(): string {
@@ -120,6 +122,57 @@ export function collectionPageLd(opts: {
             artform: "Crypto Art",
           },
         })),
+    },
+  };
+}
+
+/** Site-wide default social card (1200×630). */
+export const DEFAULT_OG_IMAGE = "/social.jpg";
+
+export interface PageMetadataInput {
+  title: string;
+  description: string;
+  /** Site-relative path, used for the canonical URL and og:url. */
+  path: string;
+  /**
+   * Site-relative preview image — the page's hero where one exists,
+   * otherwise the site-wide default card.
+   */
+  image?: string;
+  imageAlt?: string;
+  /** Render the title as-is instead of through the layout's `%s · …` template. */
+  absoluteTitle?: boolean;
+}
+
+/**
+ * Complete per-page metadata: title, description, canonical, and matching
+ * Open Graph + Twitter cards. Next.js merges metadata shallowly — a page
+ * that defines only `title`/`description` inherits the root layout's WHOLE
+ * `openGraph` object, so its social card would show the site-default title
+ * and text instead of the page's. Every page therefore restates the full
+ * card through this helper.
+ */
+export function pageMetadata(opts: PageMetadataInput): Metadata {
+  const image = opts.image ?? DEFAULT_OG_IMAGE;
+  const imageAlt = opts.imageAlt ?? `${opts.title} — ${SITE_NAME}`;
+  const ogTitle = opts.absoluteTitle ? opts.title : `${opts.title} · ${SITE_NAME}`;
+  return {
+    title: opts.absoluteTitle ? { absolute: opts.title } : opts.title,
+    description: opts.description,
+    alternates: { canonical: opts.path },
+    openGraph: {
+      type: "website",
+      siteName: SITE_NAME,
+      title: ogTitle,
+      description: opts.description,
+      url: opts.path,
+      images: [{ url: image, alt: imageAlt }],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: ogTitle,
+      description: opts.description,
+      images: [image],
     },
   };
 }

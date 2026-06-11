@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { listRooms, assetUrl, type Room } from "@/lib/museum/directus";
+import { DEFAULT_OG_IMAGE } from "@/lib/seo";
 import RoomDetail, {
   type RoomDetailView,
   type RoomNeighbor,
@@ -34,16 +35,27 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const description =
     room.description?.slice(0, 200) ||
     `Step inside ${title}${room.architect ? `, architecture by ${room.architect},` : ""} — an immersive 3D exhibition room from the Museum of Crypto Art.`;
+  const canonical = `/rooms/${room.id}`;
+  // The room's poster still is its hero; fall back to the site-wide card.
+  const ogImage = room.image
+    ? assetUrl(room.image, { width: 1200, height: 630, fit: "cover", quality: 80, format: "jpg" })
+    : DEFAULT_OG_IMAGE;
   return {
     title,
     description,
-    alternates: { canonical: `/rooms/${room.id}` },
+    alternates: { canonical },
     openGraph: {
       title,
       description,
-      images: room.image
-        ? [assetUrl(room.image, { width: 1200, height: 630, fit: "cover", quality: 80, format: "jpg" })]
-        : undefined,
+      url: canonical,
+      type: "website",
+      images: [ogImage],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title,
+      description,
+      images: [ogImage],
     },
   };
 }

@@ -56,9 +56,15 @@ ${collectionsSection}
 
 ## Build
 
-- [MOCA API documentation](https://docs.museumofcryptoart.com): Guides and full API reference.
-- [MOCA API llms.txt](https://docs.museumofcryptoart.com/llms.txt): Agent-first index of the API docs.
+The MOCA stack ships three documentation sites. Each publishes its own llms.txt (and llms-full.txt with the complete corpus inlined) — follow those indexes to traverse deeper.
+
+- [MOCA API documentation](https://docs.museumofcryptoart.com): Guides and full reference for the public MOCA API — collections, artworks, 3D rooms, and the Art DeCC0s knowledge base behind one API key.
+- [MOCA API llms.txt](https://docs.museumofcryptoart.com/llms.txt): Agent-first index of the MOCA API docs; full corpus at [llms-full.txt](https://docs.museumofcryptoart.com/llms-full.txt).
 - [MOCA Skills](https://docs.museumofcryptoart.com/SKILL.md): Skill handbook for AI agents integrating with MOCA.
+- [Cortex documentation](https://docs.cortex.eco): Run and build on Cortex — the agentic knowledge base (GraphRAG) that powers the Library and Soulweaver.
+- [Cortex llms.txt](https://docs.cortex.eco/llms.txt): Agent-first index of the Cortex docs; full corpus at [llms-full.txt](https://docs.cortex.eco/llms-full.txt).
+- [Art DeCC0s Codex documentation](https://docs.decc0s.com): The MOCA Codex API — query all 10,000 Art DeCC0s, their traits, and their 10,000+ word personalities.
+- [Art DeCC0s llms.txt](https://docs.decc0s.com/llms.txt): Agent-first index of the Codex docs; full corpus at [llms-full.txt](https://docs.decc0s.com/llms-full.txt).
 - [GitHub](https://github.com/mocaOS): The museum's open-source stack.
 
 ## Optional

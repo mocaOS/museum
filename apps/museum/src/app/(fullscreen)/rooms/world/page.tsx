@@ -3,15 +3,16 @@ import Link from "next/link";
 import { listRooms, assetUrl } from "@/lib/museum/directus";
 import WorldClient from "@/components/museum/three/WorldClient";
 import type { WorldRoom } from "@/components/museum/three/WorldBuilder";
+import { pageMetadata } from "@/lib/seo";
 
 export const dynamic = "force-dynamic";
 
-export const metadata: Metadata = {
-  title: "World",
+export const metadata: Metadata = pageMetadata({
+  title: "World Builder",
   description:
     "Build your own museum: place MOCA exhibition rooms into a shared world, hang artworks from the collection, and save your exhibits.",
-  alternates: { canonical: "/rooms/world" },
-};
+  path: "/rooms/world",
+});
 
 export default async function WorldPage() {
   const rooms = await listRooms();

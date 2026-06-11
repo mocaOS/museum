@@ -2,14 +2,14 @@ import type { Metadata } from "next";
 import writings from "@/content/writings.json";
 import WritingsBrowser from "@/components/museum/WritingsBrowser";
 import JsonLd from "@/components/seo/JsonLd";
-import { writingsListLd } from "@/lib/seo";
+import { pageMetadata, writingsListLd } from "@/lib/seo";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMetadata({
   title: "Writings",
   description:
     "A living reading list of the manifestos, papers, and essays that shaped crypto art and the culture around it.",
-  alternates: { canonical: "/writings" },
-};
+  path: "/writings",
+});
 
 export default function WritingsPage() {
   return (

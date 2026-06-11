@@ -1,13 +1,14 @@
 import type { Metadata } from "next";
 import pressRoom from "@/content/press-room.json";
 import PressRoomBrowser, { type PressRoom } from "@/components/museum/PressRoomBrowser";
+import { pageMetadata } from "@/lib/seo";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMetadata({
   title: "Press Room",
   description:
     "Media coverage, interviews, podcast appearances, and the press kit for the Museum of Crypto Art.",
-  alternates: { canonical: "/press-room" },
-};
+  path: "/press-room",
+});
 
 export default function PressRoomPage() {
   return (

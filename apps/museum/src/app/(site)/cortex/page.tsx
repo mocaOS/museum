@@ -1,13 +1,16 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import ComingSoonButton from "@/components/site/ComingSoonButton";
+import { pageMetadata } from "@/lib/seo";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMetadata({
   title: "Cortex",
   description:
     "Cortex is the memory layer for AI agents — a managed platform that turns your documents into a living knowledge graph agents can read, write, and reason over. Built by the Museum of Crypto Art; the stack beneath Soulweaver and the MOCA Library.",
-  alternates: { canonical: "/cortex" },
-};
+  path: "/cortex",
+  image: "/cortex/hero.jpg",
+  imageAlt: "Cortex — the memory layer for AI agents",
+});
 
 const PROBLEMS = [
   {

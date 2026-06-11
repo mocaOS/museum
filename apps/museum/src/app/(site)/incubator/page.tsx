@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
 import incubator from "@/content/incubator.json";
+import { pageMetadata } from "@/lib/seo";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMetadata({
   title: "Incubator",
   description: incubator.intro,
-  alternates: { canonical: "/incubator" },
-};
+  path: "/incubator",
+});
 
 export default function IncubatorPage() {
   return (

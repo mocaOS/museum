@@ -1,12 +1,13 @@
 import type { Metadata } from "next";
 import timeline from "@/content/timeline.json";
+import { pageMetadata } from "@/lib/seo";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMetadata({
   title: "Timeline",
   description:
     "An abbreviated history of crypto art — from the first on-chain tributes to the auctions that put NFTs on the world stage.",
-  alternates: { canonical: "/timeline" },
-};
+  path: "/timeline",
+});
 
 interface Event {
   date: string;

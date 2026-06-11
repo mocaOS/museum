@@ -1,11 +1,14 @@
 import type { Metadata } from "next";
+import { pageMetadata } from "@/lib/seo";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMetadata({
   title: "Art DeCC0s",
   description:
     "Art DeCC0s is a PFP r/evolution by the Museum of Crypto Art — 10,000 unique 1/1 characters bred from the entire history of art, each backed by a 10,000+ word personality in the Codex and ready to live on as an autonomous AI agent. Fully CC0.",
-  alternates: { canonical: "/decc0s" },
-};
+  path: "/decc0s",
+  image: "/decc0s/hero.jpg",
+  imageAlt: "Art DeCC0s — 10,000 unique 1/1 characters bred from the history of art",
+});
 
 const DNA = [
   {

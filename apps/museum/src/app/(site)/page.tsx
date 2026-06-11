@@ -3,31 +3,17 @@ import type { Metadata } from "next";
 import { listTopCollections, listCollectionPreviews } from "@/lib/museum/directus";
 import { pickDisplayMedia, pickPreviewMedia, preferOriginalStill } from "@/lib/museum/media";
 import CollectionCard from "@/components/museum/CollectionCard";
+import { pageMetadata } from "@/lib/seo";
 
 export const dynamic = "force-dynamic";
 
-const HOME_DESCRIPTION =
-  "A community museum for crypto art and Web3 culture. Explore the collections, walk the exhibitions, and enter the Library to query the MOCA Cortex.";
-
-export const metadata: Metadata = {
-  title: { absolute: "Museum of Crypto Art" },
-  description: HOME_DESCRIPTION,
-  alternates: { canonical: "/" },
-  // Note: a page-level `openGraph`/`twitter` REPLACES the root layout's whole
-  // object (Next.js metadata merging is shallow) — images must be restated.
-  openGraph: {
-    title: "Museum of Crypto Art",
-    description: HOME_DESCRIPTION,
-    url: "/",
-    images: ["/social.jpg"],
-  },
-  twitter: {
-    card: "summary_large_image",
-    title: "Museum of Crypto Art",
-    description: HOME_DESCRIPTION,
-    images: ["/social.jpg"],
-  },
-};
+export const metadata: Metadata = pageMetadata({
+  title: "Museum of Crypto Art",
+  description:
+    "A community museum for crypto art and Web3 culture. Explore the collections, walk the exhibitions, and enter the Library to query the MOCA Cortex.",
+  path: "/",
+  absoluteTitle: true,
+});
 
 const MODES = [
   {

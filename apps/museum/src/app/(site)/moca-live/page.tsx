@@ -1,13 +1,14 @@
 import type { Metadata } from "next";
 import mocaLive from "@/content/moca-live.json";
 import MocaLiveBrowser, { type MocaLive } from "@/components/museum/MocaLiveBrowser";
+import { pageMetadata } from "@/lib/seo";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMetadata({
   title: "MOCA Live",
   description:
     "Every MOCA livestream — town halls, artist conversations, and shows — watchable on-page, plus the podcast.",
-  alternates: { canonical: "/moca-live" },
-};
+  path: "/moca-live",
+});
 
 export default function MocaLivePage() {
   return (

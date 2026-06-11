@@ -1,12 +1,15 @@
 import type { Metadata } from "next";
 import ComingSoonButton from "@/components/site/ComingSoonButton";
+import { pageMetadata } from "@/lib/seo";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMetadata({
   title: "Soulweaver",
   description:
     "Awaken your NFTs. Soulweaver is AI-powered personality synthesis for NFT collections — portable SOUL.md identities, grounded in on-chain DNA and community lore, built on the Cortex knowledge graph by the Museum of Crypto Art.",
-  alternates: { canonical: "/soulweaver" },
-};
+  path: "/soulweaver",
+  image: "/soulweaver/hero.jpg",
+  imageAlt: "Soulweaver — AI-powered personality synthesis for NFT collections",
+});
 
 const PIPELINE = [
   {
