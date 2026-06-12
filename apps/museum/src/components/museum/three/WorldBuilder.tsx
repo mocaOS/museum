@@ -2,22 +2,28 @@
 
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { Grid, Environment, Lightformer, Html, useGLTF, AdaptiveDpr } from "@react-three/drei";
+import { AdaptiveDpr, Environment, Grid, Html, Lightformer, useGLTF } from "@react-three/drei";
 import * as THREE from "three";
-import type { NftView } from "@/lib/museum/media";
 import ArtworkPlane, { DEFAULT_OVERRIDE } from "./ArtworkPlane";
-import ArtworkPicker from "./ArtworkPicker";
-import ExhibitsPanel from "./ExhibitsPanel";
+import BuilderSidebar, {
+  type PlacedSummary,
+  SIDEBAR_RAIL_WIDTH,
+  SIDEBAR_WIDTH,
+  type SidebarTab,
+} from "./BuilderSidebar";
+import ControlsHelp from "./ControlsHelp";
+import { generateAutoSlots } from "./auto-slots";
 import { buildHyperfyExhibition, downloadHyperfyExhibition } from "./hyperfy-export";
-import { extractSlots, setPlaceholdersVisible, type RoomSlot } from "./slots";
+import { type RoomSlot, extractSlots, setPlaceholdersVisible } from "./slots";
 import {
-  loadWorldLayout,
-  saveWorldLayout,
   type Assignments,
   type SlotOverride,
   type SlotOverrides,
   type WorldLayout,
+  loadWorldLayout,
+  saveWorldLayout,
 } from "./world-storage";
+import type { NftView } from "@/lib/museum/media";
 
 export interface WorldRoom {
   id: number;
@@ -25,6 +31,12 @@ export interface WorldRoom {
   architect?: string | null;
   modelUrl?: string;
   imageUrl?: string;
+  /**
+   * Onchain slot amount (Directus `rooms.slots`, synced from the smart
+   * contract — the source of truth). Used to generate default slots for
+   * models that carry no authored `Slot_NNN` placeholders (un_MUSEUMs).
+   */
+  slotCount?: number | null;
 }
 
 interface Placed {
@@ -46,6 +58,8 @@ export interface CameraApi {
   focus: (p: THREE.Vector3) => void;
   /** Fly to stand in front of a wall slot, looking straight at it. */
   focusSlot: (pos: THREE.Vector3, normal: THREE.Vector3, size: number) => void;
+  /** Multiply the goal camera distance (for the on-screen zoom buttons). */
+  zoomBy: (factor: number) => void;
   reset: () => void;
 }
 
@@ -107,7 +121,7 @@ function RTSControls({ apiRef }: { apiRef: React.MutableRefObject<CameraApi | nu
         const dir = new THREE.Vector3(
           Math.sin(g.yaw) * Math.cos(pitch),
           Math.sin(pitch),
-          Math.cos(g.yaw) * Math.cos(pitch)
+          Math.cos(g.yaw) * Math.cos(pitch),
         ).normalize();
         // Start a touch out from the wall so we don't hit the slot's own frame.
         const start = pos.clone().addScaledVector(dir, 0.25);
@@ -128,6 +142,10 @@ function RTSControls({ apiRef }: { apiRef: React.MutableRefObject<CameraApi | nu
         const blocked = hits.length ? Math.max(1.2, hits[0].distance + 0.25 - MARGIN) : desired;
         g.dist = Math.min(desired, blocked);
       },
+      zoomBy: (factor) => {
+        const g = s.current.goal;
+        g.dist = clamp(g.dist * factor, 1.2, 140);
+      },
       reset: () => {
         const g = s.current.goal;
         g.target.set(0, 0, 0);
@@ -136,7 +154,7 @@ function RTSControls({ apiRef }: { apiRef: React.MutableRefObject<CameraApi | nu
         g.dist = 46;
       },
     };
-  }, [apiRef, scene]);
+  }, [ apiRef, scene ]);
 
   useEffect(() => {
     const dom = gl.domElement;
@@ -167,10 +185,10 @@ function RTSControls({ apiRef }: { apiRef: React.MutableRefObject<CameraApi | nu
       const rect = dom.getBoundingClientRect();
       const ndc = new THREE.Vector2(
         ((e.clientX - rect.left) / rect.width) * 2 - 1,
-        -(((e.clientY - rect.top) / rect.height) * 2 - 1)
+        -(((e.clientY - rect.top) / rect.height) * 2 - 1),
       );
       ray.current.setFromCamera(ndc, camera);
-      ray.current.far = Infinity;
+      ray.current.far = Number.POSITIVE_INFINITY;
       const hit = new THREE.Vector3();
       if (ray.current.ray.intersectPlane(groundPlane.current, hit)) {
         const k = clamp(1 - next / g.dist, -0.6, 0.9);
@@ -229,7 +247,7 @@ function RTSControls({ apiRef }: { apiRef: React.MutableRefObject<CameraApi | nu
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
     };
-  }, [gl, camera]);
+  }, [ gl, camera ]);
 
   useFrame((_, dt) => {
     const { cur, goal: g } = s.current;
@@ -260,7 +278,7 @@ function RTSControls({ apiRef }: { apiRef: React.MutableRefObject<CameraApi | nu
     const offset = new THREE.Vector3(
       Math.sin(cur.yaw) * Math.cos(cur.pitch),
       Math.sin(cur.pitch),
-      Math.cos(cur.yaw) * Math.cos(cur.pitch)
+      Math.cos(cur.yaw) * Math.cos(cur.pitch),
     ).multiplyScalar(cur.dist);
     camera.position.copy(cur.target.clone().add(offset));
     camera.lookAt(cur.target);
@@ -283,16 +301,24 @@ function SlotMarker({
   active: boolean;
   onClick: () => void;
 }) {
+  const { gl } = useThree();
   return (
     <group position={slot.position.clone().add(inwardOffset)} quaternion={orientation}>
       <mesh
+        onPointerOver={(e) => {
+          e.stopPropagation();
+          gl.domElement.style.cursor = "pointer";
+        }}
+        onPointerOut={() => {
+          gl.domElement.style.cursor = "";
+        }}
         onPointerDown={(e) => {
           if (e.button !== 0) return;
           e.stopPropagation();
           onClick();
         }}
       >
-        <planeGeometry args={[slot.width, slot.height]} />
+        <planeGeometry args={[ slot.width, slot.height ]} />
         <meshBasicMaterial
           color={active ? "#e0b24d" : "#5fb0ff"}
           transparent
@@ -304,7 +330,7 @@ function SlotMarker({
       </mesh>
       {/* Frame outline */}
       <lineSegments renderOrder={999}>
-        <edgesGeometry args={[new THREE.PlaneGeometry(slot.width, slot.height)]} />
+        <edgesGeometry args={[ new THREE.PlaneGeometry(slot.width, slot.height) ]} />
         <lineBasicMaterial color={active ? "#e0b24d" : "#5fb0ff"} transparent opacity={0.95} depthTest={false} />
       </lineSegments>
     </group>
@@ -356,13 +382,21 @@ function PlacedRoom({
   onSlotsReady: (uid: string, slots: SlotWorld[]) => void;
 }) {
   const { scene } = useGLTF(placed.room.modelUrl!, true, true);
-  const cloned = useMemo(() => scene.clone(true), [scene]);
-  const slots = useMemo(() => extractSlots(cloned), [cloned]);
+  const { gl } = useThree();
+  const cloned = useMemo(() => scene.clone(true), [ scene ]);
+  // Authored Slot_NNN placeholders win; models without any (un_MUSEUMs) get
+  // deterministic surface-sampled slots matching the onchain slot amount.
+  const slots = useMemo(() => {
+    const authored = extractSlots(cloned);
+    if (authored.length) return authored;
+    const n = placed.room.slotCount ?? 0;
+    return n > 0 ? generateAutoSlots(cloned, n, placed.room.id) : [];
+  }, [ cloned, placed.room.slotCount, placed.room.id ]);
 
   // Hide the placeholder quads in the model — we draw our own markers/artworks.
   useEffect(() => {
     setPlaceholdersVisible(cloned, false);
-  }, [cloned]);
+  }, [ cloned ]);
 
   const { scale, offset, center } = useMemo(() => {
     const box = new THREE.Box3().setFromObject(cloned);
@@ -372,12 +406,13 @@ function PlacedRoom({
     box.getCenter(c);
     const s = TILE / (Math.max(size.x, size.z) || 1);
     return { scale: s, offset: new THREE.Vector3(-c.x, -box.min.y, -c.z), center: c };
-  }, [cloned]);
+  }, [ cloned ]);
 
-  // Per-slot inward orientation in room-local space (shared by marker + art).
+  // Per-slot orientation in room-local space (shared by marker + art). Auto
+  // slots already face outward along the surface normal — no inward flip.
   const oriented = useMemo(
-    () => slots.map((s) => ({ slot: s, quat: inwardOrientation(s, center) })),
-    [slots, center]
+    () => slots.map(s => ({ slot: s, quat: s.auto ? s.quaternion.clone() : inwardOrientation(s, center) })),
+    [ slots, center ],
   );
 
   // Resolve every slot into world space for the sidebar navigator + camera fly.
@@ -386,12 +421,12 @@ function PlacedRoom({
     const outer = new THREE.Matrix4().compose(
       new THREE.Vector3(...placed.position),
       new THREE.Quaternion().setFromEuler(new THREE.Euler(0, placed.rotationY, 0)),
-      new THREE.Vector3(1, 1, 1)
+      new THREE.Vector3(1, 1, 1),
     );
     const inner = new THREE.Matrix4().compose(
       new THREE.Vector3(offset.x * scale, offset.y * scale, offset.z * scale),
       new THREE.Quaternion(),
-      new THREE.Vector3(scale, scale, scale)
+      new THREE.Vector3(scale, scale, scale),
     );
     const world = outer.multiply(inner);
     const rot = new THREE.Quaternion();
@@ -409,11 +444,11 @@ function PlacedRoom({
         size: Math.max(slot.width, slot.height) * scale,
       };
     });
-  }, [oriented, placed.position, placed.rotationY, offset, scale]);
+  }, [ oriented, placed.position, placed.rotationY, offset, scale ]);
 
   useEffect(() => {
     onSlotsReady(placed.uid, worldSlots);
-  }, [placed.uid, worldSlots, onSlotsReady]);
+  }, [ placed.uid, worldSlots, onSlotsReady ]);
 
   // Small inward push so markers/art sit just off the wall (no z-fighting).
   const EPS = 0.06 / scale;
@@ -421,10 +456,18 @@ function PlacedRoom({
   return (
     <group
       position={placed.position}
-      rotation={[0, placed.rotationY, 0]}
+      rotation={[ 0, placed.rotationY, 0 ]}
       onDoubleClick={(e) => {
         e.stopPropagation();
         onFocus();
+      }}
+      onPointerOver={(e) => {
+        e.stopPropagation();
+        // Rooms drag in build mode; while curating the room body is inert.
+        gl.domElement.style.cursor = curating ? "" : "grab";
+      }}
+      onPointerOut={() => {
+        gl.domElement.style.cursor = "";
       }}
       onPointerDown={(e) => {
         if (e.button !== 0) return;
@@ -437,16 +480,20 @@ function PlacedRoom({
         e.stopPropagation();
         onSelect();
         onStartDrag();
+        gl.domElement.style.cursor = "grabbing";
+      }}
+      onPointerUp={() => {
+        if (!curating) gl.domElement.style.cursor = "grab";
       }}
     >
       {selected && (
-        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, 0]}>
-          <ringGeometry args={[TILE * 0.6, TILE * 0.72, 56]} />
+        <mesh rotation={[ -Math.PI / 2, 0, 0 ]} position={[ 0, 0.02, 0 ]}>
+          <ringGeometry args={[ TILE * 0.6, TILE * 0.72, 56 ]} />
           <meshBasicMaterial color="#e0b24d" transparent opacity={0.95} side={THREE.DoubleSide} />
         </mesh>
       )}
       {/* Room geometry + its slots/artworks share the same scaled local space. */}
-      <group scale={scale} position={[offset.x * scale, offset.y * scale, offset.z * scale]}>
+      <group scale={scale} position={[ offset.x * scale, offset.y * scale, offset.z * scale ]}>
         <primitive object={cloned} />
 
         {/* Hung artworks (always visible once assigned). */}
@@ -466,15 +513,15 @@ function PlacedRoom({
               selected={curating && activeSlotId === slot.id}
               onSelect={curating ? () => onArtSelect(slot) : undefined}
               onOverrideChange={
-                curating ? (next) => onOverrideChange(slot.id, next) : undefined
+                curating ? next => onOverrideChange(slot.id, next) : undefined
               }
             />
           );
         })}
 
         {/* Empty-slot markers (only while curating this room). */}
-        {curating &&
-          oriented
+        {curating
+          && oriented
             .filter(({ slot }) => !assignments[slot.id])
             .map(({ slot, quat }) => {
               const inward = new THREE.Vector3(0, 0, 1).applyQuaternion(quat).multiplyScalar(EPS);
@@ -496,18 +543,18 @@ function PlacedRoom({
 
 function Ghost({ pos, rotY }: { pos: [number, number, number]; rotY: number }) {
   return (
-    <group position={pos} rotation={[0, rotY, 0]}>
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.03, 0]}>
-        <planeGeometry args={[TILE, TILE]} />
+    <group position={pos} rotation={[ 0, rotY, 0 ]}>
+      <mesh rotation={[ -Math.PI / 2, 0, 0 ]} position={[ 0, 0.03, 0 ]}>
+        <planeGeometry args={[ TILE, TILE ]} />
         <meshBasicMaterial color="#e0b24d" transparent opacity={0.18} side={THREE.DoubleSide} />
       </mesh>
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.04, 0]}>
-        <ringGeometry args={[TILE * 0.7, TILE * 0.72, 4]} />
+      <mesh rotation={[ -Math.PI / 2, 0, 0 ]} position={[ 0, 0.04, 0 ]}>
+        <ringGeometry args={[ TILE * 0.7, TILE * 0.72, 4 ]} />
         <meshBasicMaterial color="#e0b24d" transparent opacity={0.9} side={THREE.DoubleSide} />
       </mesh>
       {/* facing arrow */}
-      <mesh position={[0, 0.05, -TILE * 0.4]} rotation={[-Math.PI / 2, 0, 0]}>
-        <circleGeometry args={[0.5, 3]} />
+      <mesh position={[ 0, 0.05, -TILE * 0.4 ]} rotation={[ -Math.PI / 2, 0, 0 ]}>
+        <circleGeometry args={[ 0.5, 3 ]} />
         <meshBasicMaterial color="#e0b24d" />
       </mesh>
     </group>
@@ -515,17 +562,18 @@ function Ghost({ pos, rotY }: { pos: [number, number, number]; rotY: number }) {
 }
 
 export default function WorldBuilder({ rooms }: { rooms: WorldRoom[] }) {
-  const placeable = useMemo(() => rooms.filter((r) => r.modelUrl), [rooms]);
-  const roomById = useMemo(() => new Map(rooms.map((r) => [r.id, r])), [rooms]);
-  const [placed, setPlaced] = useState<Placed[]>([]);
-  const [selected, setSelected] = useState<string | null>(null);
-  const [placing, setPlacing] = useState<WorldRoom | null>(null);
-  const [ghost, setGhost] = useState<{ pos: [number, number, number]; rotY: number }>({
-    pos: [0, 0, 0],
+  const placeable = useMemo(() => rooms.filter(r => r.modelUrl), [ rooms ]);
+  const roomById = useMemo(() => new Map(rooms.map(r => [ r.id, r ])), [ rooms ]);
+  const [ placed, setPlaced ] = useState<Placed[]>([]);
+  const [ selected, setSelected ] = useState<string | null>(null);
+  const [ placing, setPlacing ] = useState<WorldRoom | null>(null);
+  const [ ghost, setGhost ] = useState<{ pos: [number, number, number]; rotY: number }>({
+    pos: [ 0, 0, 0 ],
     rotY: 0,
   });
-  const [showHelp, setShowHelp] = useState(true);
-  const [exhibitsOpen, setExhibitsOpen] = useState(false);
+  const [ showHelp, setShowHelp ] = useState(false);
+  const [ tab, setTab ] = useState<SidebarTab>("build");
+  const [ collapsed, setCollapsed ] = useState(false);
   const draggingRef = useRef<string | null>(null);
   const camApi = useRef<CameraApi | null>(null);
   const counter = useRef(0);
@@ -533,19 +581,19 @@ export default function WorldBuilder({ rooms }: { rooms: WorldRoom[] }) {
   // --- Curate mode: hang artworks on a placed room's wall slots -------------
   // assignments: placement uid → (slotId → artwork). overrides: placement uid →
   // (slotId → move/resize adjustment). Both persisted to localStorage.
-  const [assignments, setAssignments] = useState<Record<string, Assignments>>({});
-  const [overrides, setOverrides] = useState<Record<string, SlotOverrides>>({});
-  const [curatingUid, setCuratingUid] = useState<string | null>(null);
-  const [activeSlotId, setActiveSlotId] = useState<string | null>(null);
+  const [ assignments, setAssignments ] = useState<Record<string, Assignments>>({});
+  const [ overrides, setOverrides ] = useState<Record<string, SlotOverrides>>({});
+  const [ curatingUid, setCuratingUid ] = useState<string | null>(null);
+  const [ activeSlotId, setActiveSlotId ] = useState<string | null>(null);
   // World-resolved slots per placed room (for the sidebar navigator + fly-to).
-  const [roomSlots, setRoomSlots] = useState<Record<string, SlotWorld[]>>({});
-  const [autoBusy, setAutoBusy] = useState(false);
+  const [ roomSlots, setRoomSlots ] = useState<Record<string, SlotWorld[]>>({});
+  const [ autoBusy, setAutoBusy ] = useState(false);
   // State (not a ref) so the persist effect only runs in renders *after* the
   // restored layout has flushed — a ref flips synchronously inside the hydrate
   // effect and lets the very first persist pass save the initial empty state
   // over the stored layout (StrictMode's double effect run then re-hydrates
   // from the wiped storage and the layout is lost).
-  const [hydrated, setHydrated] = useState(false);
+  const [ hydrated, setHydrated ] = useState(false);
 
   // Restore a layout (initial hydration or loading a saved exhibit).
   const applyLayout = useCallback(
@@ -576,14 +624,14 @@ export default function WorldBuilder({ rooms }: { rooms: WorldRoom[] }) {
       setCuratingUid(null);
       setActiveSlotId(null);
     },
-    [roomById]
+    [ roomById ],
   );
 
   // Snapshot the current working layout (persistence + exhibit saves).
   const buildLayout = useCallback(
     (): WorldLayout => ({
       version: 2,
-      placements: placed.map((p) => ({
+      placements: placed.map(p => ({
         uid: p.uid,
         roomId: p.room.id,
         position: p.position,
@@ -592,7 +640,7 @@ export default function WorldBuilder({ rooms }: { rooms: WorldRoom[] }) {
         overrides: overrides[p.uid] || {},
       })),
     }),
-    [placed, assignments, overrides]
+    [ placed, assignments, overrides ],
   );
 
   // Hydrate the saved layout once on mount (rooms come from the server props).
@@ -600,24 +648,24 @@ export default function WorldBuilder({ rooms }: { rooms: WorldRoom[] }) {
     const layout = loadWorldLayout();
     if (layout) applyLayout(layout);
     setHydrated(true);
-  }, [applyLayout]);
+  }, [ applyLayout ]);
 
   // Persist on any change to placements / assignments / overrides.
   useEffect(() => {
     if (!hydrated) return;
     saveWorldLayout(buildLayout());
-  }, [hydrated, buildLayout]);
+  }, [ hydrated, buildLayout ]);
 
-  const curatingRoom = curatingUid ? placed.find((p) => p.uid === curatingUid) : null;
+  const curatingRoom = curatingUid ? placed.find(p => p.uid === curatingUid) : null;
   const curatingSlots = curatingUid ? roomSlots[curatingUid] || [] : [];
   const activeSlot = activeSlotId
-    ? curatingSlots.find((s) => s.id === activeSlotId) ?? null
+    ? curatingSlots.find(s => s.id === activeSlotId) ?? null
     : null;
   const activeSlotLabel = activeSlot ? `Slot ${activeSlot.index}` : null;
-  const activeArt =
-    curatingUid && activeSlotId ? (assignments[curatingUid] || {})[activeSlotId] ?? null : null;
-  const activeOverride =
-    curatingUid && activeSlotId
+  const activeArt
+    = curatingUid && activeSlotId ? (assignments[curatingUid] || {})[activeSlotId] ?? null : null;
+  const activeOverride
+    = curatingUid && activeSlotId
       ? (overrides[curatingUid] || {})[activeSlotId] ?? DEFAULT_OVERRIDE
       : DEFAULT_OVERRIDE;
 
@@ -629,9 +677,17 @@ export default function WorldBuilder({ rooms }: { rooms: WorldRoom[] }) {
     camApi.current?.focusSlot(s.position.clone(), s.normal.clone(), s.size * ovScale);
   };
 
+  // Make sure the curate tools are on screen (slot clicks can come from the
+  // 3D view while the sidebar is collapsed or on another tab).
+  const revealCurateTab = () => {
+    setCollapsed(false);
+    setTab("curate");
+  };
+
   const selectSlot = (slotId: string) => {
     setActiveSlotId(slotId);
-    const s = curatingSlots.find((x) => x.id === slotId);
+    revealCurateTab();
+    const s = curatingSlots.find(x => x.id === slotId);
     if (s) flyToSlot(s);
   };
 
@@ -640,14 +696,64 @@ export default function WorldBuilder({ rooms }: { rooms: WorldRoom[] }) {
     setSelected(uid);
     setPlacing(null);
     setActiveSlotId(null);
-    setExhibitsOpen(false);
-    const it = placed.find((p) => p.uid === uid);
+    revealCurateTab();
+    const it = placed.find(p => p.uid === uid);
     if (it && camApi.current) camApi.current.focus(new THREE.Vector3(...it.position));
+  };
+
+  const exitCurate = () => {
+    setCuratingUid(null);
+    setActiveSlotId(null);
+  };
+
+  // Select a room from the sidebar (or re-focus an already selected one).
+  const selectAndFocus = (uid: string) => {
+    setSelected(uid);
+    const it = placed.find(p => p.uid === uid);
+    if (it) camApi.current?.focus(new THREE.Vector3(...it.position));
+  };
+
+  const rotateRoom = (uid: string, dir: 1 | -1 = 1) => {
+    setPlaced(p =>
+      p.map(it => (it.uid === uid ? { ...it, rotationY: it.rotationY + dir * (Math.PI / 4) } : it)),
+    );
+  };
+
+  const removeRoom = (uid: string) => {
+    setPlaced(p => p.filter(x => x.uid !== uid));
+    setAssignments((a) => {
+      const next = { ...a };
+      delete next[uid];
+      return next;
+    });
+    setOverrides((o) => {
+      const next = { ...o };
+      delete next[uid];
+      return next;
+    });
+    setRoomSlots((r) => {
+      const next = { ...r };
+      delete next[uid];
+      return next;
+    });
+    if (curatingUid === uid) exitCurate();
+    setSelected(s => (s === uid ? null : s));
+  };
+
+  const clearWorld = () => {
+    if (!window.confirm("Clear the whole world? (Saved exhibits are kept.)")) return;
+    setPlaced([]);
+    setAssignments({});
+    setOverrides({});
+    setRoomSlots({});
+    setSelected(null);
+    setCuratingUid(null);
+    setActiveSlotId(null);
   };
 
   const assignArt = (art: NftView) => {
     if (!curatingUid || !activeSlotId) return;
-    setAssignments((prev) => ({
+    setAssignments(prev => ({
       ...prev,
       [curatingUid]: { ...(prev[curatingUid] || {}), [activeSlotId]: art },
     }));
@@ -655,7 +761,7 @@ export default function WorldBuilder({ rooms }: { rooms: WorldRoom[] }) {
   };
 
   const setSlotOverride = (uid: string, slotId: string, next: SlotOverride) => {
-    setOverrides((prev) => ({
+    setOverrides(prev => ({
       ...prev,
       [uid]: { ...(prev[uid] || {}), [slotId]: next },
     }));
@@ -678,13 +784,53 @@ export default function WorldBuilder({ rooms }: { rooms: WorldRoom[] }) {
     resetSlotOverride(uid, slotId);
   };
 
+  const scaleActive = (dir: 1 | -1) => {
+    if (!curatingUid || !activeSlotId) return;
+    setSlotOverride(curatingUid, activeSlotId, {
+      ...activeOverride,
+      scale: clamp(activeOverride.scale + dir * SCALE_STEP, MIN_ART_SCALE, MAX_ART_SCALE),
+    });
+  };
+
+  const exportHyperfy = () =>
+    downloadHyperfyExhibition(
+      buildHyperfyExhibition({
+        name: `MOCA exhibition ${new Date().toLocaleDateString()}`,
+        placed,
+        assignments,
+        overrides,
+      }),
+    );
+
+  const handleLoadExhibit = (layout: WorldLayout) => {
+    if (
+      placed.length > 0
+      && !window.confirm(
+        "Load this exhibit? Your current world will be replaced (save it first if you want to keep it).",
+      )
+    ) {
+      return;
+    }
+    applyLayout(layout);
+    camApi.current?.reset();
+  };
+
+  // Placed rooms reduced to what the sidebar renders (titles + fill counts).
+  const placedSummaries: PlacedSummary[] = placed.map(p => ({
+    uid: p.uid,
+    title: p.room.title,
+    architect: p.room.architect,
+    slotsTotal: (roomSlots[p.uid] || []).length,
+    slotsFilled: Object.keys(assignments[p.uid] || {}).length,
+  }));
+
   // Auto-curate: fill every empty slot of the curated room with random works
   // pulled from across all collections (paged to gather enough candidates).
   const autoPopulate = async () => {
     if (!curatingUid || autoBusy) return;
     const slots = roomSlots[curatingUid] || [];
     const current = assignments[curatingUid] || {};
-    const empty = slots.filter((s) => !current[s.id]);
+    const empty = slots.filter(s => !current[s.id]);
     if (!empty.length) return;
     setAutoBusy(true);
     try {
@@ -711,97 +857,108 @@ export default function WorldBuilder({ rooms }: { rooms: WorldRoom[] }) {
       // Shuffle the pool, then assign one per empty slot (cycling if short).
       for (let i = pool.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
-        [pool[i], pool[j]] = [pool[j], pool[i]];
+        [ pool[i], pool[j] ] = [ pool[j], pool[i] ];
       }
       const next: Assignments = { ...current };
       empty.forEach((s, i) => {
         next[s.id] = pool[i % pool.length];
       });
-      setAssignments((prev) => ({ ...prev, [curatingUid]: next }));
+      setAssignments(prev => ({ ...prev, [curatingUid]: next }));
     } finally {
       setAutoBusy(false);
     }
   };
 
-  // Keyboard shortcuts: R rotate, Del/Backspace remove, F focus, Esc cancel, H help.
+  // Keyboard shortcuts: R rotate (Shift reverses), C curate, Del/Backspace
+  // remove, F focus, Esc step back one mode, Home reset view, H help.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      const tag = (e.target as HTMLElement)?.tagName;
-      if (tag === "INPUT" || tag === "TEXTAREA") return;
+      const el = e.target as HTMLElement | null;
+      const tag = el?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || el?.isContentEditable) return;
       if (e.code === "KeyR") {
-        if (placing) setGhost((g) => ({ ...g, rotY: g.rotY + Math.PI / 4 }));
-        else if (selected)
-          setPlaced((p) => p.map((it) => (it.uid === selected ? { ...it, rotationY: it.rotationY + Math.PI / 4 } : it)));
+        const dir = e.shiftKey ? -1 : 1;
+        if (placing) setGhost(g => ({ ...g, rotY: g.rotY + dir * (Math.PI / 4) }));
+        else if (selected) rotateRoom(selected, dir);
+      } else if (e.code === "KeyC") {
+        if (!curatingUid && selected) enterCurate(selected);
       } else if (e.code === "Delete" || e.code === "Backspace") {
         // In curate mode, Del clears the hung artwork on the active slot.
         if (curatingUid && activeSlotId) {
           clearSlot(curatingUid, activeSlotId);
           setActiveSlotId(null);
         } else if (selected) {
-          setPlaced((p) => p.filter((x) => x.uid !== selected));
-          setAssignments((a) => {
-            const next = { ...a };
-            delete next[selected];
-            return next;
-          });
-          setOverrides((o) => {
-            const next = { ...o };
-            delete next[selected];
-            return next;
-          });
-          if (curatingUid === selected) setCuratingUid(null);
-          setSelected(null);
+          removeRoom(selected);
         }
       } else if (e.code === "KeyF") {
-        const it = placed.find((x) => x.uid === selected);
-        if (it && camApi.current) camApi.current.focus(new THREE.Vector3(...it.position));
+        if (selected) selectAndFocus(selected);
       } else if (e.code === "Escape") {
-        if (curatingUid) {
-          setCuratingUid(null);
-          setActiveSlotId(null);
-        } else if (exhibitsOpen) {
-          setExhibitsOpen(false);
-        } else {
+        // Step back one layer at a time: placing → active slot → curate mode
+        // → help panel → selection.
+        if (placing) {
           setPlacing(null);
+        } else if (curatingUid && activeSlotId) {
+          setActiveSlotId(null);
+        } else if (curatingUid) {
+          exitCurate();
+        } else if (showHelp) {
+          setShowHelp(false);
+        } else {
           setSelected(null);
         }
       } else if (e.code === "Home") {
         camApi.current?.reset();
       } else if (e.code === "KeyH") {
-        setShowHelp((v) => !v);
+        setShowHelp(v => !v);
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [placing, selected, placed, curatingUid, activeSlotId, exhibitsOpen]);
+  });
+
+  // Right-click cancels placement mode (classic RTS affordance).
+  useEffect(() => {
+    if (!placing) return;
+    const onDown = (e: PointerEvent) => {
+      if (e.button === 2) setPlacing(null);
+    };
+    window.addEventListener("pointerdown", onDown);
+    return () => window.removeEventListener("pointerdown", onDown);
+  }, [ placing ]);
 
   const placeAt = (x: number, z: number) => {
     if (!placing) return;
     const uid = `p${counter.current++}`;
-    setPlaced((p) => [...p, { uid, room: placing, position: [snap(x), 0, snap(z)], rotationY: ghost.rotY }]);
+    setPlaced(p => [ ...p, { uid, room: placing, position: [ snap(x), 0, snap(z) ], rotationY: ghost.rotY } ]);
     setSelected(uid);
     // stay in placement mode for rapid building (Esc / right-click to stop)
   };
 
+  // Overlays sit beside the sidebar, not under it.
+  const sidebarWidth = collapsed ? SIDEBAR_RAIL_WIDTH : SIDEBAR_WIDTH;
+
   return (
-    <div className="relative h-full w-full" style={{ background: "#070707" }}>
+    <div
+      className="relative h-full w-full"
+      style={{ background: "#070707", cursor: placing ? "crosshair" : undefined }}
+    >
       <Canvas
         shadows
-        dpr={[1, 2]}
-        camera={{ position: [32, 30, 32], fov: 42 }}
+        dpr={[ 1, 2 ]}
+        camera={{ position: [ 32, 30, 32 ], fov: 42 }}
         gl={{ antialias: true, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.05 }}
         onPointerMissed={(e) => {
           if ((e as MouseEvent).button === 0) setSelected(null);
         }}
       >
-        <color attach="background" args={["#070707"]} />
-        <fog attach="fog" args={["#070707", 70, 200]} />
+        <color attach="background" args={[ "#070707" ]} />
+        <fog attach="fog" args={[ "#070707", 70, 200 ]} />
         <hemisphereLight intensity={0.45} groundColor="#050505" />
         <directionalLight
-          position={[30, 40, 15]}
+          position={[ 30, 40, 15 ]}
           intensity={1.5}
           castShadow
-          shadow-mapSize={[2048, 2048]}
+          shadow-mapSize={[ 2048, 2048 ]}
           shadow-camera-left={-80}
           shadow-camera-right={80}
           shadow-camera-top={80}
@@ -809,7 +966,7 @@ export default function WorldBuilder({ rooms }: { rooms: WorldRoom[] }) {
         />
 
         <Grid
-          args={[600, 600]}
+          args={[ 600, 600 ]}
           cellSize={2}
           cellThickness={0.5}
           cellColor="#1c1c1c"
@@ -823,13 +980,14 @@ export default function WorldBuilder({ rooms }: { rooms: WorldRoom[] }) {
 
         {/* Ground: click target for placement / dragging / deselect */}
         <mesh
-          rotation={[-Math.PI / 2, 0, 0]}
-          position={[0, 0, 0]}
+          rotation={[ -Math.PI / 2, 0, 0 ]}
+          position={[ 0, 0, 0 ]}
           onPointerMove={(e) => {
-            if (placing) setGhost((g) => ({ ...g, pos: [e.point.x, 0, e.point.z] }));
-            else if (draggingRef.current) {
+            if (placing) {
+              setGhost(g => ({ ...g, pos: [ e.point.x, 0, e.point.z ] }));
+            } else if (draggingRef.current) {
               const id = draggingRef.current;
-              setPlaced((p) => p.map((it) => (it.uid === id ? { ...it, position: [snap(e.point.x), 0, snap(e.point.z)] } : it)));
+              setPlaced(p => p.map(it => (it.uid === id ? { ...it, position: [ snap(e.point.x), 0, snap(e.point.z) ] } : it)));
             }
           }}
           onPointerUp={() => (draggingRef.current = null)}
@@ -840,19 +998,21 @@ export default function WorldBuilder({ rooms }: { rooms: WorldRoom[] }) {
             }
           }}
         >
-          <planeGeometry args={[2000, 2000]} />
+          <planeGeometry args={[ 2000, 2000 ]} />
           <meshStandardMaterial color="#0b0b0b" roughness={1} />
         </mesh>
 
         {placing && <Ghost pos={ghost.pos} rotY={ghost.rotY} />}
 
         <Suspense fallback={null}>
-          {placed.map((p) => (
+          {placed.map(p => (
             <Suspense
               key={p.uid}
               fallback={
                 <Html position={p.position} center>
-                  <span className="rounded bg-black/60 px-2 py-1 text-[10px] text-white/70">loading…</span>
+                  <span className={`
+                    rounded bg-black/60 px-2 py-1 text-[10px] text-white/70
+                  `}>loading…</span>
                 </Html>
               }
             >
@@ -866,20 +1026,20 @@ export default function WorldBuilder({ rooms }: { rooms: WorldRoom[] }) {
                 onSelect={() => setSelected(p.uid)}
                 onFocus={() => camApi.current?.focus(new THREE.Vector3(...p.position))}
                 onStartDrag={() => (draggingRef.current = p.uid)}
-                onSlotClick={(slot) => selectSlot(slot.id)}
-                onArtSelect={(slot) => setActiveSlotId(slot.id)}
+                onSlotClick={slot => selectSlot(slot.id)}
+                onArtSelect={slot => setActiveSlotId(slot.id)}
                 onOverrideChange={(slotId, next) => setSlotOverride(p.uid, slotId, next)}
                 onSlotsReady={(uid, slots) =>
-                  setRoomSlots((prev) =>
-                    prev[uid] === slots ? prev : { ...prev, [uid]: slots }
+                  setRoomSlots(prev =>
+                    prev[uid] === slots ? prev : { ...prev, [uid]: slots },
                   )
                 }
               />
             </Suspense>
           ))}
           <Environment resolution={256} frames={1}>
-            <Lightformer intensity={1.8} position={[0, 12, -6]} scale={[24, 10, 1]} color="#ffffff" />
-            <Lightformer intensity={1} position={[-12, 6, 6]} scale={[12, 12, 1]} color="#bcd0ff" />
+            <Lightformer intensity={1.8} position={[ 0, 12, -6 ]} scale={[ 24, 10, 1 ]} color="#ffffff" />
+            <Lightformer intensity={1} position={[ -12, 6, 6 ]} scale={[ 12, 12, 1 ]} color="#bcd0ff" />
           </Environment>
         </Suspense>
 
@@ -887,101 +1047,77 @@ export default function WorldBuilder({ rooms }: { rooms: WorldRoom[] }) {
         <AdaptiveDpr pixelated />
       </Canvas>
 
-      {/* Artwork picker (curate mode) */}
-      {curatingUid && (
-        <ArtworkPicker
-          activeSlotLabel={activeSlotLabel}
-          onPick={assignArt}
-          onClose={() => {
-            setCuratingUid(null);
+      {/* Unified exhibition management sidebar */}
+      <BuilderSidebar
+        tab={tab}
+        onTabChange={setTab}
+        collapsed={collapsed}
+        onToggleCollapse={() => setCollapsed(v => !v)}
+        rooms={placeable}
+        placingId={placing?.id ?? null}
+        onTogglePlacing={(r) => {
+          setPlacing(cur => (cur?.id === r.id ? null : r));
+          setSelected(null);
+        }}
+        placed={placedSummaries}
+        selectedUid={selected}
+        onSelectRoom={selectAndFocus}
+        onRotateRoom={uid => rotateRoom(uid)}
+        onRemoveRoom={removeRoom}
+        onCurate={enterCurate}
+        onClearWorld={clearWorld}
+        curating={curatingRoom ? { uid: curatingRoom.uid, title: curatingRoom.room.title } : null}
+        slots={curatingSlots}
+        curAssignments={curatingUid ? assignments[curatingUid] || {} : {}}
+        activeSlotId={activeSlotId}
+        onSelectSlot={selectSlot}
+        onExitCurate={exitCurate}
+        onAutoFill={autoPopulate}
+        autoBusy={autoBusy}
+        activeArt={activeArt}
+        activeScale={activeOverride.scale}
+        canScaleUp={activeOverride.scale < MAX_ART_SCALE - 1e-6}
+        canScaleDown={activeOverride.scale > MIN_ART_SCALE + 1e-6}
+        onScaleActive={scaleActive}
+        onResetActive={() => curatingUid && activeSlotId && resetSlotOverride(curatingUid, activeSlotId)}
+        onClearActive={() => {
+          if (curatingUid && activeSlotId) {
+            clearSlot(curatingUid, activeSlotId);
             setActiveSlotId(null);
-          }}
-        />
-      )}
+          }
+        }}
+        onPickArt={assignArt}
+        getLayout={buildLayout}
+        hasContent={placed.length > 0}
+        onLoadLayout={handleLoadExhibit}
+        onExport={exportHyperfy}
+      />
 
-      {/* Saved exhibits library */}
-      {exhibitsOpen && !curatingUid && (
-        <ExhibitsPanel
-          getLayout={buildLayout}
-          hasContent={placed.length > 0}
-          onLoad={(layout) => {
-            if (
-              placed.length > 0 &&
-              !window.confirm("Load this exhibit? Your current world will be replaced (save it first if you want to keep it).")
-            ) {
-              return;
-            }
-            applyLayout(layout);
-            setExhibitsOpen(false);
-            camApi.current?.reset();
-          }}
-          onClose={() => setExhibitsOpen(false)}
-        />
-      )}
-
-      {/* Slot navigator — numbered list, click to fly to a slot */}
-      {curatingUid && curatingSlots.length > 0 && (
-        <div
-          className="pointer-events-auto absolute bottom-0 top-0 z-30 flex w-14 flex-col border-r"
-          style={{
-            left: 360,
-            background: "oklch(0.1 0 0 / 0.94)",
-            borderColor: "var(--border)",
-            backdropFilter: "blur(20px)",
-          }}
-        >
-          <div
-            className="border-b py-2 text-center text-[9px] uppercase tracking-[0.1em]"
-            style={{ borderColor: "var(--border)", color: "var(--fg3)" }}
-          >
-            Slots
-          </div>
-          <div className="min-h-0 flex-1 space-y-1 overflow-y-auto p-1.5">
-            {curatingSlots.map((s) => {
-              const filled = !!(assignments[curatingUid] || {})[s.id];
-              const active = activeSlotId === s.id;
-              return (
-                <button
-                  key={s.id}
-                  onClick={() => selectSlot(s.id)}
-                  className="relative flex h-9 w-full items-center justify-center rounded-[var(--radius-sm)] border text-[11px] transition-transform hover:-translate-y-0.5"
-                  style={{
-                    fontFamily: "var(--font-mono)",
-                    borderColor: active ? "var(--accent)" : "var(--border)",
-                    background: active ? "var(--accent)" : filled ? "var(--muted)" : "transparent",
-                    color: active ? "var(--accent-fg)" : "var(--fg1)",
-                  }}
-                  title={`Fly to slot ${s.index}${filled ? " (filled)" : ""}`}
-                >
-                  {s.index}
-                  {filled && !active && (
-                    <span
-                      className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full"
-                      style={{ background: "var(--accent)" }}
-                    />
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* Mode banner */}
+      {/* Mode banner (centered over the 3D viewport, not the full window) */}
       {placing && (
-        <div className="pointer-events-none absolute inset-x-0 top-16 flex justify-center">
+        <div
+          className={`
+            pointer-events-none absolute top-3 z-20 flex justify-center
+          `}
+          style={{ left: sidebarWidth, right: 0 }}
+        >
           <div
             className="rounded-full px-4 py-1.5 text-xs"
             style={{ background: "var(--accent)", color: "var(--accent-fg)" }}
           >
-            Placing “{placing.title}” · click to drop · R to rotate · Esc to stop
+            Placing “{placing.title}” · click the ground to drop · R rotates · right-click to stop
           </div>
         </div>
       )}
 
       {/* Curate banner */}
-      {curatingRoom && (
-        <div className="pointer-events-none absolute inset-x-0 top-16 flex justify-center">
+      {curatingRoom && !placing && (
+        <div
+          className={`
+            pointer-events-none absolute top-3 z-20 flex justify-center
+          `}
+          style={{ left: sidebarWidth, right: 0 }}
+        >
           <div
             className="rounded-full px-4 py-1.5 text-xs"
             style={{ background: "var(--accent)", color: "var(--accent-fg)" }}
@@ -990,245 +1126,22 @@ export default function WorldBuilder({ rooms }: { rooms: WorldRoom[] }) {
             {activeArt
               ? "drag to move · corner dot to resize"
               : activeSlotId
-                ? "pick a work from the panel"
+                ? `pick a work for ${activeSlotLabel}`
                 : "click a glowing slot"}{" "}
             · Esc to finish
           </div>
         </div>
       )}
 
-      {/* Per-artwork toolbar (curate mode, selected hung work) */}
-      {curatingUid && activeSlotId && activeArt && (
-        <div className="pointer-events-none absolute inset-x-0 bottom-5 flex justify-center">
-          <div
-            className="pointer-events-auto flex items-center gap-1 rounded-full border px-2 py-1 text-xs"
-            style={{ background: "oklch(0.14 0 0 / 0.88)", borderColor: "var(--border)", backdropFilter: "blur(12px)" }}
-          >
-            <span className="max-w-44 truncate px-2" style={{ color: "var(--fg2)" }}>
-              {activeArt.name || "Untitled"}
-            </span>
-            <span className="h-4 w-px" style={{ background: "var(--border)" }} />
-            <Btn
-              onClick={() =>
-                setSlotOverride(curatingUid, activeSlotId, {
-                  ...activeOverride,
-                  scale: clamp(activeOverride.scale - SCALE_STEP, MIN_ART_SCALE, MAX_ART_SCALE),
-                })
-              }
-              disabled={activeOverride.scale <= MIN_ART_SCALE}
-            >
-              − Smaller
-            </Btn>
-            <span
-              className="w-12 text-center"
-              style={{ color: "var(--fg3)", fontFamily: "var(--font-mono)" }}
-            >
-              {Math.round(activeOverride.scale * 100)}%
-            </span>
-            <Btn
-              onClick={() =>
-                setSlotOverride(curatingUid, activeSlotId, {
-                  ...activeOverride,
-                  scale: clamp(activeOverride.scale + SCALE_STEP, MIN_ART_SCALE, MAX_ART_SCALE),
-                })
-              }
-              disabled={activeOverride.scale >= MAX_ART_SCALE}
-            >
-              + Larger
-            </Btn>
-            <span className="h-4 w-px" style={{ background: "var(--border)" }} />
-            <Btn onClick={() => resetSlotOverride(curatingUid, activeSlotId)}>Reset</Btn>
-            <Btn
-              onClick={() => {
-                clearSlot(curatingUid, activeSlotId);
-                setActiveSlotId(null);
-              }}
-            >
-              Remove
-            </Btn>
-          </div>
-        </div>
-      )}
-
-      {/* Action bar */}
-      <div className="pointer-events-none absolute inset-x-0 top-3 flex justify-center">
-        <div
-          className="pointer-events-auto flex items-center gap-1 rounded-full border px-1.5 py-1 text-xs"
-          style={{ background: "oklch(0.14 0 0 / 0.82)", borderColor: "var(--border)", backdropFilter: "blur(12px)" }}
-        >
-          <Btn onClick={() => camApi.current?.reset()}>Reset view</Btn>
-          <Btn onClick={() => setExhibitsOpen((v) => !v)} active={exhibitsOpen} disabled={!!curatingUid}>
-            Exhibits
-          </Btn>
-          <Btn
-            onClick={() =>
-              downloadHyperfyExhibition(
-                buildHyperfyExhibition({
-                  name: `MOCA exhibition ${new Date().toLocaleDateString()}`,
-                  placed,
-                  assignments,
-                  overrides,
-                })
-              )
-            }
-            disabled={!placed.length}
-          >
-            Export
-          </Btn>
-          <span className="mx-1 h-4 w-px" style={{ background: "var(--border)" }} />
-          {curatingUid ? (
-            <>
-              <Btn onClick={autoPopulate} disabled={autoBusy}>
-                {autoBusy ? "Filling…" : "Auto-populate"}
-              </Btn>
-              <Btn
-                active
-                onClick={() => {
-                  setCuratingUid(null);
-                  setActiveSlotId(null);
-                }}
-              >
-                Done curating
-              </Btn>
-            </>
-          ) : (
-            <Btn onClick={() => selected && enterCurate(selected)} disabled={!selected}>
-              Curate{" "}
-              {selected && roomSlots[selected]
-                ? `(${Object.keys(assignments[selected] || {}).length}/${roomSlots[selected].length})`
-                : ""}
-            </Btn>
-          )}
-          <span className="mx-1 h-4 w-px" style={{ background: "var(--border)" }} />
-          <Btn onClick={() => { setSelected(null); }} disabled={!selected}>Deselect</Btn>
-          <Btn
-            onClick={() => {
-              if (selected) {
-                setPlaced((p) => p.filter((x) => x.uid !== selected));
-                setSelected(null);
-              }
-            }}
-            disabled={!selected}
-          >
-            Remove
-          </Btn>
-          <Btn
-            onClick={() => {
-              if (window.confirm("Clear the whole world? (Saved exhibits are kept.)")) {
-                setPlaced([]);
-                setAssignments({});
-                setOverrides({});
-                setSelected(null);
-                setCuratingUid(null);
-                setActiveSlotId(null);
-              }
-            }}
-            disabled={!placed.length}
-          >
-            Clear
-          </Btn>
-          <span className="mx-1 h-4 w-px" style={{ background: "var(--border)" }} />
-          <Btn onClick={() => setShowHelp((v) => !v)} active={showHelp}>Controls</Btn>
-        </div>
-      </div>
-
-      {/* Controls legend (gamer-friendly) */}
-      {showHelp && (
-        <div
-          className="absolute bottom-3 left-3 z-10 w-60 rounded-[var(--radius-lg)] border p-3 text-[11px]"
-          style={{ background: "oklch(0.12 0 0 / 0.9)", borderColor: "var(--border)", color: "var(--fg2)", backdropFilter: "blur(16px)" }}
-        >
-          <div className="mb-2 text-[10px] uppercase tracking-[0.1em]" style={{ color: "var(--fg3)" }}>Controls</div>
-          {[
-            ["W A S D / Arrows", "Pan"],
-            ["Q / E", "Rotate camera"],
-            ["Right-drag", "Orbit"],
-            ["Middle-drag", "Pan"],
-            ["Scroll", "Zoom to cursor"],
-            ["Screen edges", "Edge-scroll"],
-            ["Shift", "Move faster"],
-            ["Click tray → click", "Place room"],
-            ["Drag room", "Move"],
-            ["Double-click room", "Focus"],
-            ["Select → Curate", "Hang artworks"],
-            ["Click slot → pick", "Fill slot"],
-            ["Drag artwork", "Move on wall"],
-            ["Corner dot", "Resize artwork"],
-            ["R", "Rotate piece / ghost"],
-            ["F", "Focus selected"],
-            ["Del", "Remove selected / slot"],
-            ["Home", "Reset view"],
-            ["Esc", "Cancel / deselect"],
-          ].map(([k, v]) => (
-            <div key={k} className="flex justify-between py-0.5">
-              <kbd
-                className="rounded px-1.5 py-0.5"
-                style={{ background: "var(--muted)", color: "var(--fg1)", fontFamily: "var(--font-mono)" }}
-              >
-                {k}
-              </kbd>
-              <span className="ml-2 text-right">{v}</span>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Room tray / hotbar */}
-      <div className="absolute right-3 top-1/2 z-10 -translate-y-1/2">
-        <div
-          className="max-h-[68vh] w-56 overflow-y-auto rounded-[var(--radius-lg)] border p-2"
-          style={{ background: "oklch(0.13 0 0 / 0.92)", borderColor: "var(--border)", backdropFilter: "blur(16px)" }}
-        >
-          <div className="mb-2 px-1 text-[10px] uppercase tracking-[0.1em]" style={{ color: "var(--fg3)" }}>
-            Rooms · {placeable.length}
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            {placeable.map((r) => (
-              <button
-                key={r.id}
-                onClick={() => { setPlacing(r); setSelected(null); }}
-                className="group overflow-hidden rounded-[var(--radius)] border text-left transition-transform hover:-translate-y-0.5"
-                style={{
-                  borderColor: placing?.id === r.id ? "var(--accent)" : "var(--border)",
-                  background: "var(--card)",
-                }}
-                title={`Place ${r.title}`}
-              >
-                <div className="aspect-square overflow-hidden" style={{ background: "var(--muted)" }}>
-                  {r.imageUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={r.imageUrl} alt={r.title} loading="lazy" className="h-full w-full object-cover" />
-                  ) : null}
-                </div>
-                <div className="truncate px-1.5 py-1 text-[10px]" style={{ color: "var(--fg2)" }}>{r.title}</div>
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
+      {/* Bottom-right: zoom / reset-view cluster + controls reference */}
+      <ControlsHelp
+        open={showHelp}
+        onToggle={() => setShowHelp(v => !v)}
+        onClose={() => setShowHelp(false)}
+        onResetView={() => camApi.current?.reset()}
+        onZoomIn={() => camApi.current?.zoomBy(1 / 1.35)}
+        onZoomOut={() => camApi.current?.zoomBy(1.35)}
+      />
     </div>
-  );
-}
-
-function Btn({
-  children,
-  active,
-  disabled,
-  onClick,
-}: {
-  children: React.ReactNode;
-  active?: boolean;
-  disabled?: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      className="rounded-full px-3 py-1 transition-colors disabled:opacity-30"
-      style={{ background: active ? "var(--accent)" : "transparent", color: active ? "var(--accent-fg)" : "var(--fg1)" }}
-    >
-      {children}
-    </button>
   );
 }

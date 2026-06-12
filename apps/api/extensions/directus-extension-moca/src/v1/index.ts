@@ -244,11 +244,22 @@ export default defineEndpoint({
     router.get("/rooms", async (_req, res) => {
       try {
         const svc = await itemsService("rooms");
-        const rows = await svc.readByQuery({
-          limit: -1,
-          sort: ["id"],
-          fields: ["id", "title", "architect", "description", "series", "slots", "image", "model", "token_id"],
-        });
+        const baseFields = ["id", "title", "architect", "description", "series", "slots", "image", "model", "token_id"];
+        let rows: any[];
+        try {
+          // model_optimized = builder variant (draco/webp-optimized GLB with
+          // embedded Slot_NNN placeholders; un_MUSEUMs get theirs generated
+          // from the onchain slot amount). `model` stays the untouched HQ
+          // version. The field is created by apps/migration/embed-room-slots.ts
+          // — fall back gracefully on instances that predate it.
+          rows = await svc.readByQuery({
+            limit: -1,
+            sort: ["id"],
+            fields: [...baseFields, "model_optimized"],
+          });
+        } catch {
+          rows = await svc.readByQuery({ limit: -1, sort: ["id"], fields: baseFields });
+        }
         res.json({
           data: rows.map((r: any) => ({
             id: r.id,
@@ -260,6 +271,7 @@ export default defineEndpoint({
             token_id: r.token_id ?? null,
             image_url: assetUrl(r.image),
             model_url: assetUrl(r.model),
+            model_optimized_url: assetUrl(r.model_optimized),
           })),
         });
       } catch (e: any) {

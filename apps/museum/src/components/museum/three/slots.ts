@@ -20,6 +20,13 @@ export interface RoomSlot {
   width: number;
   /** Frame height in room-local units. */
   height: number;
+  /**
+   * True for procedurally generated slots (un_MUSEUMs — no authored
+   * placeholders; see auto-slots.ts). Their quaternion already faces outward
+   * along the surface normal, so the inward-to-room-center flip must be
+   * skipped.
+   */
+  auto?: boolean;
 }
 
 const SLOT_NAME = /slot[_\s-]*(\d+)/i;

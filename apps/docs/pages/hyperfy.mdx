@@ -70,8 +70,10 @@ but Docker.
 
 ## The slot convention (build your own renderer)
 
-Rooms from `GET /v1/rooms` are GLBs whose `Slot_001…Slot_NNN` placeholder
-quads define where art hangs — transform = anchor, bounding box = frame
+Rooms from `GET /v1/rooms` ship as GLBs whose `Slot_001…Slot_NNN`
+placeholder quads define where art hangs — use `model_optimized_url`, which
+always carries them (un_MUSEUM sculptures get theirs generated from the
+onchain slot amount; `model_url` is the untouched HQ original) — transform = anchor, bounding box = frame
 size, `slots` field = count. Hide the placeholder, place the work at its
 transform, fit preserving `ratio`. That single convention powers the museum
 site, the Hyperfy integration, and whatever you build next.

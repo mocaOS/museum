@@ -137,7 +137,10 @@ const systemPrompt = [
 
 ## Hanging art in your own 3D space
 
-1. `GET /v1/rooms` → pick a room, download `model_url` (GLB).
+1. `GET /v1/rooms` → pick a room, download `model_optimized_url` (a
+   draco-compressed GLB that always carries slots — un_MUSEUM sculptures get
+   theirs generated from the onchain slot amount). `model_url` is the untouched
+   high-quality original for hero/detail rendering.
 2. Find meshes named `Slot_001…Slot_NNN` — their transforms are wall anchors,
    their bounding boxes the frame size.
 3. `GET /v1/artworks` → fit each work into a slot preserving `ratio`

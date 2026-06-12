@@ -1,6 +1,6 @@
 "use client";
 
-import { useDeferredValue, useMemo, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 
 export interface RoomView {
@@ -23,7 +23,16 @@ export interface RoomView {
 export default function RoomsBrowser({ rooms }: { rooms: RoomView[] }) {
   const [query, setQuery] = useState("");
   const [architect, setArchitect] = useState<string | null>(null);
+  // null = all slot counts (default). A set narrows to rooms whose slot
+  // count is in it; rooms without slots count as 0.
+  const [selectedSlots, setSelectedSlots] = useState<Set<number> | null>(null);
   const deferredQuery = useDeferredValue(query);
+
+  const slotOptions = useMemo(() => {
+    const seen = new Set<number>();
+    for (const r of rooms) seen.add(r.slots ?? 0);
+    return [...seen].sort((a, b) => a - b);
+  }, [rooms]);
 
   const architectOptions = useMemo(() => {
     const seen = new Set<string>();
@@ -41,13 +50,14 @@ export default function RoomsBrowser({ rooms }: { rooms: RoomView[] }) {
   const filtered = useMemo(() => {
     const q = deferredQuery.trim().toLowerCase();
     return rooms.filter((r) => {
+      if (selectedSlots && !selectedSlots.has(r.slots ?? 0)) return false;
       if (architect && (r.architect?.trim() ?? "") !== architect) return false;
       if (!q) return true;
       return [r.title, r.architect, r.series].some((v) =>
         v?.toLowerCase().includes(q),
       );
     });
-  }, [rooms, deferredQuery, architect]);
+  }, [rooms, deferredQuery, architect, selectedSlots]);
 
   if (!rooms.length) {
     return (
@@ -61,6 +71,13 @@ export default function RoomsBrowser({ rooms }: { rooms: RoomView[] }) {
     <>
       <div className="mb-8 flex flex-col gap-3">
         <div className="flex flex-wrap items-center gap-3">
+          {slotOptions.length > 1 && (
+            <SlotsDropdown
+              options={slotOptions}
+              selected={selectedSlots}
+              onChange={setSelectedSlots}
+            />
+          )}
           <div className="relative w-full max-w-sm">
             <svg
               className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2"
@@ -188,6 +205,7 @@ export default function RoomsBrowser({ rooms }: { rooms: RoomView[] }) {
             onClick={() => {
               setQuery("");
               setArchitect(null);
+              setSelectedSlots(null);
             }}
             className="mt-3 text-xs underline-offset-2 hover:underline"
             style={{ color: "var(--fg3)" }}
@@ -197,6 +215,159 @@ export default function RoomsBrowser({ rooms }: { rooms: RoomView[] }) {
         </div>
       )}
     </>
+  );
+}
+
+/**
+ * Multi-select dropdown over the distinct slot counts. `selected === null`
+ * means "all" (the default). Narrowing from "all" selects just the clicked
+ * count; deselecting the last count falls back to "all" rather than an
+ * empty (zero-result) selection.
+ */
+function SlotsDropdown({
+  options,
+  selected,
+  onChange,
+}: {
+  options: number[];
+  selected: Set<number> | null;
+  onChange: (next: Set<number> | null) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onPointerDown = (e: PointerEvent) => {
+      if (!rootRef.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open]);
+
+  const toggle = (value: number) => {
+    if (selected === null) {
+      onChange(new Set([value]));
+      return;
+    }
+    const next = new Set(selected);
+    if (next.has(value)) next.delete(value);
+    else next.add(value);
+    onChange(next.size === 0 || next.size === options.length ? null : next);
+  };
+
+  const label =
+    selected === null
+      ? "Slots"
+      : selected.size === 1
+        ? `Slots · ${[...selected][0] || "none"}`
+        : `Slots · ${selected.size}`;
+
+  return (
+    <div ref={rootRef} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        className="flex h-10 items-center gap-2 rounded-[var(--radius)] border px-3 text-sm transition-colors"
+        style={{
+          background: "var(--card)",
+          borderColor: open ? "var(--fg3)" : "var(--border)",
+          color: selected === null ? "var(--fg2)" : "var(--fg1)",
+        }}
+      >
+        {label}
+        <svg
+          className={`h-4 w-4 transition-transform duration-150 ${open ? "rotate-180" : ""}`}
+          style={{ color: "var(--fg3)" }}
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          strokeWidth={2}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d="m6 9 6 6 6-6" />
+        </svg>
+      </button>
+
+      {open && (
+        <div
+          role="listbox"
+          aria-multiselectable
+          className="absolute left-0 top-[calc(100%+6px)] z-20 min-w-[160px] rounded-[var(--radius)] border py-1.5 shadow-lg"
+          style={{ background: "var(--card)", borderColor: "var(--border)" }}
+        >
+          <SlotOption
+            checked={selected === null}
+            label="All slots"
+            onClick={() => onChange(null)}
+          />
+          <div className="my-1 h-px" style={{ background: "var(--border)" }} />
+          {options.map((count) => (
+            <SlotOption
+              key={count}
+              checked={selected === null || selected.has(count)}
+              label={count === 0 ? "No slots" : `${count} slots`}
+              onClick={() => toggle(count)}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SlotOption({
+  checked,
+  label,
+  onClick,
+}: {
+  checked: boolean;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="option"
+      aria-selected={checked}
+      onClick={onClick}
+      className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left text-sm transition-colors hover:bg-[var(--muted)]"
+      style={{ color: checked ? "var(--fg1)" : "var(--fg2)" }}
+    >
+      <span
+        className="flex h-4 w-4 shrink-0 items-center justify-center rounded-[var(--radius-sm)] border"
+        style={{
+          borderColor: checked ? "var(--fg1)" : "var(--border)",
+          background: checked ? "var(--fg1)" : "transparent",
+        }}
+      >
+        {checked && (
+          <svg
+            className="h-3 w-3"
+            style={{ color: "var(--bg)" }}
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth={3}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M20 6 9 17l-5-5" />
+          </svg>
+        )}
+      </span>
+      <span className="font-mono text-[13px]">{label}</span>
+    </button>
   );
 }
 

@@ -8,10 +8,16 @@
   },
   "dependencies": {
     "@directus/sdk": "^19.0.1",
+    "@gltf-transform/core": "^4.4.0",
+    "@gltf-transform/extensions": "^4.4.0",
+    "@gltf-transform/functions": "^4.4.0",
     "axios": "^1.7.9",
+    "draco3dgltf": "^1.5.7",
     "google-auth-library": "^9.15.1",
     "google-spreadsheet": "^4.1.4",
     "js-base64": "^3.7.7",
+    "sharp": "^0.35.1",
+    "three": "^0.184.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.7.3"
   },

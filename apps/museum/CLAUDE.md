@@ -80,17 +80,42 @@ no accounts. Code lives in `src/components/museum/three/`:
 
 - **`WorldBuilder.tsx`** — the builder scene: goal-damped RTS camera (WASD/edge pan,
   Q/E rotate, wheel **zoom-to-cursor**, RMB orbit, MMB pan, double-click room to
-  focus), room placement/dragging/rotation, curate mode, exhibits UI, keyboard map.
+  focus), room placement/dragging/rotation (right-click cancels placing, R/Shift+R
+  rotate, C curates the selection), curate mode, keyboard map, cursor feedback.
+- **`BuilderSidebar.tsx`** — the unified exhibition-management panel on the left
+  (collapsible to an icon rail): **Build** (searchable room library + selected-room
+  actions + clear), **Curate** (per-room fill progress, slot chips, active-slot
+  scale/reset/remove, embedded artwork browser, auto-fill), **Exhibits** (saved
+  exhibits + Hyperfy export). Slot clicks in 3D auto-reveal the Curate tab.
+- **`ControlsHelp.tsx`** — bottom-right nav cluster (zoom in/out, reset view, help
+  icon) plus the grouped controls reference that slides in on the right (H toggles).
 - **`ArtworkPlane.tsx`** — one hung work: textured plane + matte frame, sized to the
   work's true aspect ratio (read from the loaded texture's pixels, falling back to
   catalog `ratio`). In curate mode supports drag-to-move along the wall plane and a
   corner-handle resize; both write a per-slot override `{dx, dy, scale}`.
-- **`ArtworkPicker.tsx`** — in-canvas search/browse panel (`/api/museum/artworks`,
+- **`ArtworkPicker.tsx`** — exports `ArtworkBrowser`, the embeddable search/browse
+  grid used by the sidebar's Curate tab (`/api/museum/artworks`,
   `/api/museum/collections`), scoped by collection, click to hang.
-- **`ExhibitsPanel.tsx`** — save/load/update/delete named exhibits.
-- **`slots.ts`** — slot extraction from room GLBs. Authoring convention: every room
-  model carries `Slot_001…Slot_NNN` placeholder quads (material "Slot Placeholder");
+- **`ExhibitsPanel.tsx`** — save/load/update/delete named exhibits (embedded in the
+  sidebar's Exhibits tab).
+- **`slots.ts`** — slot extraction from room GLBs. Authoring convention: room
+  models carry `Slot_001…Slot_NNN` placeholder quads (material "Slot Placeholder");
   their transforms/bboxes define hang position, orientation, and frame size.
+- **`auto-slots.ts`** — runtime fallback slot generation for models with **no**
+  `Slot_NNN` placeholders (un_MUSEUMs not yet processed by the embed script —
+  single-mesh sculptures whose slot *amount* lives onchain, synced into Directus
+  `rooms.slots`, the source of truth). Deterministic seeded surface sampling
+  (seed = room id): area-weighted candidates, floor/underside rejection,
+  local-flatness scoring, greedy farthest-point pick with relaxing separation.
+  Slots face outward along the surface normal (`RoomSlot.auto` skips the
+  inward-to-room-center flip) so works hang on walls and lie on slanted limbs.
+  **The canonical path is `apps/migration/embed-room-slots.ts`**, which bakes
+  the same generated slots (1:1 algorithm port — keep them in sync) into an
+  optimized GLB stored as `rooms.model_optimized` (draco + webp): the builder
+  loads `model_optimized ?? model` (see `/rooms/world/page.tsx`), while the HQ
+  `model` stays untouched for the `/rooms/[id]` viewer. Embedded slots also make
+  Hyperfy exports work for un_MUSEUMs (the spawner resolves `Slot_NNN` nodes in
+  the GLB it uploads).
 - **`world-storage.ts`** — localStorage persistence. Working layout under
   `moca-world-layout-v1` (payload is **v2**: placements + assignments + slot
   overrides; v1 payloads migrate on load). Named exhibits under

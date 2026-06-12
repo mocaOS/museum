@@ -1567,7 +1567,7 @@
               "integer",
               "null"
             ],
-            "description": "Number of artwork wall slots in the GLB"
+            "description": "Number of artwork wall slots (source of truth: the smart contract, synced onchain \u2192 Directus)"
           },
           "token_id": {
             "type": [
@@ -1587,7 +1587,14 @@
               "string",
               "null"
             ],
-            "description": "GLB model download URL"
+            "description": "GLB model download URL \u2014 the untouched high-quality version (single-room HQ viewer)"
+          },
+          "model_optimized_url": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Optimized GLB download URL (draco-compressed, webp textures) with embedded Slot_NNN placeholder nodes \u2014 the variant the exhibition builder uses. For un_MUSEUMs (no authored slots in the model) the slots are generated deterministically from the onchain slot amount. Null until the variant has been generated."
           }
         }
       },

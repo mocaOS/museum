@@ -30,7 +30,7 @@ GET  /v1/collections                      # published collections + children
 GET  /v1/collections/:slug
 GET  /v1/artworks?collection&search&page&limit   # max limit 100
 GET  /v1/artworks/:id
-GET  /v1/rooms                            # 3D rooms: image_url, model_url (GLB), slots
+GET  /v1/rooms                            # 3D rooms: image_url, model_url (HQ GLB), model_optimized_url (GLB w/ slots), slots
 GET  /v1/decc0s?page&limit&search&fields
 GET  /v1/decc0s/:id?include=profiles,codex
 GET  /v1/search?q=&limit                  # grouped: artworks+collections+decc0s

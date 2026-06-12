@@ -9,8 +9,10 @@ multiplayer exhibitions into Hyperfy worlds.
 curl -H "X-API-Key: $KEY" "https://api.moca.qwellco.de/v1/rooms"
 ```
 
-→ `{ id, title, architect, series, slots, image_url, model_url }`.
-`model_url` is a GLB. **The convention:** every room model contains
+→ `{ id, title, architect, series, slots, image_url, model_url, model_optimized_url }`.
+Use `model_optimized_url` — a draco-compressed GLB that always carries slots
+(un_MUSEUM sculptures get theirs generated from the onchain slot amount);
+`model_url` is the untouched HQ original. **The convention:** the model contains
 placeholder quads named `Slot_001 … Slot_NNN` (material "Slot Placeholder").
 Their transforms are the wall anchors; their bounding boxes the frame sizes;
 `slots` is the count. Hide the placeholders, hang art at their transforms,
