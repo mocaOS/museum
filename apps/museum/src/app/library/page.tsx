@@ -70,7 +70,7 @@ export default function LibraryPage() {
   const suggestions = [
     "How did crypto art begin?",
     "What is the Genesis Collection?",
-    "Which artists shaped the early movement?",
+    "Which artists shaped the early cryptoart movement?",
     "What does the MOCA manifesto stand for?",
   ];
 

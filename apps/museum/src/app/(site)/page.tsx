@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { listTopCollections, listCollectionPreviews, listRooms, assetUrl } from "@/lib/museum/directus";
 import { pickDisplayMedia, pickPreviewMedia, preferOriginalStill } from "@/lib/museum/media";
 import CollectionCard from "@/components/museum/CollectionCard";
+import CardCarousel from "@/components/museum/CardCarousel";
 import { pageMetadata } from "@/lib/seo";
 
 export const dynamic = "force-dynamic";
@@ -47,7 +48,9 @@ const PRODUCTS = [
 
 export default async function HomePage() {
   const collections = await listTopCollections();
-  const featured = collections.slice(0, 6);
+  // The featured rail is a horizontal slider, so it can hold more than the
+  // old 2×3 grid did.
+  const featured = collections.slice(0, 12);
 
   // ROOMs card cover: first room in the catalog that has a poster still.
   let roomsImage: string | null = null;
@@ -63,9 +66,15 @@ export default async function HomePage() {
   const products = PRODUCTS.map((p) =>
     p.href === "/rooms" ? { ...p, image: roomsImage } : p
   );
+  // Slug set per featured collection (parent + children) — used both for the
+  // initial preview batch and by the card's shuffle button to pull random
+  // pieces from across the entire collection.
+  const featuredSlugs = featured.map((c) => [
+    c.slug,
+    ...(c.child_collections || []).map((cc) => cc.slug),
+  ]);
   const previewSets = await Promise.all(
-    featured.map(async (c) => {
-      const slugs = [c.slug, ...(c.child_collections || []).map((cc) => cc.slug)];
+    featuredSlugs.map(async (slugs) => {
       const nfts = await listCollectionPreviews(slugs, 12);
       // Prefer a still poster so video works don't autoplay in the overview.
       return nfts.map((n) =>
@@ -179,17 +188,17 @@ export default async function HomePage() {
               All collections →
             </Link>
           </div>
-          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          <CardCarousel>
             {featured.map((c, i) => (
               <CollectionCard
                 key={c.id}
                 href={`/collections/${c.slug}`}
                 title={c.title || c.name}
-                description={c.description}
                 previews={previewSets[i]}
+                slugs={featuredSlugs[i]}
               />
             ))}
-          </div>
+          </CardCarousel>
         </section>
       )}
 

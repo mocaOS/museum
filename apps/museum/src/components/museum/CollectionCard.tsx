@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import MediaView from "./MediaView";
 import type { MediaInfo } from "@/lib/museum/media";
@@ -11,8 +11,18 @@ interface Props {
   title: string;
   description?: string | null;
   previews: (MediaInfo | null)[];
+  /**
+   * Collection slugs (parent + children). When set, the shuffle button
+   * lazily pulls random batches from /api/museum/previews so it draws from
+   * the entire collection instead of cycling the server-shipped batch.
+   */
+  slugs?: string[];
   aspect?: string;
 }
+
+// Beyond this many cached pieces we stop fetching more — plenty of variety
+// without holding an entire large collection in memory.
+const POOL_CAP = 96;
 
 // Deterministic index from a stable seed (the card href), so the initial piece
 // is varied per collection yet identical on server and client — avoids a
@@ -34,9 +44,14 @@ export default function CollectionCard({
   title,
   description,
   previews,
+  slugs,
   aspect = "aspect-[16/10]",
 }: Props) {
   const valid = previews.filter(Boolean) as MediaInfo[];
+  // The shuffle pool starts as the server-shipped batch and grows with random
+  // batches fetched from across the whole collection. Append-only, so indices
+  // already shown stay stable.
+  const [pool, setPool] = useState<MediaInfo[]>(valid);
   const [idx, setIdx] = useState(() => seededIndex(href, valid.length));
   const [hover, setHover] = useState(false);
   const [pos, setPos] = useState({ x: 0, y: 0 });
@@ -47,14 +62,54 @@ export default function CollectionCard({
   const [measured, setMeasured] = useState<Record<number, number>>({});
   useEffect(() => setMounted(true), []);
 
-  const media = valid[idx] ?? null;
+  // Indices already shown this session — shuffle walks the pool without
+  // repeats until every piece has been seen, then starts over.
+  const seenRef = useRef<Set<number>>(new Set([seededIndex(href, valid.length)]));
+  const fetchingRef = useRef(false);
+  const exhaustedRef = useRef(false);
+
+  const media = pool[idx] ?? null;
+
+  // Top up the pool from a random slice of the full collection.
+  const topUp = () => {
+    if (!slugs?.length || fetchingRef.current || exhaustedRef.current) return;
+    fetchingRef.current = true;
+    fetch(`/api/museum/previews?slugs=${encodeURIComponent(slugs.join(","))}&count=24`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: { previews?: MediaInfo[]; total?: number } | null) => {
+        if (!data?.previews?.length) return;
+        setPool((prev) => {
+          const seen = new Set(prev.map((m) => m.url));
+          const fresh = data.previews!.filter((m) => m.url && !seen.has(m.url));
+          const next = [...prev, ...fresh];
+          if ((data.total && next.length >= data.total) || next.length >= POOL_CAP) {
+            exhaustedRef.current = true;
+          }
+          return next;
+        });
+      })
+      .catch(() => {})
+      .finally(() => {
+        fetchingRef.current = false;
+      });
+  };
 
   const shuffle = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    if (valid.length < 2) return;
-    let next = idx;
-    while (next === idx) next = Math.floor(Math.random() * valid.length);
+    topUp();
+    if (pool.length < 2) return;
+    const seen = seenRef.current;
+    if (seen.size >= pool.length) {
+      seen.clear();
+      seen.add(idx);
+    }
+    const unseen: number[] = [];
+    for (let i = 0; i < pool.length; i++) if (!seen.has(i)) unseen.push(i);
+    const next = unseen.length
+      ? unseen[Math.floor(Math.random() * unseen.length)]
+      : (idx + 1) % pool.length;
+    seen.add(next);
     setIdx(next);
   };
 
@@ -101,7 +156,7 @@ export default function CollectionCard({
         )}
       </div>
 
-      {valid.length > 1 && (
+      {(pool.length > 1 || (!!slugs?.length && pool.length > 0)) && (
         <button
           onClick={shuffle}
           className="absolute right-2 top-2 z-[3] flex h-8 w-8 items-center justify-center rounded-full opacity-0 transition-opacity duration-150 group-hover:opacity-100"
