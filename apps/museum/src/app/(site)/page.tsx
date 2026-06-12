@@ -104,7 +104,7 @@ export default async function HomePage() {
             className="mx-auto mt-6 max-w-xl text-base sm:text-lg"
             style={{ color: "var(--fg2)" }}
           >
-            Explore the collections, walk the exhibitions, and enter the Library —
+            Explore the collections, walk our ROOMs, and enter the Library —
             a living knowledge graph of crypto art, powered by the MOCA Cortex.
           </p>
           <div className="mt-10 flex flex-wrap items-center justify-center gap-3">

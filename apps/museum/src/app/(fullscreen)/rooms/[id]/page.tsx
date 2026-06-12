@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { listRooms, assetUrl, type Room } from "@/lib/museum/directus";
+import { getRoomOwner } from "@/lib/museum/room-owner";
 import { DEFAULT_OG_IMAGE } from "@/lib/seo";
 import RoomDetail, {
   type RoomDetailView,
@@ -67,6 +68,10 @@ export default async function RoomDetailPage({ params }: Props) {
   const { rooms, index } = ctx;
   const room = rooms[index];
 
+  // Onchain owner (ROOMs ERC-721, Ethereum mainnet) with verified ENS — cached
+  // hourly in the lib, fails soft to null so the page never blocks on the RPC.
+  const owner = room.token_id ? await getRoomOwner(room.token_id) : null;
+
   const view: RoomDetailView = {
     id: room.id,
     title: room.title || "Untitled room",
@@ -74,7 +79,11 @@ export default async function RoomDetailPage({ params }: Props) {
     description: room.description,
     series: room.series,
     slots: room.slots,
+    owner,
     modelUrl: room.model ? assetUrl(room.model) : undefined,
+    // Directus serves Content-Disposition: attachment with ?download — the
+    // visitor gets the original HQ GLB file.
+    downloadUrl: room.model ? `${assetUrl(room.model)}?download` : undefined,
     // Veil/fallback still — large WebP, a fraction of the multi-MB original.
     posterUrl: room.image
       ? assetUrl(room.image, { width: 1920, quality: 80, format: "webp" })

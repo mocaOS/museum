@@ -14,6 +14,7 @@
   "description": "Museum of Crypto Art — galleries, exhibitions, and the MOCA Library Cortex.",
   "dependencies": {
     "@directus/sdk": "^20.1.0",
+    "@noble/hashes": "^2.2.0",
     "@react-three/drei": "^10.7.7",
     "@react-three/fiber": "^9.6.1",
     "@tanstack/react-query": "^5.62.0",

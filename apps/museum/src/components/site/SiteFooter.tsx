@@ -29,7 +29,7 @@ const INTERNAL = [
 // External destinations (right) — open in a new tab.
 const EXTERNAL = [
   { href: "https://vibe.museumofcryptoart.com/", label: "Vibe Studio" },
-  { href: "https://opensea.io/MOCA-Genesis", label: "Our NFTs" },
+  { href: "https://opensea.io/MOCA-Genesis", label: "Genesis NFTs" },
   { href: "https://docs.museumofcryptoart.com", label: "Docs" },
   { href: "https://github.com/mocaOS", label: "GitHub" },
   { href: "https://museumofcrypto.substack.com/", label: "Newsletter" },

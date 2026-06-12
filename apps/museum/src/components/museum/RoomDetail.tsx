@@ -17,9 +17,15 @@ export interface RoomDetailView {
   series?: string | null;
   slots?: number | null;
   modelUrl?: string;
+  /** Direct-download URL for the HQ GLB (Directus `?download` variant). */
+  downloadUrl?: string;
+  /** Onchain owner (ROOMs ERC-721 on Ethereum), ENS-resolved when set. */
+  owner?: { address: string; ens: string | null } | null;
   /** Large still of the room — the loading veil and the no-model fallback. */
   posterUrl?: string;
 }
+
+const shortAddress = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
 
 export interface RoomNeighbor {
   id: number;
@@ -209,10 +215,52 @@ export default function RoomDetail({
               by {room.architect}
             </p>
           )}
-          {(room.modelUrl || (room.slots ?? 0) > 0) && (
+          {room.owner && (
+            <p className="mt-1 text-sm" style={{ color: "var(--fg2)" }}>
+              owned by{" "}
+              <a
+                href={`https://etherscan.io/address/${room.owner.address}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline-offset-2 hover:underline"
+                style={{
+                  color: "var(--fg1)",
+                  fontFamily: room.owner.ens ? undefined : "var(--font-mono)",
+                }}
+                title={room.owner.address}
+              >
+                {room.owner.ens ?? shortAddress(room.owner.address)}
+              </a>
+            </p>
+          )}
+          {(room.modelUrl || (room.slots ?? 0) > 0 || room.downloadUrl) && (
             <div className="mt-3 flex flex-wrap items-center gap-1.5">
               {room.modelUrl && <Chip>3D</Chip>}
               {(room.slots ?? 0) > 0 && <Chip>{room.slots} wall slots</Chip>}
+              {room.downloadUrl && (
+                <a
+                  href={room.downloadUrl}
+                  className="flex items-center gap-1 rounded-full px-2 py-0.5 font-mono text-[10px] uppercase tracking-wide transition-colors"
+                  style={{ background: "oklch(1 0 0 / 0.08)", color: "var(--fg1)" }}
+                  title="Download the room's GLB model"
+                >
+                  <svg
+                    className="h-3 w-3"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth={2}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden
+                  >
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                    <path d="m7 10 5 5 5-5" />
+                    <path d="M12 15V3" />
+                  </svg>
+                  Download GLB
+                </a>
+              )}
             </div>
           )}
           {room.description && (

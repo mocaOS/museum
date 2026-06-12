@@ -6,11 +6,12 @@ import { embedSrc, posterSrc, type VideoRef } from "@/lib/museum/video";
 // On-page player. Embeds YouTube/Vimeo in a 16:9 frame with a fallback link
 // below in case the embed is blocked (some videos disable embedding).
 //
-// Perceived load: we never hide the iframe behind our own spinner. The poster
-// frame paints instantly as the backdrop and the iframe sits on top fully
-// opaque, so the visitor sees the video still immediately and then YouTube's
-// own player fades in — instead of staring at a spinner until the (late)
-// onLoad event.
+// Perceived load: the iframe mounts the instant the modal opens, the poster
+// frame paints immediately as the backdrop, and a spinner labeled with the
+// platform name sits on top until the embed's onLoad fires — so the visitor
+// gets instant feedback and can see the remaining wait is the player loading,
+// not the site. A safety timeout reveals the iframe even if onLoad never
+// fires (some embeds withhold it).
 //
 // Esc-to-close keeps working even after the user clicks into the player: a
 // cross-origin iframe steals keyboard focus, so a window keydown listener alone
@@ -26,6 +27,13 @@ export default function VideoPlayerModal({
   const shellRef = useRef<HTMLDivElement>(null);
   const [ready, setReady] = useState(false);
   const poster = posterSrc(video);
+
+  // Never hide a slow-but-working player forever: if onLoad hasn't fired
+  // after a few seconds, reveal the iframe anyway.
+  useEffect(() => {
+    const t = window.setTimeout(() => setReady(true), 5000);
+    return () => window.clearTimeout(t);
+  }, []);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -84,12 +92,33 @@ export default function VideoPlayerModal({
               className="absolute inset-0 z-0 h-full w-full object-cover"
             />
           )}
+          {/* Immediate feedback while the embed loads — names the platform so
+              the wait reads as "YouTube is loading", not the museum hanging. */}
+          {!ready && (
+            <div
+              className="absolute inset-0 z-[5] flex flex-col items-center justify-center gap-3"
+              style={{ background: "oklch(0 0 0 / 0.45)" }}
+              aria-live="polite"
+            >
+              <div
+                className="h-9 w-9 animate-spin rounded-full border-2"
+                style={{ borderColor: "oklch(1 0 0 / 0.18)", borderTopColor: "var(--accent)" }}
+                aria-hidden
+              />
+              <span
+                className="text-[11px] uppercase tracking-[0.12em]"
+                style={{ color: "oklch(0.85 0 0)" }}
+              >
+                Loading {video.platform} player…
+              </span>
+            </div>
+          )}
           <iframe
             src={embedSrc(video)}
             title={video.title}
             onLoad={() => setReady(true)}
             className="absolute inset-0 z-10 h-full w-full transition-opacity duration-300"
-            style={{ opacity: poster && !ready ? 0 : 1 }}
+            style={{ opacity: ready ? 1 : 0 }}
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
             allowFullScreen
           />

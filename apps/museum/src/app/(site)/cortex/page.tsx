@@ -199,25 +199,34 @@ export default function CortexPage() {
 
         {/* Cortex × MOCA */}
         <section className="py-10">
-          <div className="mb-8 max-w-2xl">
-            <p
-              className="mb-3 text-[11px] uppercase tracking-[0.16em]"
-              style={{ color: "var(--fg3)" }}
+          <div className="mb-8 flex flex-wrap items-end justify-between gap-x-8 gap-y-5">
+            <div className="max-w-4xl">
+              <p
+                className="mb-3 text-[11px] uppercase tracking-[0.16em]"
+                style={{ color: "var(--fg3)" }}
+              >
+                Cortex at the museum
+              </p>
+              <h2
+                className="text-2xl font-semibold sm:text-3xl"
+                style={{ color: "var(--fg1)", letterSpacing: "-0.02em" }}
+              >
+                Proven on one of the world&apos;s largest digital art collections.
+              </h2>
+              <p className="mt-4 max-w-2xl text-base" style={{ color: "var(--fg2)" }}>
+                Cortex didn&apos;t start as a product. It grew out of the applied
+                research behind the MOCA Library — and the Library already runs on
+                the exact product that&apos;s about to be released. Every question
+                you ask it is answered by Cortex, in production, today.
+              </p>
+            </div>
+            <Link
+              href="/library"
+              className="ml-auto flex h-11 items-center rounded-[var(--radius)] px-6 text-sm font-medium transition-transform active:scale-[0.98]"
+              style={{ background: "var(--accent)", color: "var(--accent-fg)" }}
             >
-              Cortex at the museum
-            </p>
-            <h2
-              className="text-2xl font-semibold sm:text-3xl"
-              style={{ color: "var(--fg1)", letterSpacing: "-0.02em" }}
-            >
-              Proven on one of the world&apos;s largest digital art collections.
-            </h2>
-            <p className="mt-4 text-base" style={{ color: "var(--fg2)" }}>
-              Cortex didn&apos;t start as a product. It grew out of the applied
-              research behind the MOCA Library — and the Library already runs on
-              the exact product that&apos;s about to be released. Every question
-              you ask it is answered by Cortex, in production, today.
-            </p>
+              Enter the Library
+            </Link>
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <div
@@ -258,15 +267,6 @@ export default function CortexPage() {
                 </p>
               </div>
             ))}
-          </div>
-          <div className="mt-8 flex">
-            <Link
-              href="/library"
-              className="flex h-11 items-center rounded-[var(--radius)] px-6 text-sm font-medium transition-transform active:scale-[0.98]"
-              style={{ background: "var(--accent)", color: "var(--accent-fg)" }}
-            >
-              Enter the Library
-            </Link>
           </div>
         </section>
 

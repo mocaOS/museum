@@ -117,13 +117,13 @@ export default function ArtDecc0sPage() {
               Explore the Codex
             </a>
             <a
-              href="https://docs.decc0s.com"
+              href="https://vibe.museumofcryptoart.com"
               target="_blank"
               rel="noopener noreferrer"
               className="flex h-11 items-center rounded-[var(--radius)] border px-6 text-sm font-medium"
               style={{ borderColor: "var(--border)", color: "var(--fg1)" }}
             >
-              DeCC0s API docs
+              Enter the Vibe Studio
             </a>
           </div>
         </section>
@@ -169,6 +169,25 @@ export default function ArtDecc0sPage() {
                   </div>
                 ))}
               </div>
+              <p className="mt-6 text-sm leading-relaxed" style={{ color: "var(--fg2)" }}>
+                To generate a character, four individual input images — one drawn
+                from each strand — were blended into a single new face by a
+                ComfyUI pipeline tuned over months of experimentation, chasing
+                what the team called &ldquo;the perfect balance between aesthetic
+                coherence and complete batshit depravity.&rdquo; The blend runs
+                so deep that even DeCC0s sharing four identical DNA traits
+                emerged as aesthetically inimitable 1/1s.{" "}
+                <a
+                  href="https://museumofcrypto.substack.com/p/art-decc0s-the-process"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline underline-offset-4 transition-colors"
+                  style={{ color: "var(--fg1)" }}
+                >
+                  Read the full process
+                </a>
+                .
+              </p>
             </div>
             <div
               className="overflow-hidden rounded-[var(--radius-xl)] border"
