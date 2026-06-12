@@ -12,8 +12,13 @@ import BuilderSidebar, {
   type SidebarTab,
 } from "./BuilderSidebar";
 import ControlsHelp from "./ControlsHelp";
+import SpawnHyperfyDialog from "./SpawnHyperfyDialog";
 import { generateAutoSlots } from "./auto-slots";
-import { buildHyperfyExhibition, downloadHyperfyExhibition } from "./hyperfy-export";
+import {
+  type RoomNorm,
+  buildHyperfyExhibition,
+  downloadHyperfyExhibition,
+} from "./hyperfy-export";
 import { type RoomSlot, extractSlots, setPlaceholdersVisible } from "./slots";
 import {
   type Assignments,
@@ -21,6 +26,7 @@ import {
   type SlotOverrides,
   type WorldLayout,
   loadWorldLayout,
+  newExhibitionId,
   saveWorldLayout,
 } from "./world-storage";
 import type { NftView } from "@/lib/museum/media";
@@ -365,6 +371,7 @@ function PlacedRoom({
   onArtSelect,
   onOverrideChange,
   onSlotsReady,
+  onMeasure,
 }: {
   placed: Placed;
   selected: boolean;
@@ -380,6 +387,8 @@ function PlacedRoom({
   onArtSelect: (slot: RoomSlot) => void;
   onOverrideChange: (slotId: string, next: SlotOverride) => void;
   onSlotsReady: (uid: string, slots: SlotWorld[]) => void;
+  /** Lift the GLB's raw measurements (Hyperfy exports reproduce the layout from them). */
+  onMeasure: (uid: string, norm: RoomNorm) => void;
 }) {
   const { scene } = useGLTF(placed.room.modelUrl!, true, true);
   const { gl } = useThree();
@@ -398,14 +407,20 @@ function PlacedRoom({
     setPlaceholdersVisible(cloned, false);
   }, [ cloned ]);
 
-  const { scale, offset, center } = useMemo(() => {
+  const { scale, offset, center, footprint } = useMemo(() => {
     const box = new THREE.Box3().setFromObject(cloned);
     const size = new THREE.Vector3();
     const c = new THREE.Vector3();
     box.getSize(size);
     box.getCenter(c);
-    const s = TILE / (Math.max(size.x, size.z) || 1);
-    return { scale: s, offset: new THREE.Vector3(-c.x, -box.min.y, -c.z), center: c };
+    const fp = Math.max(size.x, size.z) || 1;
+    const s = TILE / fp;
+    return {
+      scale: s,
+      offset: new THREE.Vector3(-c.x, -box.min.y, -c.z),
+      center: c,
+      footprint: fp,
+    };
   }, [ cloned ]);
 
   // Per-slot orientation in room-local space (shared by marker + art). Auto
@@ -414,6 +429,24 @@ function PlacedRoom({
     () => slots.map(s => ({ slot: s, quat: s.auto ? s.quaternion.clone() : inwardOrientation(s, center) })),
     [ slots, center ],
   );
+
+  // Lift the raw GLB measurements + the baked slot map: Hyperfy spawns
+  // reproduce the tile normalization from footprint/groundOffset and anchor
+  // artworks on these slot transforms (un_MUSEUM Auto_NNN slots exist only
+  // here at runtime — never as nodes in the uploaded GLB).
+  useEffect(() => {
+    onMeasure(placed.uid, {
+      footprint,
+      groundOffset: [ offset.x, offset.y, offset.z ],
+      slots: oriented.map(({ slot, quat }) => ({
+        id: slot.id,
+        position: [ slot.position.x, slot.position.y, slot.position.z ],
+        quaternion: [ quat.x, quat.y, quat.z, quat.w ],
+        width: slot.width,
+        height: slot.height,
+      })),
+    });
+  }, [ placed.uid, footprint, offset, oriented, onMeasure ]);
 
   // Resolve every slot into world space for the sidebar navigator + camera fly.
   // World = outer(placement) ∘ inner(scale/offset) ∘ slotLocal.
@@ -577,6 +610,16 @@ export default function WorldBuilder({ rooms }: { rooms: WorldRoom[] }) {
   const draggingRef = useRef<string | null>(null);
   const camApi = useRef<CameraApi | null>(null);
   const counter = useRef(0);
+  // Stable identity for this exhibition — the Hyperfy spawners derive
+  // deterministic ids from it so re-spawning updates worlds in place.
+  const exhibitionIdRef = useRef(newExhibitionId());
+  // Raw GLB measurements per placement (footprint + ground offset), lifted
+  // from the loaded models — Hyperfy exports carry them so spawners can
+  // reproduce the builder's tile layout at world scale.
+  const roomNormsRef = useRef<Record<string, RoomNorm>>({});
+  const handleMeasure = useCallback((uid: string, norm: RoomNorm) => {
+    roomNormsRef.current[uid] = norm;
+  }, []);
 
   // --- Curate mode: hang artworks on a placed room's wall slots -------------
   // assignments: placement uid → (slotId → artwork). overrides: placement uid →
@@ -616,6 +659,7 @@ export default function WorldBuilder({ rooms }: { rooms: WorldRoom[] }) {
         if (Number.isFinite(n)) maxN = Math.max(maxN, n + 1);
       }
       counter.current = Math.max(counter.current, maxN);
+      exhibitionIdRef.current = layout.exhibitionId || newExhibitionId();
       setPlaced(restored);
       setAssignments(restoredAssign);
       setOverrides(restoredOv);
@@ -631,6 +675,7 @@ export default function WorldBuilder({ rooms }: { rooms: WorldRoom[] }) {
   const buildLayout = useCallback(
     (): WorldLayout => ({
       version: 2,
+      exhibitionId: exhibitionIdRef.current,
       placements: placed.map(p => ({
         uid: p.uid,
         roomId: p.room.id,
@@ -742,6 +787,7 @@ export default function WorldBuilder({ rooms }: { rooms: WorldRoom[] }) {
 
   const clearWorld = () => {
     if (!window.confirm("Clear the whole world? (Saved exhibits are kept.)")) return;
+    exhibitionIdRef.current = newExhibitionId(); // a cleared world is a new show
     setPlaced([]);
     setAssignments({});
     setOverrides({});
@@ -792,15 +838,19 @@ export default function WorldBuilder({ rooms }: { rooms: WorldRoom[] }) {
     });
   };
 
-  const exportHyperfy = () =>
-    downloadHyperfyExhibition(
-      buildHyperfyExhibition({
-        name: `MOCA exhibition ${new Date().toLocaleDateString()}`,
-        placed,
-        assignments,
-        overrides,
-      }),
-    );
+  const buildExhibition = () =>
+    buildHyperfyExhibition({
+      id: exhibitionIdRef.current,
+      name: `MOCA exhibition ${new Date().toLocaleDateString()}`,
+      placed,
+      assignments,
+      overrides,
+      norms: roomNormsRef.current,
+    });
+
+  const exportHyperfy = () => downloadHyperfyExhibition(buildExhibition());
+
+  const [ spawnOpen, setSpawnOpen ] = useState(false);
 
   const handleLoadExhibit = (layout: WorldLayout) => {
     if (
@@ -1034,6 +1084,7 @@ export default function WorldBuilder({ rooms }: { rooms: WorldRoom[] }) {
                     prev[uid] === slots ? prev : { ...prev, [uid]: slots },
                   )
                 }
+                onMeasure={handleMeasure}
               />
             </Suspense>
           ))}
@@ -1091,6 +1142,7 @@ export default function WorldBuilder({ rooms }: { rooms: WorldRoom[] }) {
         hasContent={placed.length > 0}
         onLoadLayout={handleLoadExhibit}
         onExport={exportHyperfy}
+        onSpawn={() => setSpawnOpen(true)}
       />
 
       {/* Mode banner (centered over the 3D viewport, not the full window) */}
@@ -1141,6 +1193,13 @@ export default function WorldBuilder({ rooms }: { rooms: WorldRoom[] }) {
         onResetView={() => camApi.current?.reset()}
         onZoomIn={() => camApi.current?.zoomBy(1 / 1.35)}
         onZoomOut={() => camApi.current?.zoomBy(1.35)}
+      />
+
+      {/* Spawn the exhibition into a self-hosted Hyperfy world */}
+      <SpawnHyperfyDialog
+        open={spawnOpen}
+        onClose={() => setSpawnOpen(false)}
+        buildExhibition={buildExhibition}
       />
     </div>
   );

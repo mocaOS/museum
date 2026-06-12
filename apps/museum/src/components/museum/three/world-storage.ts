@@ -39,17 +39,32 @@ export interface StoredPlacement {
 
 export interface WorldLayout {
   version: 2;
+  /**
+   * Stable identity for this exhibition, carried into Hyperfy exports/spawns
+   * so re-spawning updates the same in-world rooms instead of duplicating
+   * them. Travels with saved exhibits; generated lazily for older payloads.
+   */
+  exhibitionId?: string;
   placements: StoredPlacement[];
+}
+
+export function newExhibitionId(): string {
+  return typeof crypto !== "undefined" && "randomUUID" in crypto
+    ? crypto.randomUUID()
+    : `ex-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
 /** Accepts v1 (no overrides) and v2 payloads; normalizes to v2. */
 function normalizeLayout(parsed: unknown): WorldLayout | null {
-  const p = parsed as { version?: number; placements?: StoredPlacement[] } | null;
+  const p = parsed as
+    | { version?: number; exhibitionId?: string; placements?: StoredPlacement[] }
+    | null;
   if (!p || (p.version !== 1 && p.version !== 2) || !Array.isArray(p.placements)) {
     return null;
   }
   return {
     version: 2,
+    exhibitionId: p.exhibitionId,
     placements: p.placements.map((pl) => ({
       ...pl,
       assignments: pl.assignments || {},

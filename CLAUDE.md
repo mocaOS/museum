@@ -109,12 +109,24 @@ cortexskills.org-style), plus the floating Library chat widget
 
 ### apps/hyperfy — exhibitions as walkable worlds
 
-Tooling that spawns world-builder exhibitions (exported `*.moca-exhibition.json`,
-device-local until the curator acts) into self-hosted [Hyperfy](https://github.com/hyperfy-xyz/hyperfy)
-worlds: `spawn-exhibition.mjs` (drives Hyperfy's node client; rooms + artworks via
-the shared `Slot_NNN` convention), `docker-compose.worlds.yml` (multi-world
-hosting template), `harvest-hyperfy-docs.mjs` (ingests Hyperfy docs into the
-Library so agents can help build worlds). See `apps/hyperfy/README.md`.
+Tooling that spawns world-builder exhibitions into self-hosted
+[Hyperfy](https://github.com/hyperfy-xyz/hyperfy) v2 worlds — world URL +
+admin key is all it takes. `spawn-exhibition.mjs` (CLI; no engine checkout —
+`lib/protocol.mjs` speaks Hyperfy's msgpackr wire protocol, pinned to
+v0.16.0) consumes the exported `*.moca-exhibition.json`; the builder's
+**Spawn to Hyperfy** dialog does the same browser-side via the twins in
+`apps/museum/src/lib/museum/hyperfy/` (keep the protocol/room-script twins in
+sync). Each room = one Hyperfy app — artworks hang on baked slot anchors
+from the export (works for un_MUSEUM `Auto_NNN` slots that never exist as
+GLB nodes), curated images upload into the world as assets, `app.configure`
+exposes room-level refinement props, and an embedded in-world slot editor
+(hold E at a work) lets builders fine-place pieces with rank-checked,
+world-storage-persisted adjustments. Spawns are idempotent (deterministic
+ids from the exhibition id → re-spawning updates rooms in place, preserving
+ALL in-world refinements) and end with a verification pass. `world-template/` is the deployable single-world "MOCA world template"
+(official engine image); `docker-compose.worlds.yml` hosts many;
+`harvest-hyperfy-docs.mjs` ingests Hyperfy docs into the Library so agents
+can help build worlds. See `apps/hyperfy/README.md`.
 
 ### Directus backend (`apps/api`)
 

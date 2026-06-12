@@ -1,0 +1,46 @@
+# Museum of Crypto Art — Hyperfy world template.
+#
+# One self-hosted Hyperfy v2 world, ready to receive exhibitions from the
+# museum's world builder (museumofcryptoart.com/rooms/world). Deploy it,
+# share `https://your-world.example.com` + the ADMIN_CODE with a curator,
+# and they can spawn their curation straight from the builder's
+# "Spawn to Hyperfy" dialog (or the spawn-exhibition.mjs CLI).
+#
+# Quick start:
+#   cp .env.example .env       # set ADMIN_CODE + JWT_SECRET + public URLs
+#   mkdir -p world && chown -R 1001 world   # the image runs as uid 1001
+#   docker compose up -d
+#
+# Behind Coolify/Traefik: point the domain at port 3400 (TLS terminates at
+# the proxy; WebSockets are forwarded automatically by Traefik).
+#
+# The image is the official engine build. Pinned to v0.16.0 — the protocol
+# version the MOCA spawner is tested against. Everything that makes this
+# world yours (database, uploaded rooms and artworks, settings) lives in
+# ./world, so backups are a folder copy and upgrades are an image bump.
+
+services:
+  moca-world:
+    image: ghcr.io/hyperfy-xyz/hyperfy:v0.16.0
+    restart: unless-stopped
+    ports:
+      - "${HOST_PORT:-3400}:3000"
+    environment:
+      WORLD: world
+      PORT: 3000
+      # The world's "API key": curators spawn exhibitions with it, and typing
+      # `/admin <code>` in the world chat grants build rights in the browser.
+      ADMIN_CODE: ${ADMIN_CODE:?set ADMIN_CODE in .env — a blank code makes every visitor an admin}
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
+      SAVE_INTERVAL: ${SAVE_INTERVAL:-30}
+      PUBLIC_PLAYER_COLLISION: ${PUBLIC_PLAYER_COLLISION:-false}
+      # MOCA room models run 5–40 MB — leave headroom above the engine's 12 default.
+      PUBLIC_MAX_UPLOAD_SIZE: ${PUBLIC_MAX_UPLOAD_SIZE:-64}
+      PUBLIC_WS_URL: ${PUBLIC_WS_URL:?e.g. wss://your-world.example.com/ws}
+      PUBLIC_API_URL: ${PUBLIC_API_URL:?e.g. https://your-world.example.com/api}
+      ASSETS: local
+      ASSETS_BASE_URL: ${ASSETS_BASE_URL:?e.g. https://your-world.example.com/assets}
+      DB_URI: local
+      CLEAN: ${CLEAN:-true}
+    volumes:
+      - ./world:/app/world

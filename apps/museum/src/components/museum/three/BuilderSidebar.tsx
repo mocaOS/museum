@@ -133,6 +133,13 @@ function IconSearch({ size }: { size?: number }) {
     <path d="M21 21l-4.3-4.3" />
   </Icon>;
 }
+function IconGlobe({ size }: { size?: number }) {
+  return <Icon size={size}>
+    <circle cx="12" cy="12" r="9" />
+    <path d="M3 12h18" />
+    <path d="M12 3a15 15 0 0 1 0 18 15 15 0 0 1 0-18" />
+  </Icon>;
+}
 
 /* --- shared small controls -------------------------------------------------- */
 
@@ -305,6 +312,7 @@ export default function BuilderSidebar({
   hasContent,
   onLoadLayout,
   onExport,
+  onSpawn,
 }: {
   tab: SidebarTab;
   onTabChange: (tab: SidebarTab) => void;
@@ -343,6 +351,7 @@ export default function BuilderSidebar({
   hasContent: boolean;
   onLoadLayout: (layout: WorldLayout) => void;
   onExport: () => void;
+  onSpawn: () => void;
 }) {
   const TABS: { id: SidebarTab; label: string; icon: ReactNode }[] = [
     { id: "build", label: "Build", icon: <IconGrid /> },
@@ -744,7 +753,22 @@ export default function BuilderSidebar({
         style={{ display: tab === "exhibits" ? "flex" : "none" }}
       >
         <ExhibitsPanel getLayout={getLayout} hasContent={hasContent} onLoad={onLoadLayout} />
-        <div className="border-t p-3" style={{ borderColor: "var(--border)" }}>
+        <div className="flex flex-col gap-2 border-t p-3" style={{ borderColor: "var(--border)" }}>
+          <button
+            onClick={onSpawn}
+            disabled={!hasContent}
+            className={`
+              flex h-9 w-full items-center justify-center gap-2
+              rounded-[var(--radius)] text-sm transition-transform
+              active:scale-[0.98]
+              disabled:opacity-30
+            `}
+            style={{ background: "var(--accent)", color: "var(--accent-fg)" }}
+            title="Spawn this exhibition into a self-hosted Hyperfy world — world URL + admin key is all it takes"
+          >
+            <IconGlobe size={15} />
+            Spawn to Hyperfy
+          </button>
           <button
             onClick={onExport}
             disabled={!hasContent}
@@ -755,10 +779,10 @@ export default function BuilderSidebar({
               disabled:opacity-30
             `}
             style={{ background: "var(--muted)", color: "var(--fg1)" }}
-            title="Download this world as a Hyperfy exhibition file"
+            title="Download this exhibition as a portable file (spawn it later with the CLI)"
           >
             <IconDownload size={15} />
-            Export for Hyperfy
+            Export file
           </button>
         </div>
       </div>

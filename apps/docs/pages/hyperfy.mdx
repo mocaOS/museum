@@ -7,66 +7,115 @@ import { Callout } from "zudoku/ui/Callout";
 import { Stepper } from "zudoku/ui/Stepper";
 
 Anyone can curate a museum at
-[museumofcryptoart.com/exhibitions/world](https://museumofcryptoart.com/exhibitions/world)
+[museumofcryptoart.com/rooms/world](https://museumofcryptoart.com/rooms/world)
 — place 3D rooms, hang artworks, resize and arrange them. With the
 [Hyperfy](https://github.com/hyperfy-xyz/hyperfy) integration, that curation
-becomes a **walkable, multiplayer world** people can actually visit.
+becomes a **walkable, multiplayer world**: provide a world URL and its admin
+key, and the whole exhibition spawns into the Hyperfy v2 world of your choice.
 
 <Callout type="note" title="The privacy contract" icon>
-  Curation data never leaves the curator's device. The world builder stores
-  everything in browser localStorage; "Export" writes a
-  `*.moca-exhibition.json` file to disk. A Hyperfy world only ever sees an
-  exhibition when the curator explicitly runs the spawner against it — that
-  is the upload moment, and it's theirs.
+  Curation data never leaves the curator's device on its own. The world
+  builder stores everything in browser localStorage; spawning — from the
+  builder's dialog or the CLI — is the explicit upload moment, and the
+  exhibition travels directly from the curator to the world they chose,
+  never through museum servers.
 </Callout>
 
 ## From curation to world
 
 <Stepper>
 
-1. **Curate & export**
+1. **Curate**
 
-   Build the exhibition in the world builder, then hit **Export**. The file
-   carries room GLB references, placements, and every hung artwork with
-   CORS-enabled texture URLs, true ratios, video URLs, and your move/resize
-   adjustments.
+   Build the exhibition in the world builder: place rooms, hang artworks,
+   adjust each piece. Everything autosaves locally.
 
-1. **Prepare Hyperfy (once)**
+1. **Get a world**
 
-   ```bash
-   git clone https://github.com/hyperfy-xyz/hyperfy && cd hyperfy
-   npm install && npm run node-client:build
-   ```
+   Any self-hosted Hyperfy v2 world works. Deploying your own takes one
+   docker-compose file — the **MOCA world template** in
+   `apps/hyperfy/world-template/` pins the engine version, sets sane
+   defaults, and documents the whole operate/backup story. You need two
+   values: the **world URL** and the **admin key** (the world's
+   `ADMIN_CODE`).
 
 1. **Spawn**
 
+   In the builder's **Exhibits** tab hit **Spawn to Hyperfy**, paste URL +
+   key, spawn. Or use the exported file with the CLI:
+
    ```bash
+   cd apps/hyperfy && npm install
    node spawn-exhibition.mjs my-show.moca-exhibition.json \
-     --hyperfy ../hyperfy \
-     --url https://your-world.example.com \
-     --admin-code YOUR_CODE
+     --url https://your-world.example.com --key YOUR_ADMIN_CODE
    ```
 
-   Every room uploads as a Hyperfy app; a generated script finds the same
-   `Slot_NNN` placeholder nodes the museum uses and hangs the art — images
-   as unlit planes at true aspect ratio, motion works as live spatial video.
+   No engine checkout needed — the spawner speaks Hyperfy's wire protocol
+   directly. Every spawn ends with a verification pass confirming the world
+   really received every room.
 
-1. **Walk in**
+1. **Walk in & refine**
 
-   Open the world in a browser. It's multiplayer — bring people.
+   Open the world in a browser — it's multiplayer, bring people. Admins
+   refine in-engine (see below); curators push updates by spawning again.
 
 </Stepper>
 
-The spawner and templates live in the museum monorepo under `apps/hyperfy`.
+## Modular by design
 
-## Hosting many worlds
+Every placed room arrives as **its own Hyperfy app**: the room GLB plus a
+generated script that hangs the curated works onto the model's `Slot_NNN`
+nodes — images as planes at true aspect ratio, motion works as live spatial
+video, optional title/artist placards. Artworks are **child nodes of their
+room**, so a room can be grabbed, rotated, even duplicated in-engine and its
+curation stays attached, always.
 
-Each Hyperfy world is one lightweight server with its own database, assets,
-and admin code — perfect isolation per exhibition or curator.
-`apps/hyperfy/docker-compose.worlds.yml` is the template: copy a service
-block per world, point subdomains at the ports, hand each curator their
-code. The museum hosts worlds for curated shows; self-hosters need nothing
-but Docker.
+The builder's layout translates faithfully: it arranges rooms on uniform
+tiles (every model normalized to fit one), and the spawner reproduces that —
+each room is scaled so a tile spans a configurable number of meters
+(**Room size**, default 16 m; `--tile-size` on the CLI), positions convert
+with it, and artworks stay at their metric size inside the scaled rooms.
+
+Spawning is **idempotent**: blueprint and entity ids derive from the
+exhibition's stable id, so re-spawning updates the same rooms in place.
+Curation changes flow in from the museum; the arrangement and tuning done
+inside the engine survive. (`--relayout` reapplies the museum room layout;
+`--fresh` spawns an independent copy.)
+
+## Refining in-engine
+
+Anyone holding the admin key types `/admin <code>` in the world chat, then:
+
+- **Tab** toggles build mode.
+- **Right-click a room** opens its inspector. The **App pane** holds the
+  curation controls every room ships with: artwork size, wall gap, placards,
+  art lighting (unlit true-color vs world-lit), video volume. Changes apply
+  live for everyone.
+- **P** unpins a room (rooms spawn pinned so visitors can't drag them); then
+  grab to move, **1–4** for translate/rotate/scale modes, **R** duplicates,
+  **X** deletes.
+- **Per-slot editing, in place:** flip the room's **Slot editing** toggle,
+  then hold **E** at any hung work — arrow keys nudge it along the wall
+  (Shift = faster), the scroll wheel resizes, R resets, Enter finishes.
+  Changes sync live to everyone in the world, are permission-checked
+  server-side, and persist in the world itself — they survive server
+  restarts and even curation re-spawns from the museum.
+- Right-click → **Download** exports any room as a portable `.hyp` file.
+
+Both refinement layers and the museum builder compose: museum data defines
+the curation, the inspector tunes the room's mood, and slot editing
+fine-places individual works — pushing a curation update from the museum
+never wipes what was refined in-world.
+
+## Host worlds
+
+Each Hyperfy world is one lightweight container with its own database,
+assets, and admin key — perfect isolation per exhibition or curator.
+
+- Single world: `apps/hyperfy/world-template/` (deploy guide included).
+- Many worlds: `apps/hyperfy/docker-compose.worlds.yml` — copy a service
+  block per world, point subdomains at the ports, hand each curator their
+  key. Self-hosters need nothing but Docker.
 
 ## The slot convention (build your own renderer)
 

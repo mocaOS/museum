@@ -86,7 +86,8 @@ no accounts. Code lives in `src/components/museum/three/`:
   (collapsible to an icon rail): **Build** (searchable room library + selected-room
   actions + clear), **Curate** (per-room fill progress, slot chips, active-slot
   scale/reset/remove, embedded artwork browser, auto-fill), **Exhibits** (saved
-  exhibits + Hyperfy export). Slot clicks in 3D auto-reveal the Curate tab.
+  exhibits + **Spawn to Hyperfy** primary CTA + file export). Slot clicks in 3D
+  auto-reveal the Curate tab.
 - **`ControlsHelp.tsx`** — bottom-right nav cluster (zoom in/out, reset view, help
   icon) plus the grouped controls reference that slides in on the right (H toggles).
 - **`ArtworkPlane.tsx`** — one hung work: textured plane + matte frame, sized to the
@@ -98,6 +99,31 @@ no accounts. Code lives in `src/components/museum/three/`:
   `/api/museum/collections`), scoped by collection, click to hang.
 - **`ExhibitsPanel.tsx`** — save/load/update/delete named exhibits (embedded in the
   sidebar's Exhibits tab).
+- **`SpawnHyperfyDialog.tsx`** — spawns the current exhibition into any
+  self-hosted Hyperfy v2 world straight from the browser (world URL + admin
+  key, persisted in `moca-hyperfy-target-v1`; per-room progress + post-spawn
+  verification). The protocol/orchestration lives in
+  `src/lib/museum/hyperfy/` — `protocol.ts` (minimal msgpackr wire client,
+  pinned to Hyperfy v0.16.0), `room-script.ts` (generated per-room app script:
+  `app.configure` refinement props + the embedded in-world slot editor),
+  `spawn.ts` (idempotent spawn: deterministic ids from the layout's
+  `exhibitionId`, blueprint version bumps on re-spawn, in-world arrangement
+  preserved; uploads curated images into the world as content-addressed
+  assets). **Layout translation:** the builder normalizes rooms onto 8-unit
+  tiles, so exports carry per-room GLB measurements + the baked slot map
+  (`footprint`/`groundOffset`/`slots`, lifted from `PlacedRoom` via
+  `onMeasure`) and the spawners reproduce the layout by scaling each room to
+  `tileMeters` (dialog "Room size", default 16 m) — artworks hang on baked
+  anchors (required for un_MUSEUM `Auto_NNN` slots, which never exist as GLB
+  nodes) and letterbox into their slot frames like the builder; generated
+  scripts divide meter sizes by `rootScale`; legacy scale-1 entities are
+  healed on re-spawn. **In-world slot editor:** with the room's "Slot
+  editing" prop on, builders hold E at a work and nudge/resize it; the
+  server validates rank, persists to world `storage.json` keyed by the
+  deterministic entity id (survives restarts, rebuilds, re-spawns) and
+  rebroadcasts (`moca:adjust` / `moca:adjust:init` app events).
+  `protocol.ts`/`room-script.ts` are **twins of `apps/hyperfy/lib/*.mjs`**
+  (the CLI spawner) — keep them in sync.
 - **`slots.ts`** — slot extraction from room GLBs. Authoring convention: room
   models carry `Slot_001…Slot_NNN` placeholder quads (material "Slot Placeholder");
   their transforms/bboxes define hang position, orientation, and frame size.
@@ -118,7 +144,8 @@ no accounts. Code lives in `src/components/museum/three/`:
   the GLB it uploads).
 - **`world-storage.ts`** — localStorage persistence. Working layout under
   `moca-world-layout-v1` (payload is **v2**: placements + assignments + slot
-  overrides; v1 payloads migrate on load). Named exhibits under
+  overrides + `exhibitionId`, the stable identity Hyperfy spawns key their
+  deterministic ids on; v1 payloads migrate on load). Named exhibits under
   `moca-world-exhibits-v1`. Same localStorage-only convention as chat history.
 - **`RoomStage.tsx` / `RoomDetail.tsx`** — the ultra-HQ single-room viewer behind
   `/rooms/[id]` (replaced the old `Room3DViewer` lightbox): auto-framing
