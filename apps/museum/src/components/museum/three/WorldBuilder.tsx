@@ -12,6 +12,7 @@ import BuilderSidebar, {
   type SidebarTab,
 } from "./BuilderSidebar";
 import ControlsHelp from "./ControlsHelp";
+import GuideDialog from "./GuideDialog";
 import SpawnHyperfyDialog from "./SpawnHyperfyDialog";
 import { generateAutoSlots } from "./auto-slots";
 import {
@@ -851,6 +852,7 @@ export default function WorldBuilder({ rooms }: { rooms: WorldRoom[] }) {
   const exportHyperfy = () => downloadHyperfyExhibition(buildExhibition());
 
   const [ spawnOpen, setSpawnOpen ] = useState(false);
+  const [ guideOpen, setGuideOpen ] = useState(false);
 
   const handleLoadExhibit = (layout: WorldLayout) => {
     if (
@@ -1143,6 +1145,7 @@ export default function WorldBuilder({ rooms }: { rooms: WorldRoom[] }) {
         onLoadLayout={handleLoadExhibit}
         onExport={exportHyperfy}
         onSpawn={() => setSpawnOpen(true)}
+        onGuide={() => setGuideOpen(true)}
       />
 
       {/* Mode banner (centered over the 3D viewport, not the full window) */}
@@ -1199,6 +1202,13 @@ export default function WorldBuilder({ rooms }: { rooms: WorldRoom[] }) {
       <SpawnHyperfyDialog
         open={spawnOpen}
         onClose={() => setSpawnOpen(false)}
+        buildExhibition={buildExhibition}
+      />
+
+      {/* Send the AI museum guide into the exhibition (persona picker) */}
+      <GuideDialog
+        open={guideOpen}
+        onClose={() => setGuideOpen(false)}
         buildExhibition={buildExhibition}
       />
     </div>

@@ -123,7 +123,18 @@ exposes room-level refinement props, and an embedded in-world slot editor
 (hold E at a work) lets builders fine-place pieces with rank-checked,
 world-storage-persisted adjustments. Spawns are idempotent (deterministic
 ids from the exhibition id → re-spawning updates rooms in place, preserving
-ALL in-world refinements) and end with a verification pass. `world-template/` is the deployable single-world "MOCA world template"
+ALL in-world refinements) and end with a verification pass. **The museum
+guide** (`--guide` / the dialog's Museum guide toggle): an agentic VRM avatar
+(default `omnimorph-3321.vrm`, catalog at `apps/museum/public/avatars/`) that
+visitors hold E to talk to — per-player private Q&A about the exhibition,
+served by the MOCA API's public `/v1/guide/*` endpoints (context registered at
+spawn, enriched from Directus, answered via Cortex + optional Art DeCC0
+persona); script generator twins in `lib/guide-script.mjs` /
+`apps/museum/src/lib/museum/hyperfy/guide-script.ts`. The guide also ships
+as a drag-droppable `.hyp` app (`build-guide-app.mjs` CLI or the dialog's
+"Download guide app" button; `.hyp` builder twins `lib/hyp.mjs` /
+`apps/museum/src/lib/museum/hyperfy/hyp.ts`) — no world URL/key needed,
+retargetable in-world via inspector props. `world-template/` is the deployable single-world "MOCA world template"
 (official engine image); `docker-compose.worlds.yml` hosts many;
 `harvest-hyperfy-docs.mjs` ingests Hyperfy docs into the Library so agents
 can help build worlds. See `apps/hyperfy/README.md`.

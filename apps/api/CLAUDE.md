@@ -84,9 +84,17 @@ source of truth.
   **Souls** (`GET /v1/souls/:chainId/:contractAddress[/:tokenId]` — Soulweaver's
   EIP-191-signed SOUL identity files for web3/agent integrators,
   `src/v1/souls.ts`; ERC-8004/8183/8257 patterns documented in apps/docs
-  `pages/web3.mdx`), and **ephemeral presence** (`GET /v1/presence/stream`
+  `pages/web3.mdx`), **ephemeral presence** (`GET /v1/presence/stream`
   SSE + `POST /v1/presence/ping` — public, in-memory broadcast for the docs
-  chat widget, NOTHING persisted by design — `src/v1/presence.ts`).
+  chat widget, NOTHING persisted by design — `src/v1/presence.ts`), and the
+  **museum guide** (`src/v1/guide.ts` — public like presence, IP-rate-limited:
+  `POST /v1/guide/exhibitions` registers a spawned exhibition and enriches it
+  from `rooms`/`nfts` into a context document persisted in the
+  `guide_exhibitions` collection (in-memory fallback pre-`directus-sync push`);
+  `GET /v1/guide/exhibitions/:id[/suggestions]` serve it; `POST /v1/guide/ask`
+  answers in-world visitor questions by combining that context with Cortex and
+  an optional Art DeCC0 `moltbot` persona; Cortex-generated question starters
+  fill in asynchronously after registration).
 - **Auth** (`src/v1/auth.ts`): keys in the **`moca_api_keys`** collection
   (admin-managed; generate with `echo "moca_$(openssl rand -hex 24)"`), sent
   as `X-API-Key` or `Authorization: Bearer`. In-memory key cache (60 s) +

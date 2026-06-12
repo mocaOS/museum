@@ -122,8 +122,28 @@ no accounts. Code lives in `src/components/museum/three/`:
   server validates rank, persists to world `storage.json` keyed by the
   deterministic entity id (survives restarts, rebuilds, re-spawns) and
   rebroadcasts (`moca:adjust` / `moca:adjust:init` app events).
-  `protocol.ts`/`room-script.ts` are **twins of `apps/hyperfy/lib/*.mjs`**
-  (the CLI spawner) — keep them in sync.
+  **Museum guide:** the dialog's guide toggle (default on) spawns an agentic
+  VRM avatar with the exhibition — `spawn.ts` registers the exhibition
+  context with the MOCA API (`POST /v1/guide/exhibitions`, the explicit
+  opt-in moment where curation data reaches MOCA servers), uploads the
+  chosen `.vrm` (catalog `public/avatars/avatars.json`, default
+  `omnimorph-3321.vrm`), and spawns the generated `guide-script.ts` app:
+  hold-E conversation panel, clickable suggested questions, free text via
+  world chat, per-player private answers fetched server-side from
+  `POST /v1/guide/ask` (exhibition context + Cortex + optional Art DeCC0
+  persona via the dialog's "DeCC0 persona" token id, default 4209 =
+  Tsahafi). The dialog's **Download guide app (.hyp)** button
+  (`guide-hyp.ts` + `hyp.ts`) bundles the same guide as a drag-droppable
+  Hyperfy app file — registers the context, then builds
+  VRM+script into the engine's `.hyp` format; no world URL/key needed.
+  **`GuideDialog.tsx`** (sidebar Exhibits tab → "Museum guide") is the
+  dedicated agent launcher: persona picker (searchable Art DeCC0s live from
+  api.decc0s.com, Soulweaver soul by chainId/contract/tokenId resolved
+  server-side, or an uploaded SOUL.md baked into the app), avatar select,
+  then `spawnGuide()` (guide-only idempotent spawn into the same world the
+  rooms went to, with verification) or `.hyp` download.
+  `protocol.ts`/`room-script.ts`/`guide-script.ts`/`hyp.ts` are **twins of
+  `apps/hyperfy/lib/*.mjs`** (the CLI spawner) — keep them in sync.
 - **`slots.ts`** — slot extraction from room GLBs. Authoring convention: room
   models carry `Slot_001…Slot_NNN` placeholder quads (material "Slot Placeholder");
   their transforms/bboxes define hang position, orientation, and frame size.

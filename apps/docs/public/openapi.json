@@ -59,6 +59,10 @@
     {
       "name": "Presence",
       "description": "Ephemeral presence for the Library \u2014 public, nothing persisted server-side"
+    },
+    {
+      "name": "Guide",
+      "description": "The agentic museum guide: exhibition context (rooms, architects, artists, works), visitor question suggestions, and in-persona Q&A. Public \u2014 these endpoints power anonymous in-world visitors in Hyperfy and require no API key."
     }
   ],
   "paths": {
@@ -1243,6 +1247,407 @@
           }
         }
       }
+    },
+    "/v1/guide/exhibitions": {
+      "post": {
+        "tags": [
+          "Guide"
+        ],
+        "operationId": "guideRegisterExhibition",
+        "summary": "Register an exhibition for the guide",
+        "security": [],
+        "description": "Register (or refresh) a world-builder exhibition so the museum guide can answer questions about it. Accepts a trimmed `moca-exhibition@1` document \u2014 only `id`, `name`, and per-placement room/artwork identity are read; the API enriches architects, descriptions, and artist data from the museum\u2019s own collections. Idempotent per exhibition id. Spawners call this automatically when a curator spawns with a guide \u2014 that spawn is the curator\u2019s explicit opt-in to publish the context. Rate-limited per IP. Cortex-generated question starters are added asynchronously after registration.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "format",
+                  "id",
+                  "name",
+                  "placements"
+                ],
+                "properties": {
+                  "format": {
+                    "type": "string",
+                    "const": "moca-exhibition@1"
+                  },
+                  "id": {
+                    "type": "string",
+                    "maxLength": 64,
+                    "pattern": "^[\\w.:-]+$"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "generator": {
+                    "type": "string"
+                  },
+                  "placements": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "uid": {
+                          "type": "string"
+                        },
+                        "room": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "integer"
+                            },
+                            "title": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "artworks": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "integer"
+                              },
+                              "name": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "artist": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "example": {
+                "format": "moca-exhibition@1",
+                "id": "echoes-of-the-mind",
+                "name": "Echoes of the Mind",
+                "placements": [
+                  {
+                    "uid": "p0",
+                    "room": {
+                      "id": 12,
+                      "title": "Genesis Hall"
+                    },
+                    "artworks": [
+                      {
+                        "id": 3402,
+                        "name": "Untitled Mind",
+                        "artist": "Anon Artist"
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Registered",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "counts": {
+                          "type": "object",
+                          "properties": {
+                            "rooms": {
+                              "type": "integer"
+                            },
+                            "artworks": {
+                              "type": "integer"
+                            },
+                            "artists": {
+                              "type": "integer"
+                            }
+                          }
+                        },
+                        "architects": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "artists": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "suggestions": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      }
+    },
+    "/v1/guide/exhibitions/{id}": {
+      "get": {
+        "tags": [
+          "Guide"
+        ],
+        "operationId": "guideGetExhibition",
+        "summary": "The exhibition context document",
+        "security": [],
+        "description": "The enriched context the guide reasons over: every room with its architect and description, every artwork with its artist \u2014 plus distinct artist/architect lists and Cortex question starters.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "The exhibition id from the world builder."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The context document",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/GuideContext"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/v1/guide/exhibitions/{id}/suggestions": {
+      "get": {
+        "tags": [
+          "Guide"
+        ],
+        "operationId": "guideSuggestions",
+        "summary": "Visitor question suggestions",
+        "security": [],
+        "description": "Question starters for a visitor \u2014 Cortex-generated starters plus questions templated from the exhibition\u2019s actual works, artists, rooms, and architects. Deterministic per `seed`; vary it to rotate the pool.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "seed",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "Rotation seed (default: derived from the exhibition id)."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Suggestions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "exhibition": {
+                          "type": "string"
+                        },
+                        "suggestions": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/v1/guide/ask": {
+      "post": {
+        "tags": [
+          "Guide"
+        ],
+        "operationId": "guideAsk",
+        "summary": "Ask the museum guide",
+        "security": [],
+        "description": "Answer a visitor\u2019s question about a registered exhibition. Combines the exhibition context with the museum\u2019s Cortex Library (RAG with citations) and answers in persona \u2014 Omnimorph by default, or any Art DeCC0 via `decc0`, a Soulweaver soul via `soulRef`, or a curator-supplied SOUL.md via `soul` (first match wins: soul > soulRef > decc0). Pass the running conversation in `history` so the guide reacts to the dialogue, not just the last question. Falls back to a context-only answer (`fallback: true`) when the Library is unreachable. Rate-limited per IP (~20/min).",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "exhibition",
+                  "question"
+                ],
+                "properties": {
+                  "exhibition": {
+                    "type": "string",
+                    "description": "The registered exhibition id."
+                  },
+                  "question": {
+                    "type": "string",
+                    "maxLength": 2000
+                  },
+                  "history": {
+                    "type": "array",
+                    "description": "Conversation so far (last ~8 turns are used).",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "role": {
+                          "type": "string",
+                          "enum": [
+                            "user",
+                            "assistant"
+                          ]
+                        },
+                        "content": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  },
+                  "decc0": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 10000,
+                    "description": "Art DeCC0 token id whose persona the guide adopts. Omit for the default guide."
+                  },
+                  "visitor": {
+                    "type": "string",
+                    "maxLength": 48,
+                    "description": "Visitor display name. Optional."
+                  },
+                  "soul": {
+                    "type": "string",
+                    "maxLength": 4000,
+                    "description": "A complete SOUL.md the guide embodies (beats soulRef/decc0)."
+                  },
+                  "soulName": {
+                    "type": "string",
+                    "maxLength": 60,
+                    "description": "Display name for the custom soul."
+                  },
+                  "soulRef": {
+                    "type": "object",
+                    "description": "A Soulweaver soul coordinate \u2014 the EIP-191-signed SOUL file is resolved server-side (beats decc0).",
+                    "properties": {
+                      "chainId": {
+                        "type": "integer"
+                      },
+                      "address": {
+                        "type": "string",
+                        "pattern": "^0x[0-9a-fA-F]{40}$"
+                      },
+                      "tokenId": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              },
+              "example": {
+                "exhibition": "echoes-of-the-mind",
+                "question": "Who designed this room, and what should I look at first?",
+                "decc0": 1
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The guide\u2019s answer",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/GuideAnswer"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "502": {
+            "$ref": "#/components/responses/Upstream"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1951,6 +2356,185 @@
                 "type": "string"
               }
             }
+          }
+        }
+      },
+      "GuideContextArtwork": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Museum artwork id (nfts.id), when known."
+          },
+          "title": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "artist": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Artwork description from museum data, clamped."
+          },
+          "collection": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "GuideContextRoom": {
+        "type": "object",
+        "properties": {
+          "uid": {
+            "type": "string",
+            "description": "Placement uid from the exhibition export."
+          },
+          "id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Museum room id."
+          },
+          "title": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "architect": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The room\u2019s architect, from museum data."
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "series": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "artworks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GuideContextArtwork"
+            }
+          }
+        }
+      },
+      "GuideContext": {
+        "type": "object",
+        "description": "The enriched context document the museum guide reasons over \u2014 the authoritative record of what hangs where in a spawned exhibition.",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Stable exhibition id from the world builder."
+          },
+          "name": {
+            "type": "string"
+          },
+          "registeredAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "generator": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "rooms": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GuideContextRoom"
+            }
+          },
+          "artists": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Distinct exhibited artist names."
+          },
+          "architects": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Distinct room architect names."
+          },
+          "counts": {
+            "type": "object",
+            "properties": {
+              "rooms": {
+                "type": "integer"
+              },
+              "artworks": {
+                "type": "integer"
+              },
+              "artists": {
+                "type": "integer"
+              }
+            }
+          },
+          "starters": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Cortex-suggested visitor questions (filled in asynchronously after registration)."
+          }
+        }
+      },
+      "GuideAnswer": {
+        "type": "object",
+        "properties": {
+          "answer": {
+            "type": "string",
+            "description": "The guide\u2019s in-persona answer."
+          },
+          "persona": {
+            "type": "string",
+            "description": "Name of the persona that answered (Omnimorph or a DeCC0)."
+          },
+          "suggestions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Follow-up questions to offer the visitor."
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Library document titles the answer drew on."
+          },
+          "fallback": {
+            "type": "boolean",
+            "description": "True when the answer was built from exhibition context alone (Library unreachable)."
           }
         }
       }

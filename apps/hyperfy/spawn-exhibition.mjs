@@ -46,19 +46,37 @@
  *   --no-verify               skip the post-spawn verification pass
  *   --name <bot name>         spawner's display name in the world
  *
+ * THE MUSEUM GUIDE (agentic VRM avatar):
+ *   --guide                   also spawn the AI museum guide. This registers
+ *                             the exhibition's context (rooms, architects,
+ *                             artists, works) with the MOCA API — that's what
+ *                             the guide answers from — and drops a talking
+ *                             VRM avatar into the world (hold E to chat).
+ *   --guide-name <name>       the guide's display name (default "Tsahafi")
+ *   --guide-avatar <path|url> .vrm to embody (default: the museum's Omnimorph)
+ *   --decc0 <token id>        Art DeCC0 persona the guide adopts (default
+ *                             4209 = Tsahafi; souls come from the MOCA Codex
+ *                             via /v1/decc0s)
+ *   --soul <file.md>          a custom SOUL.md the guide embodies (beats --decc0)
+ *   --soul-name <name>        display name for the custom soul
+ *   --soulweaver <ref>        a Soulweaver soul, chainId:0xcontract:tokenId —
+ *                             resolved by the MOCA API at answer time
+ *   --api <url>               MOCA API base (default https://api.moca.qwellco.de)
+ *
  * Privacy by design: the exhibition file lives on the curator's device. This
  * command is the explicit "upload it into Hyperfy" moment — nothing reaches a
  * world until the curator runs it (or uses the builder's Spawn dialog).
  */
 
 import crypto from "node:crypto";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import {
   deterministicUuid,
   HyperfySession,
   uploadAsset,
   yawToQuaternion,
 } from "./lib/protocol.mjs";
+import { generateGuideScript } from "./lib/guide-script.mjs";
 import { generateRoomScript } from "./lib/room-script.mjs";
 
 // ---------------------------------------------------------------- args ----
@@ -88,6 +106,41 @@ const UNPINNED = flag("unpinned");
 const RELAYOUT = flag("relayout");
 const FRESH = flag("fresh");
 const VERIFY = !flag("no-verify");
+const GUIDE = flag("guide");
+const GUIDE_NAME = opt("guide-name", "Tsahafi");
+// Default body: the in-repo Omnimorph VRM when running from the monorepo,
+// otherwise the museum-hosted copy.
+const LOCAL_OMNIMORPH = new URL("../museum/public/avatars/omnimorph-3321.vrm", import.meta.url).pathname;
+const GUIDE_AVATAR = opt(
+  "guide-avatar",
+  process.env.MOCA_GUIDE_AVATAR
+  || (existsSync(LOCAL_OMNIMORPH)
+    ? LOCAL_OMNIMORPH
+    : "https://museumofcryptoart.com/avatars/omnimorph-3321.vrm"),
+);
+const DECC0_ID = Number(opt("decc0", "4209")) || 0;
+const MOCA_API = (opt("api", process.env.MOCA_API_URL || "https://api.moca.qwellco.de")).replace(/\/+$/, "");
+
+// Persona beyond DeCC0s: --soul <SOUL.md file> bakes a custom soul into the
+// guide; --soulweaver <chainId:0xcontract:tokenId> references a Soulweaver
+// soul the API resolves at answer time.
+const SOUL_FILE = opt("soul", "");
+const CUSTOM_SOUL = SOUL_FILE ? readFileSync(SOUL_FILE, "utf8").slice(0, 4000) : "";
+const SOUL_NAME = opt(
+  "soul-name",
+  CUSTOM_SOUL.match(/^#\s*(?:SOUL\.md\s*[—-]\s*)?(.+)$/m)?.[1]?.trim().slice(0, 60) || "",
+);
+const SOUL_REF = (() => {
+  const raw = opt("soulweaver", "");
+  if (!raw) return null;
+  const m = raw.match(/^(\d+):(0x[0-9a-fA-F]{40}):(.+)$/);
+  if (!m) {
+    console.error("--soulweaver expects chainId:0xcontract:tokenId");
+    process.exit(1);
+  }
+  return { chainId: Number(m[1]), address: m[2], tokenId: m[3] };
+})();
+
 
 if (opt("hyperfy", null)) {
   console.log("Note: --hyperfy is no longer needed — the spawner speaks the wire protocol itself.\n");
@@ -295,6 +348,176 @@ for (const placement of exhibition.placements) {
     stats.artworks += placement.artworks.length;
     expected.push({ bpId, enId, title });
     await new Promise((r) => setTimeout(r, 300));
+  } catch (err) {
+    stats.failed++;
+    console.error(`  ✗ ${err.message}`);
+  }
+}
+
+// ---------------------------------------------------------- museum guide ----
+// The agentic guide: register the exhibition's context with the MOCA API
+// (rooms + architects + artists + works — what the guide answers from), then
+// drop a talking VRM avatar into the world. Idempotent like the rooms: the
+// blueprint/entity ids derive from the exhibition key, so re-spawning updates
+// the guide in place (and keeps wherever admins moved it).
+if (GUIDE) {
+  console.log(`\n→ Museum guide "${GUIDE_NAME}"${DECC0_ID ? ` (DeCC0 #${DECC0_ID} persona)` : ""}`);
+  try {
+    // The id must match what the guide app sends to /v1/guide/ask.
+    const guideExhibitionId
+      = exhibition.id || (exhibition.name || "exhibition").replace(/[^\w.:-]+/g, "-").toLowerCase();
+
+    // 1. Register the exhibition context (the API enriches rooms/artworks
+    //    from the museum's own data). Failure is not fatal — the guide spawns
+    //    with baked suggestions and answers go offline-polite until the
+    //    exhibition is registered.
+    let suggestions = [];
+    let counts = { rooms: exhibition.placements.length, artworks: 0 };
+    try {
+      const res = await fetch(`${MOCA_API}/v1/guide/exhibitions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          format: "moca-exhibition@1",
+          id: guideExhibitionId,
+          name: exhibition.name,
+          generator: exhibition.generator,
+          placements: exhibition.placements.map((p) => ({
+            uid: p.uid,
+            room: { id: p.room.id, title: p.room.title },
+            artworks: p.artworks.map((a) => ({ id: a.id, name: a.name, artist: a.artist })),
+          })),
+        }),
+      });
+      if (res.ok) {
+        const { data } = await res.json();
+        suggestions = data?.suggestions || [];
+        counts = { rooms: data?.counts?.rooms ?? counts.rooms, artworks: data?.counts?.artworks ?? 0 };
+        console.log(`  context registered with ${MOCA_API} (${counts.rooms} rooms, ${counts.artworks} works, ${data?.counts?.artists ?? 0} artists)`);
+      } else {
+        console.warn(`  ⚠ context registration failed (${res.status}) — the guide will run on baked knowledge`);
+      }
+    } catch (err) {
+      console.warn(`  ⚠ MOCA API unreachable (${err.message}) — the guide will run on baked knowledge`);
+    }
+
+    // 2. The guide's body: a .vrm, uploaded content-addressed like any asset.
+    //    A VRM blueprint model renders as an avatar in Hyperfy.
+    let vrmBytes;
+    if (/^https?:\/\//.test(GUIDE_AVATAR)) {
+      const res = await fetch(GUIDE_AVATAR);
+      if (!res.ok) throw new Error(`guide avatar unreachable (${res.status}) at ${GUIDE_AVATAR}`);
+      vrmBytes = Buffer.from(await res.arrayBuffer());
+    } else {
+      vrmBytes = readFileSync(GUIDE_AVATAR);
+    }
+    const avatarUrl = await uploadAsset({ baseUrl: BASE_URL, bytes: vrmBytes, ext: "vrm", mime: "model/gltf-binary" });
+    console.log(`  avatar ${avatarUrl} (${(vrmBytes.length / 1e6).toFixed(1)} MB)`);
+
+    // 3. The guide's mind: the generated app script (server side talks to the
+    //    MOCA API, client side renders the conversation panel).
+    const guideScript = Buffer.from(
+      generateGuideScript({
+        exhibitionId: guideExhibitionId,
+        exhibitionName: exhibition.name,
+        apiUrl: MOCA_API,
+        guideName: GUIDE_NAME,
+        decc0Id: DECC0_ID,
+        customSoul: CUSTOM_SOUL,
+        soulName: SOUL_NAME,
+        soulRef: SOUL_REF,
+        suggestions,
+        roomCount: counts.rooms,
+        artworkCount: counts.artworks,
+      }),
+      "utf8",
+    );
+    const guideScriptUrl = await uploadAsset({ baseUrl: BASE_URL, bytes: guideScript, ext: "js", mime: "text/javascript" });
+
+    // 4. Place the guide at the heart of the exhibition, facing its center.
+    const k = TILE_METERS / BUILDER_TILE;
+    let cx = 0;
+    let cz = 0;
+    for (const p of exhibition.placements) {
+      cx += k * p.position[0];
+      cz += k * p.position[2];
+    }
+    cx /= exhibition.placements.length || 1;
+    cz /= exhibition.placements.length || 1;
+    const gPosition = [cx, 0, cz + TILE_METERS * 0.55];
+    const gQuaternion = yawToQuaternion(Math.PI); // face the exhibition center
+
+    const bpId = await deterministicUuid(`${exhibitionKey}:guide:blueprint`);
+    const enId = await deterministicUuid(`${exhibitionKey}:guide:entity`);
+    const meta = {
+      name: `MOCA · Museum Guide`,
+      author: "Museum of Crypto Art",
+      url: "https://museumofcryptoart.com/rooms/world",
+      desc: `${GUIDE_NAME} — the AI guide of "${exhibition.name}". Hold E to talk.`,
+    };
+    const props = {
+      guideName: GUIDE_NAME,
+      decc0: DECC0_ID,
+      customSoul: CUSTOM_SOUL,
+      apiUrl: MOCA_API,
+      exhibitionId: guideExhibitionId,
+      exhibitionName: exhibition.name,
+    };
+
+    const existing = session.blueprints.get(bpId);
+    if (!existing) {
+      session.send("blueprintAdded", {
+        id: bpId,
+        version: 0,
+        ...meta,
+        image: null,
+        model: avatarUrl,
+        script: guideScriptUrl,
+        props,
+        preload: false,
+        public: false,
+        locked: false,
+        frozen: false,
+        unique: false,
+        scene: false,
+        disabled: false,
+      });
+      stats.created++;
+      console.log("  guide blueprint created");
+    } else if (existing.model !== avatarUrl || existing.script !== guideScriptUrl) {
+      session.send("blueprintModified", {
+        id: bpId,
+        version: (existing.version ?? 0) + 1,
+        ...meta,
+        model: avatarUrl,
+        script: guideScriptUrl,
+        props: { ...existing.props, ...props },
+      });
+      stats.updated++;
+      console.log("  guide updated (avatar/knowledge pushed; in-world tweaks kept)");
+    } else {
+      stats.unchanged++;
+      console.log("  guide unchanged");
+    }
+
+    if (!session.entities.get(enId)) {
+      session.send("entityAdded", {
+        id: enId,
+        type: "app",
+        blueprint: bpId,
+        position: gPosition,
+        quaternion: gQuaternion,
+        scale: [1, 1, 1],
+        mover: null,
+        uploader: null,
+        pinned: !UNPINNED,
+        state: {},
+      });
+      console.log(`  guide standing at [${gPosition.map((n) => n.toFixed(1)).join(", ")}]`);
+    } else {
+      console.log("  guide kept where admins placed it in-world");
+    }
+    expected.push({ bpId, enId, title: `Museum guide "${GUIDE_NAME}"` });
   } catch (err) {
     stats.failed++;
     console.error(`  ✗ ${err.message}`);

@@ -2,6 +2,7 @@
 
 import { type ReactNode, useEffect, useState } from "react";
 import type { HyperfyExhibition } from "./hyperfy-export";
+import { buildGuideHyp, downloadGuideHyp } from "@/lib/museum/hyperfy/guide-hyp";
 import {
   type SpawnProgress,
   type SpawnResult,
@@ -22,19 +23,44 @@ const TARGET_KEY = "moca-hyperfy-target-v1";
 interface StoredTarget {
   url: string;
   key: string;
+  /** Museum guide preferences (persisted with the target). */
+  guide?: boolean;
+  guideName?: string;
+  guideAvatar?: string;
+  guideDecc0?: string;
 }
+
+interface GuideAvatar {
+  id: string;
+  name: string;
+  url: string;
+  description?: string;
+}
+
+const DEFAULT_AVATAR: GuideAvatar = {
+  id: "omnimorph-3321",
+  name: "Omnimorph",
+  url: "/avatars/omnimorph-3321.vrm",
+};
 
 function loadTarget(): StoredTarget {
   try {
     const raw = window.localStorage.getItem(TARGET_KEY);
     if (raw) {
       const p = JSON.parse(raw) as Partial<StoredTarget>;
-      return { url: p.url || "", key: p.key || "" };
+      return {
+        url: p.url || "",
+        key: p.key || "",
+        guide: p.guide !== false,
+        guideName: p.guideName || "Tsahafi",
+        guideAvatar: p.guideAvatar || DEFAULT_AVATAR.id,
+        guideDecc0: p.guideDecc0 || "4209",
+      };
     }
   } catch {
     /* noop */
   }
-  return { url: "", key: "" };
+  return { url: "", key: "", guide: true, guideName: "Tsahafi", guideAvatar: DEFAULT_AVATAR.id, guideDecc0: "4209" };
 }
 
 function saveTarget(target: StoredTarget) {
@@ -86,6 +112,13 @@ function IconExternal({ size }: { size?: number }) {
     <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
   </Icon>;
 }
+function IconDownload({ size }: { size?: number }) {
+  return <Icon size={size}>
+    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+    <path d="m7 10 5 5 5-5" />
+    <path d="M12 15V3" />
+  </Icon>;
+}
 function IconGlobe({ size }: { size?: number }) {
   return <Icon size={size}>
     <circle cx="12" cy="12" r="9" />
@@ -130,6 +163,13 @@ export default function SpawnHyperfyDialog({
   const [ artSize, setArtSize ] = useState(2);
   const [ tileMeters, setTileMeters ] = useState(16);
   const [ relayout, setRelayout ] = useState(false);
+  const [ guideOn, setGuideOn ] = useState(true);
+  const [ guideName, setGuideName ] = useState("Tsahafi");
+  const [ guideAvatarId, setGuideAvatarId ] = useState(DEFAULT_AVATAR.id);
+  const [ guideDecc0, setGuideDecc0 ] = useState("4209");
+  const [ avatars, setAvatars ] = useState<GuideAvatar[]>([ DEFAULT_AVATAR ]);
+  const [ hypBusy, setHypBusy ] = useState(false);
+  const [ hypMsg, setHypMsg ] = useState<string | null>(null);
   const [ phase, setPhase ] = useState<"form" | "spawning" | "done">("form");
   const [ progress, setProgress ] = useState<SpawnProgress | null>(null);
   const [ result, setResult ] = useState<SpawnResult | null>(null);
@@ -141,10 +181,23 @@ export default function SpawnHyperfyDialog({
     const t = loadTarget();
     setUrl(t.url);
     setKey(t.key);
+    setGuideOn(t.guide !== false);
+    setGuideName(t.guideName || "Tsahafi");
+    setGuideAvatarId(t.guideAvatar || DEFAULT_AVATAR.id);
+    setGuideDecc0(t.guideDecc0 || "4209");
     setPhase("form");
     setProgress(null);
     setResult(null);
     setError(null);
+    // The avatar catalog grows as DeCC0 VRMs land — read it fresh each open.
+    fetch("/avatars/avatars.json")
+      .then(r => (r.ok ? r.json() : null))
+      .then((j) => {
+        if (Array.isArray(j?.avatars) && j.avatars.length) setAvatars(j.avatars);
+      })
+      .catch(() => {
+        /* the bundled default still works */
+      });
   }, [ open ]);
 
   useEffect(() => {
@@ -169,17 +222,33 @@ export default function SpawnHyperfyDialog({
 
   const spawn = async () => {
     if (!urlOk || phase === "spawning") return;
-    saveTarget({ url: normalizedUrl, key });
+    saveTarget({
+      url: normalizedUrl,
+      key,
+      guide: guideOn,
+      guideName,
+      guideAvatar: guideAvatarId,
+      guideDecc0,
+    });
     setError(null);
     setPhase("spawning");
     try {
       const exhibition = buildExhibition();
+      const avatar = avatars.find(a => a.id === guideAvatarId) || avatars[0] || DEFAULT_AVATAR;
+      const decc0Id = Number.parseInt(guideDecc0, 10);
       const res = await spawnExhibition(exhibition, {
         url: normalizedUrl,
         key: key.trim() || undefined,
         artSize,
         tileMeters,
         relayout,
+        guide: guideOn
+          ? {
+              name: guideName.trim() || "Tsahafi",
+              avatarUrl: avatar.url,
+              decc0Id: Number.isNaN(decc0Id) ? undefined : decc0Id,
+            }
+          : undefined,
         onProgress: setProgress,
       });
       setResult(res);
@@ -187,6 +256,41 @@ export default function SpawnHyperfyDialog({
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
       setPhase("form");
+    }
+  };
+
+  // Bundle the guide as a drag-droppable .hyp — no world URL or key needed.
+  const downloadHyp = async () => {
+    if (hypBusy) return;
+    setHypBusy(true);
+    setHypMsg(null);
+    try {
+      const exhibition = buildExhibition();
+      const avatar = avatars.find(a => a.id === guideAvatarId) || avatars[0] || DEFAULT_AVATAR;
+      const decc0Id = Number.parseInt(guideDecc0, 10);
+      const { blob, filename, registration } = await buildGuideHyp(exhibition, {
+        name: guideName.trim() || "Tsahafi",
+        avatarUrl: avatar.url,
+        decc0Id: Number.isNaN(decc0Id) ? undefined : decc0Id,
+      });
+      downloadGuideHyp(blob, filename);
+      setHypMsg(
+        registration.registered
+          ? "Saved — drop it into any world (build mode)."
+          : "Saved — context registration failed; the guide runs on baked knowledge.",
+      );
+      saveTarget({
+        url: normalizedUrl,
+        key,
+        guide: guideOn,
+        guideName,
+        guideAvatar: guideAvatarId,
+        guideDecc0,
+      });
+    } catch (err) {
+      setHypMsg(`✗ ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setHypBusy(false);
     }
   };
 
@@ -249,7 +353,9 @@ export default function SpawnHyperfyDialog({
             <div className="flex flex-col gap-3.5">
               <label className="block">
                 <span
-                  className="mb-1.5 block text-[10.5px] tracking-[0.08em] uppercase"
+                  className={`
+                    mb-1.5 block text-[10.5px] tracking-[0.08em] uppercase
+                  `}
                   style={{ color: "var(--fg3)" }}
                 >
                   World URL
@@ -268,7 +374,9 @@ export default function SpawnHyperfyDialog({
               </label>
               <label className="block">
                 <span
-                  className="mb-1.5 block text-[10.5px] tracking-[0.08em] uppercase"
+                  className={`
+                    mb-1.5 block text-[10.5px] tracking-[0.08em] uppercase
+                  `}
                   style={{ color: "var(--fg3)" }}
                 >
                   Admin key
@@ -343,6 +451,111 @@ export default function SpawnHyperfyDialog({
                   />
                   Reapply room layout
                 </label>
+              </div>
+
+              {/* The museum guide */}
+              <div
+                className={`
+                  flex flex-col gap-2.5 rounded-[var(--radius)] border px-3
+                  py-2.5
+                `}
+                style={{ borderColor: "var(--border)" }}
+              >
+                <label
+                  className="flex cursor-pointer items-center gap-2 text-[12px]"
+                  style={{ color: "var(--fg1)" }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={guideOn}
+                    onChange={e => setGuideOn(e.target.checked)}
+                    className="accent-[var(--accent)]"
+                  />
+                  Museum guide
+                  <span className="text-[10.5px]" style={{ color: "var(--fg3)" }}>
+                    an AI avatar visitors can talk to
+                  </span>
+                </label>
+                {guideOn && (
+                  <>
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                      <label className="flex items-center gap-2 text-[11px]" style={{ color: "var(--fg2)" }}>
+                        Name
+                        <input
+                          value={guideName}
+                          onChange={e => setGuideName(e.target.value)}
+                          className={`
+                            h-7 w-28 rounded-[var(--radius)] border
+                            bg-transparent px-2 text-[12px] outline-none
+                          `}
+                          style={{ borderColor: "var(--border)", color: "var(--fg1)" }}
+                        />
+                      </label>
+                      <label className="flex items-center gap-2 text-[11px]" style={{ color: "var(--fg2)" }}>
+                        Avatar
+                        <select
+                          value={guideAvatarId}
+                          onChange={e => setGuideAvatarId(e.target.value)}
+                          className={`
+                            h-7 rounded-[var(--radius)] border bg-transparent
+                            px-2 text-[12px] outline-none
+                          `}
+                          style={{ borderColor: "var(--border)", color: "var(--fg1)", background: "var(--popover)" }}
+                        >
+                          {avatars.map(a => (
+                            <option key={a.id} value={a.id}>{a.name}</option>
+                          ))}
+                        </select>
+                      </label>
+                      <label
+                        className="flex items-center gap-2 text-[11px]"
+                        style={{ color: "var(--fg2)" }}
+                        title="Art DeCC0 token id (1–10000) whose soul the guide adopts — its personality comes from the MOCA Codex. Default 4209 = Tsahafi, the scholar-curator."
+                      >
+                        DeCC0 persona
+                        <input
+                          value={guideDecc0}
+                          onChange={e => setGuideDecc0(e.target.value.replace(/[^\d]/g, ""))}
+                          placeholder="4209"
+                          inputMode="numeric"
+                          className={`
+                            h-7 w-16 rounded-[var(--radius)] border
+                            bg-transparent px-2 font-mono text-[12px]
+                            outline-none
+                          `}
+                          style={{ borderColor: "var(--border)", color: "var(--fg1)" }}
+                        />
+                      </label>
+                    </div>
+                    <span className="block text-[10.5px] leading-relaxed" style={{ color: "var(--fg3)" }}>
+                      Spawning a guide registers this exhibition&apos;s context —
+                      rooms, architects, artists, works — with the MOCA API, so
+                      the guide can answer questions about it. Visitors hold E
+                      at the avatar to talk.
+                    </span>
+                    <div className="flex items-center gap-2.5">
+                      <button
+                        onClick={downloadHyp}
+                        disabled={hypBusy}
+                        className={`
+                          flex h-7 items-center gap-1.5 rounded-[var(--radius)]
+                          border px-2.5 text-[11px] transition-colors
+                          disabled:opacity-40
+                        `}
+                        style={{ borderColor: "var(--border)", color: "var(--fg1)" }}
+                        title="Bundle the guide as a portable Hyperfy app file — drop it into any world in build mode, no world URL or admin key needed. Building it registers the exhibition context with the MOCA API."
+                      >
+                        {hypBusy ? <Spinner /> : <IconDownload size={13} />}
+                        {hypBusy ? "Building…" : "Download guide app (.hyp)"}
+                      </button>
+                      {hypMsg && (
+                        <span className="text-[10.5px]" style={{ color: hypMsg.startsWith("✗") ? "var(--destructive, oklch(0.55 0.2 25))" : "var(--fg3)" }}>
+                          {hypMsg}
+                        </span>
+                      )}
+                    </div>
+                  </>
+                )}
               </div>
 
               {mixedContent && (
@@ -480,8 +693,7 @@ export default function SpawnHyperfyDialog({
                   <button
                     onClick={onClose}
                     className={`
-                      h-9 rounded-[var(--radius)] px-4 text-sm
-                      transition-colors
+                      h-9 rounded-[var(--radius)] px-4 text-sm transition-colors
                     `}
                     style={{ background: "var(--muted)", color: "var(--fg1)" }}
                   >
@@ -509,8 +721,7 @@ export default function SpawnHyperfyDialog({
                     onClick={onClose}
                     disabled={busy}
                     className={`
-                      h-9 rounded-[var(--radius)] px-4 text-sm
-                      transition-colors
+                      h-9 rounded-[var(--radius)] px-4 text-sm transition-colors
                       disabled:opacity-30
                     `}
                     style={{ background: "var(--muted)", color: "var(--fg1)" }}

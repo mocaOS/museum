@@ -1,11 +1,13 @@
-import type { HyperfyExhibition } from "@/components/museum/three/hyperfy-export";
+import { DEFAULT_GUIDE_API, registerGuideExhibition } from "./guide-hyp";
+import { generateGuideScript } from "./guide-script";
 import {
-  deterministicUuid,
   HyperfySession,
+  deterministicUuid,
   uploadAsset,
   yawToQuaternion,
 } from "./protocol";
 import { generateRoomScript } from "./room-script";
+import type { HyperfyExhibition } from "@/components/museum/three/hyperfy-export";
 
 /**
  * Spawn an exhibition into a Hyperfy v2 world, straight from the browser.
@@ -50,6 +52,23 @@ export interface SpawnResult {
   verified: boolean;
 }
 
+export interface GuideOptions {
+  /** The guide's display name (default "Tsahafi"). */
+  name?: string;
+  /** Absolute or site-relative URL of the .vrm the guide embodies. */
+  avatarUrl: string;
+  /** Art DeCC0 token id whose persona the guide adopts (default 4209, Tsahafi). */
+  decc0Id?: number;
+  /** A SOUL.md the guide embodies — uploaded by the curator; beats decc0/soulRef. */
+  customSoul?: string;
+  /** Display name for the custom soul. */
+  soulName?: string;
+  /** A Soulweaver soul coordinate, resolved by the API at answer time. */
+  soulRef?: { chainId: number; address: string; tokenId: string } | null;
+  /** MOCA API base the guide asks for answers (default api.moca.qwellco.de). */
+  apiUrl?: string;
+}
+
 export interface SpawnOptions {
   url: string;
   /** The world's admin key (its ADMIN_CODE). Optional for open worlds. */
@@ -64,8 +83,18 @@ export interface SpawnOptions {
   pinned?: boolean;
   /** Move already-spawned rooms back to the museum layout. */
   relayout?: boolean;
+  /**
+   * Also spawn the agentic museum guide (a talking VRM avatar). This is the
+   * one step that DOES send exhibition data to MOCA servers: the guide's
+   * knowledge — rooms, architects, artists, works — is registered with the
+   * MOCA API so it can answer visitor questions.
+   */
+  guide?: GuideOptions;
   onProgress?: (progress: SpawnProgress) => void;
 }
+
+/** Progress-row uid of the guide (it travels with the room list in the UI). */
+export const GUIDE_UID = "__guide";
 
 /** Builder tile size in builder units — placement positions are multiples of it. */
 const BUILDER_TILE = 8;
@@ -79,6 +108,7 @@ export async function spawnExhibition(
     tileMeters = 16,
     pinned = true,
     relayout = false,
+    guide,
     onProgress,
   }: SpawnOptions,
 ): Promise<SpawnResult> {
@@ -87,6 +117,13 @@ export async function spawnExhibition(
     title: p.room.title,
     status: "connecting" as RoomSpawnStatus,
   }));
+  if (guide) {
+    rooms.push({
+      uid: GUIDE_UID,
+      title: `Museum guide “${guide.name || "Tsahafi"}”`,
+      status: "connecting" as RoomSpawnStatus,
+    });
+  }
   const report = (phase: SpawnProgress["phase"]) =>
     onProgress?.({ phase, rooms: rooms.map(r => ({ ...r })) });
   const setStatus = (uid: string, status: RoomSpawnStatus, error?: string) => {
@@ -293,15 +330,38 @@ export async function spawnExhibition(
         result.artworks += placement.artworks.length;
         expected.push({ bpId, enId, uid: placement.uid });
         setStatus(placement.uid, status);
-        await new Promise(r => setTimeout(r, 250));
+        await new Promise(resolve => setTimeout(resolve, 250));
       } catch (err) {
         result.failed++;
         setStatus(placement.uid, "failed", err instanceof Error ? err.message : String(err));
       }
     }
 
+    // ---- the museum guide (agentic VRM avatar) -------------------------
+    // Twin of the CLI's --guide path: register the exhibition context with
+    // the MOCA API (what the guide answers from), upload the .vrm, generate
+    // the guide app script, and spawn it idempotently like a room.
+    if (guide) {
+      try {
+        const pushed = await pushGuide(session, exhibition, guide, {
+          url,
+          tileMeters,
+          pinned,
+          onStatus: status => setStatus(GUIDE_UID, status),
+        });
+        if (pushed.status === "created") result.created++;
+        else if (pushed.status === "updated") result.updated++;
+        else result.unchanged++;
+        expected.push({ bpId: pushed.bpId, enId: pushed.enId, uid: GUIDE_UID });
+        setStatus(GUIDE_UID, pushed.status);
+      } catch (err) {
+        result.failed++;
+        setStatus(GUIDE_UID, "failed", err instanceof Error ? err.message : String(err));
+      }
+    }
+
     // Let the last packets land before disconnecting.
-    await new Promise(r => setTimeout(r, 1000));
+    await new Promise(resolve => setTimeout(resolve, 1000));
     session.close();
 
     // Verification pass: a fresh anonymous session sees the world's live
@@ -323,6 +383,205 @@ export async function spawnExhibition(
 
     report("done");
     return result;
+  } finally {
+    session.close();
+  }
+}
+
+/**
+ * Push the guide app into a connected world session — registration, .vrm,
+ * generated script, deterministic blueprint/entity. Used by spawnExhibition
+ * (alongside the rooms) and spawnGuide (guide only, e.g. swapping persona
+ * after the rooms are already in the world).
+ */
+async function pushGuide(
+  session: HyperfySession,
+  exhibition: HyperfyExhibition,
+  guide: GuideOptions,
+  opts: {
+    url: string;
+    tileMeters: number;
+    pinned: boolean;
+    onStatus?: (status: RoomSpawnStatus) => void;
+  },
+): Promise<{ bpId: string; enId: string; status: RoomSpawnStatus }> {
+  const { url, tileMeters, pinned, onStatus } = opts;
+  const apiUrl = (guide.apiUrl || DEFAULT_GUIDE_API).replace(/\/+$/, "");
+  const guideName = guide.name || "Tsahafi";
+  const decc0Id = guide.decc0Id || 4209;
+  const exhibitionKey = exhibition.id || exhibition.name || "default";
+
+  // 1. Register the context — enrichment (architects, artists, work
+  //    descriptions) happens server-side from the museum's own data.
+  //    Failure is not fatal: the guide spawns on baked knowledge.
+  onStatus?.("script");
+  const registration = await registerGuideExhibition(exhibition, apiUrl);
+  const { suggestions, counts } = registration;
+
+  // 2. The guide's body — a .vrm blueprint model renders as an avatar.
+  onStatus?.("model");
+  const vrmRes = await fetch(guide.avatarUrl);
+  if (!vrmRes.ok) throw new Error(`Guide avatar unreachable (${vrmRes.status})`);
+  const avatarUrl = await uploadAsset({
+    baseUrl: url,
+    bytes: await vrmRes.arrayBuffer(),
+    ext: "vrm",
+    mime: "model/gltf-binary",
+  });
+
+  // 3. The guide's mind — the generated app script.
+  onStatus?.("script");
+  const guideScript = new TextEncoder().encode(
+    generateGuideScript({
+      exhibitionId: registration.id,
+      exhibitionName: exhibition.name,
+      apiUrl,
+      guideName,
+      decc0Id,
+      customSoul: guide.customSoul,
+      soulName: guide.soulName,
+      soulRef: guide.soulRef,
+      suggestions,
+      roomCount: counts.rooms,
+      artworkCount: counts.artworks,
+    }),
+  );
+  const guideScriptUrl = await uploadAsset({
+    baseUrl: url,
+    bytes: guideScript,
+    ext: "js",
+    mime: "text/javascript",
+  });
+
+  // 4. Stand the guide at the heart of the exhibition, facing center.
+  onStatus?.("spawning");
+  const k = tileMeters / BUILDER_TILE;
+  let cx = 0;
+  let cz = 0;
+  for (const p of exhibition.placements) {
+    cx += k * p.position[0];
+    cz += k * p.position[2];
+  }
+  cx /= exhibition.placements.length || 1;
+  cz /= exhibition.placements.length || 1;
+  const gPosition = [ cx, 0, cz + tileMeters * 0.55 ];
+  const gQuaternion = yawToQuaternion(Math.PI);
+
+  const bpId = await deterministicUuid(`${exhibitionKey}:guide:blueprint`);
+  const enId = await deterministicUuid(`${exhibitionKey}:guide:entity`);
+  const meta = {
+    name: "MOCA · Museum Guide",
+    author: "Museum of Crypto Art",
+    url: "https://museumofcryptoart.com/rooms/world",
+    desc: `${guideName} — the AI guide of "${exhibition.name}". Hold E to talk.`,
+  };
+  const props = {
+    guideName,
+    decc0: decc0Id,
+    customSoul: guide.customSoul || "",
+    apiUrl,
+    exhibitionId: registration.id,
+    exhibitionName: exhibition.name,
+  };
+
+  const existing = session.blueprints.get(bpId);
+  let status: RoomSpawnStatus;
+  if (!existing) {
+    session.send("blueprintAdded", {
+      id: bpId,
+      version: 0,
+      ...meta,
+      image: null,
+      model: avatarUrl,
+      script: guideScriptUrl,
+      props,
+      preload: false,
+      public: false,
+      locked: false,
+      frozen: false,
+      unique: false,
+      scene: false,
+      disabled: false,
+    });
+    status = "created";
+  } else if (existing.model !== avatarUrl || existing.script !== guideScriptUrl) {
+    session.send("blueprintModified", {
+      id: bpId,
+      version: (existing.version ?? 0) + 1,
+      ...meta,
+      model: avatarUrl,
+      script: guideScriptUrl,
+      props: { ...(existing.props as object), ...props },
+    });
+    status = "updated";
+  } else {
+    status = "unchanged";
+  }
+
+  if (!session.entities.get(enId)) {
+    session.send("entityAdded", {
+      id: enId,
+      type: "app",
+      blueprint: bpId,
+      position: gPosition,
+      quaternion: gQuaternion,
+      scale: [ 1, 1, 1 ],
+      mover: null,
+      uploader: null,
+      pinned,
+      state: {},
+    });
+  }
+  return { bpId, enId, status };
+}
+
+export interface GuideSpawnResult {
+  status: RoomSpawnStatus;
+  verified: boolean;
+}
+
+/**
+ * Send ONLY the guide into a world — for (re)launching the agent into an
+ * exhibition whose rooms are already spawned: pick a persona, click, and the
+ * same deterministic ids update the existing guide in place (or stand a new
+ * one at the exhibition center).
+ */
+export async function spawnGuide(
+  exhibition: HyperfyExhibition,
+  {
+    url,
+    key,
+    tileMeters = 16,
+    pinned = true,
+    guide,
+    onStatus,
+  }: {
+    url: string;
+    key?: string;
+    tileMeters?: number;
+    pinned?: boolean;
+    guide: GuideOptions;
+    onStatus?: (status: RoomSpawnStatus) => void;
+  },
+): Promise<GuideSpawnResult> {
+  const session = await HyperfySession.connect({ url });
+  try {
+    if (session.hasAdminCode) {
+      if (!key) {
+        throw new Error("This world requires an admin key. Ask the world's operator for its ADMIN_CODE.");
+      }
+      await session.grantAdmin(key);
+    }
+    const pushed = await pushGuide(session, exhibition, guide, { url, tileMeters, pinned, onStatus });
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    session.close();
+
+    // Verification pass — same as room spawns: a fresh anonymous session
+    // must see the guide, otherwise the admin key was wrong.
+    const check = await HyperfySession.connect({ url, name: "MOCA Verify" });
+    const verified = check.blueprints.has(pushed.bpId) && check.entities.has(pushed.enId);
+    check.close();
+    return { status: pushed.status, verified };
   } finally {
     session.close();
   }

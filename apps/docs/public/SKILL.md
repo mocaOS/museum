@@ -18,6 +18,7 @@ Base URL for all skills: `https://docs.museumofcryptoart.com`
 | Library Cortex | `/skills/library/SKILL.md` | RAG ask/stream/search with citations |
 | Souls & web3 | `/skills/souls/SKILL.md` | SOUL files, EIP-191 verification, ERC-8004/8183/8257 |
 | Exhibitions & Hyperfy | `/skills/exhibitions/SKILL.md` | 3D rooms, slot convention, spawning walkable worlds |
+| Museum guide | `/skills/museum-guide/SKILL.md` | The agentic exhibition guide: context, suggestions, visitor Q&A, DeCC0 personas (Cortex-installable) |
 
 ## Machine-readable everything
 

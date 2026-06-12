@@ -1,0 +1,28 @@
+{
+  "collection": "guide_exhibitions",
+  "meta": {
+    "accountability": "all",
+    "archive_app_filter": true,
+    "archive_field": null,
+    "archive_value": null,
+    "collapse": "open",
+    "collection": "guide_exhibitions",
+    "color": "#2ECDA7",
+    "display_template": "{{name}}",
+    "group": null,
+    "hidden": false,
+    "icon": "tour",
+    "item_duplication_fields": null,
+    "note": "Exhibition contexts registered for the in-world museum guide (POST /v1/guide/exhibitions). One row per world-builder exhibition; the context JSON is what the guide reasons over.",
+    "preview_url": null,
+    "singleton": false,
+    "sort": null,
+    "sort_field": null,
+    "translations": null,
+    "unarchive_value": null,
+    "versioning": false
+  },
+  "schema": {
+    "name": "guide_exhibitions"
+  }
+}

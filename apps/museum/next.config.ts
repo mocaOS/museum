@@ -5,6 +5,10 @@ import { dirname } from "node:path";
 const nextConfig: NextConfig = {
   output: "standalone",
   compress: false,
+  // Dev only: allow opening the dev server via the machine's LAN address
+  // (e.g. testing Hyperfy spawns where the world must reach this host) —
+  // Next.js blocks cross-origin dev-resource requests by default.
+  allowedDevOrigins: [ "192.168.68.80", "localhost" ],
   // This app is self-contained inside the monorepo; pin the workspace root so
   // Turbopack doesn't infer the parent (which has its own bun.lock).
   turbopack: {

@@ -1,10 +1,10 @@
-import {
-  artworkTextureUrl,
-  artworkVideoUrl,
-  type NftView,
-} from "@/lib/museum/media";
 import type { Assignments, SlotOverride, SlotOverrides } from "./world-storage";
 import type { WorldRoom } from "./WorldBuilder";
+import {
+  type NftView,
+  artworkTextureUrl,
+  artworkVideoUrl,
+} from "@/lib/museum/media";
 
 /**
  * Export the current world as a portable exhibition document for Hyperfy
@@ -19,6 +19,9 @@ export const HYPERFY_EXPORT_FORMAT = "moca-exhibition@1";
 
 export interface HyperfyArtwork {
   slotId: string;
+  /** Museum artwork id (Directus `nfts.id`) — lets the guide context API
+   * enrich the work exactly (artist, description). Absent in old exports. */
+  id?: number;
   name: string | null;
   artist: string | null;
   /** Trusted aspect ratio (w/h); 1 when unknown — the media itself wins. */
@@ -125,8 +128,8 @@ export function buildHyperfyExhibition(opts: {
     generator:
       typeof window !== "undefined" ? window.location.origin : "museumofcryptoart.com",
     placements: opts.placed
-      .filter((p) => p.room.modelUrl)
-      .map((p) => ({
+      .filter(p => p.room.modelUrl)
+      .map(p => ({
         uid: p.uid,
         room: {
           id: p.room.id,
@@ -139,11 +142,12 @@ export function buildHyperfyExhibition(opts: {
         position: p.position,
         rotationY: p.rotationY,
         artworks: Object.entries(opts.assignments[p.uid] || {}).map(
-          ([slotId, art]: [string, NftView]) => {
+          ([ slotId, art ]: [string, NftView]) => {
             const image = artworkTextureUrl(art, 1024);
             const video = artworkVideoUrl(art, 1024);
             return {
               slotId,
+              id: art.id,
               name: art.name ?? null,
               artist: art.artist_name ?? null,
               ratio: art.ratio || 1,
@@ -151,7 +155,7 @@ export function buildHyperfyExhibition(opts: {
               videoUrl: video || null,
               override: (opts.overrides[p.uid] || {})[slotId] ?? null,
             };
-          }
+          },
         ),
       })),
   };
@@ -159,7 +163,7 @@ export function buildHyperfyExhibition(opts: {
 
 /** Hand the exhibition to the visitor as a .json download (device-local). */
 export function downloadHyperfyExhibition(exhibition: HyperfyExhibition) {
-  const blob = new Blob([JSON.stringify(exhibition, null, 2)], {
+  const blob = new Blob([ JSON.stringify(exhibition, null, 2) ], {
     type: "application/json",
   });
   const url = URL.createObjectURL(blob);

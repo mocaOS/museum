@@ -6,6 +6,7 @@ import { defineEndpoint } from "@directus/extensions-sdk";
 import { createKeyAuth } from "./auth";
 import { createCortexClient } from "./cortex";
 import { createDecc0sClient } from "./decc0s";
+import { registerGuideRoutes } from "./guide";
 import { normalizeArtwork, type NftRow } from "./media";
 import { registerPresenceRoutes } from "./presence";
 import { createSoulsClient } from "./souls";
@@ -86,6 +87,10 @@ export default defineEndpoint({
             "GET /v1/souls/:chainId/:contractAddress/:tokenId",
             "GET /v1/presence/stream (public, ephemeral)",
             "POST /v1/presence/ping (public, ephemeral)",
+            "POST /v1/guide/exhibitions (public — register exhibition context for the in-world guide)",
+            "GET /v1/guide/exhibitions/:id (public)",
+            "GET /v1/guide/exhibitions/:id/suggestions (public)",
+            "POST /v1/guide/ask (public — ask the museum guide a question)",
           ],
         },
       });
@@ -93,6 +98,10 @@ export default defineEndpoint({
 
     // Ephemeral presence (public — see presence.ts for the privacy model).
     registerPresenceRoutes(router);
+
+    // The museum guide (public — the in-world visitor flow must be keyless;
+    // see guide.ts for the rate limits and the enrichment pipeline).
+    registerGuideRoutes(router, { itemsService, cortex, decc0s, souls, errorJson });
 
     // Everything below requires a valid MOCA API key.
     router.use(requireKey);

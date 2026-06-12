@@ -92,6 +92,11 @@ function IconFocus({ size }: { size?: number }) {
     <path d="M12 2v3M12 19v3M2 12h3M19 12h3" />
   </Icon>;
 }
+function IconChevronRight({ size }: { size?: number }) {
+  return <Icon size={size}>
+    <path d="m9 18 6-6-6-6" />
+  </Icon>;
+}
 function IconTrash({ size }: { size?: number }) {
   return <Icon size={size}>
     <path d="M3 6h18" />
@@ -131,6 +136,13 @@ function IconSearch({ size }: { size?: number }) {
   return <Icon size={size}>
     <circle cx="11" cy="11" r="7" />
     <path d="M21 21l-4.3-4.3" />
+  </Icon>;
+}
+function IconBot({ size }: { size?: number }) {
+  return <Icon size={size}>
+    <path d="M12 8V4H8" />
+    <rect width="16" height="12" x="4" y="8" rx="2" />
+    <path d="M2 14h2M20 14h2M15 13v2M9 13v2" />
   </Icon>;
 }
 function IconGlobe({ size }: { size?: number }) {
@@ -313,6 +325,7 @@ export default function BuilderSidebar({
   onLoadLayout,
   onExport,
   onSpawn,
+  onGuide,
 }: {
   tab: SidebarTab;
   onTabChange: (tab: SidebarTab) => void;
@@ -352,10 +365,11 @@ export default function BuilderSidebar({
   onLoadLayout: (layout: WorldLayout) => void;
   onExport: () => void;
   onSpawn: () => void;
+  onGuide: () => void;
 }) {
   const TABS: { id: SidebarTab; label: string; icon: ReactNode }[] = [
     { id: "build", label: "Build", icon: <IconGrid /> },
-    { id: "curate", label: "Curate", icon: <IconImage /> },
+    { id: "curate", label: "ROOMs", icon: <IconImage /> },
     { id: "exhibits", label: "Exhibits", icon: <IconAlbum /> },
   ];
 
@@ -547,7 +561,7 @@ export default function BuilderSidebar({
       >
         {!curating && placed.length === 0 && (
           <div className="px-6 py-10 text-center text-xs" style={{ color: "var(--fg3)" }}>
-            <p>Nothing to curate yet — place a room first.</p>
+            <p>No ROOMs placed yet — place one first.</p>
             <button
               onClick={() => onTabChange("build")}
               className={`
@@ -566,44 +580,42 @@ export default function BuilderSidebar({
                 const pct = p.slotsTotal ? Math.round((p.slotsFilled / p.slotsTotal) * 100) : 0;
                 const isSel = p.uid === selectedUid;
                 return (
-                  <div
+                  <button
                     key={p.uid}
+                    onClick={() => onCurate(p.uid)}
                     className={`
-                      mb-1.5 rounded-[var(--radius)] border px-3 py-2.5
+                      mb-1.5 block w-full rounded-[var(--radius)] border px-3
+                      py-2.5 text-left transition-colors
                     `}
                     style={{
                       borderColor: isSel ? "var(--accent)" : "var(--border)",
                       background: "var(--card)",
                     }}
+                    title={`Curate “${p.title}”`}
                   >
-                    <button onClick={() => onSelectRoom(p.uid)} className={`
-                      block w-full text-left
-                    `}>
-                      <div className="truncate text-sm" style={{ color: "var(--fg1)" }}>
-                        {p.title}
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="truncate text-sm" style={{ color: "var(--fg1)" }}>
+                          {p.title}
+                        </div>
+                        <div className="mt-0.5 text-[11px]" style={{ color: "var(--fg3)" }}>
+                          {p.slotsFilled}/{p.slotsTotal} slots filled
+                        </div>
                       </div>
-                      <div className="mt-0.5 text-[11px]" style={{ color: "var(--fg3)" }}>
-                        {p.slotsFilled}/{p.slotsTotal} slots filled
-                      </div>
-                      <div
-                        className="mt-1.5 h-1 overflow-hidden rounded-full"
-                        style={{ background: "var(--muted)" }}
-                      >
-                        <div
-                          className="h-full rounded-full transition-all"
-                          style={{ width: `${pct}%`, background: "var(--accent)" }}
-                        />
-                      </div>
-                    </button>
-                    <div className="mt-2 flex gap-1.5">
-                      <SmallBtn accent onClick={() => onCurate(p.uid)}>
-                        Curate
-                      </SmallBtn>
-                      <SmallBtn onClick={() => onSelectRoom(p.uid)} title="Fly to room">
-                        <IconFocus size={13} />
-                      </SmallBtn>
+                      <span className="shrink-0" style={{ color: "var(--fg3)" }}>
+                        <IconChevronRight size={14} />
+                      </span>
                     </div>
-                  </div>
+                    <div
+                      className="mt-1.5 h-1 overflow-hidden rounded-full"
+                      style={{ background: "var(--muted)" }}
+                    >
+                      <div
+                        className="h-full rounded-full transition-all"
+                        style={{ width: `${pct}%`, background: "var(--accent)" }}
+                      />
+                    </div>
+                  </button>
                 );
               })}
             </div>
@@ -618,6 +630,12 @@ export default function BuilderSidebar({
               style={{ borderColor: "var(--border)" }}
             >
               <div className="min-w-0">
+                <div
+                  className="text-[10px] tracking-[0.08em] uppercase"
+                  style={{ color: "var(--accent)" }}
+                >
+                  Curate
+                </div>
                 <div className="truncate text-sm" style={{ color: "var(--fg1)" }}>
                   {curating.title}
                 </div>
@@ -768,6 +786,21 @@ export default function BuilderSidebar({
           >
             <IconGlobe size={15} />
             Spawn to Hyperfy
+          </button>
+          <button
+            onClick={onGuide}
+            disabled={!hasContent}
+            className={`
+              flex h-9 w-full items-center justify-center gap-2
+              rounded-[var(--radius)] text-sm transition-transform
+              active:scale-[0.98]
+              disabled:opacity-30
+            `}
+            style={{ background: "var(--muted)", color: "var(--fg1)" }}
+            title="Send the AI museum guide into the exhibition — pick an Art DeCC0, a Soulweaver soul, or upload a SOUL.md"
+          >
+            <IconBot size={15} />
+            Museum guide
           </button>
           <button
             onClick={onExport}

@@ -119,6 +119,16 @@ One Hyperfy container per world (own SQLite + assets + ADMIN_CODE).
 deploy/backup guide); `apps/hyperfy/docker-compose.worlds.yml` hosts many —
 isolate each curator's world, point subdomains at the ports.
 
+## The museum guide
+
+Spawn with `--guide` (CLI) or the dialog's **Museum guide** toggle and the
+exhibition arrives with an agentic VRM avatar visitors hold **E** to talk to
+— per-player Q&A about the rooms, architects, artists, and works, answered by
+the public `/v1/guide/*` endpoints (exhibition context + Cortex + optional
+Art DeCC0 persona). Full endpoint reference, including registering contexts
+and asking questions from your own agent:
+`/skills/museum-guide/SKILL.md` (Cortex-installable).
+
 ## Teach your agent Hyperfy
 
 `apps/hyperfy/harvest-hyperfy-docs.mjs` ingests the official Hyperfy docs
