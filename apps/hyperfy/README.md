@@ -82,14 +82,15 @@ spawns an independent copy.) Every spawn ends with a verification pass that
 reconnects and confirms the world really has every room — a wrong admin key
 fails loudly, not silently.
 
-## The museum guide (agentic VRM avatar)
+## The exhibit curator (agentic VRM avatar)
 
-Spawn with `--guide` (or tick **Museum guide** in the browser dialog) and the
-exhibition arrives with a resident: a VRM avatar visitors **hold E** to talk
-to. Click a suggested question, or just type yours in the world chat while
-standing near it — every conversation is **private and per-player**
-(`app.sendTo`), with the running history riding along so the guide reacts to
-the dialogue, not just the last question.
+Spawn with `--guide` (or tick **Exhibit curator** in the browser dialog) and
+the exhibition arrives with a resident: a VRM avatar (Oblak by default) that
+greets visitors and answers **free-text questions typed into the world chat**
+while standing near it (hold **E** to engage + start it following). Every
+conversation is **private and per-player** (`app.sendTo`), with the running
+history riding along so the curator reacts to the dialogue, not just the last
+question; a minimal bubble over its head shows only a welcome/loader line.
 
 ```
 visitor ──E / chat──▶ guide app (server script) ──▶ MOCA API /v1/guide/ask

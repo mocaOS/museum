@@ -98,16 +98,18 @@ source of truth.
   `GET /v1/guide/exhibitions/:id[/suggestions]` serve it; `POST /v1/guide/ask`
   answers in-world visitor questions by combining that context with Cortex and
   an optional Art DeCC0 `moltbot` persona; Cortex-generated question starters
-  fill in asynchronously after registration). **Cortex is resilient by design:**
-  `/v1/guide/ask` sends `use_graph: true` explicitly, retries one *fast*
+  fill in asynchronously after registration). **Fast + resilient by design:**
+  `/v1/guide/ask` uses the lean chat path (`use_agentic: false`, `use_graph:
+  false`, `top_k: 4`) — visitors want a quick reply, not deep research (the
+  latency floor is Cortex's answer-generation LLM). It retries one *fast*
   transient Cortex 5xx (`askCortexResilient`), and on any failure (5xx, timeout,
   or `CORTEX_*` unset) degrades to an exhibition-context-only answer marked
   `fallback: true` instead of erroring — so the in-world guide never goes dark.
   Failures are logged (`[moca-guide]` warnings: once at boot if `CORTEX_*` is
   missing, throttled on upstream errors), so a guide that only gives generic
   answers is diagnosable from the Directus logs. **Requires `CORTEX_API_URL` +
-  `CORTEX_API_KEY` on this Directus deployment** (see Env below) — they are what
-  hook the knowledge graph in; without them every answer is a `fallback`.
+  `CORTEX_API_KEY` on this Directus deployment** (see Env below) to reach the
+  Library at all; without them every answer is a `fallback`.
   **Voice (optional):** when `VENICE_API_KEY` is set, `/v1/guide/ask`
   synthesizes the answer with Venice TTS (`tts-qwen3-1-7b`), caches the mp3, and
   returns an `audioUrl` the in-world guide plays; served at the public

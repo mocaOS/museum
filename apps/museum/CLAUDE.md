@@ -131,8 +131,9 @@ no accounts. Code lives in `src/components/museum/three/`:
   nodes) and letterbox into their slot frames like the builder; generated
   scripts divide meter sizes by `rootScale`; legacy scale-1 entities are
   healed on re-spawn. **In-world slot editor:** with the room's "Slot
-  editing" prop on, builders hold E at a work and nudge/resize it; the
-  server validates rank, persists to world `storage.json` keyed by the
+  editing" prop on, **scene admins** (not every build-rights player) hold E at a
+  work and nudge/resize it; the server enforces `player.admin` on every
+  adjustment, persists to world `storage.json` keyed by the
   deterministic entity id (survives restarts, rebuilds, re-spawns) and
   rebroadcasts (`moca:adjust` / `moca:adjust:init` app events).
   **Museum guide:** the dialog's guide toggle (default on) spawns an agentic
@@ -143,15 +144,18 @@ no accounts. Code lives in `src/components/museum/three/`:
   `decc0.vrm` — Oblak, the #2875 body), and spawns the generated
   `guide-script.ts` app. The
   guide **spawns beside the entry-nearest room and follows a visitor once they
-  interact**; the script renders the VRM as a **script-owned `avatar` node**
-  (blueprint `model:null`, `props.avatarUrl`) so it can drive the engine's
-  built-in locomotion/gesture emotes (`asset://mp-idle|mp-walk|emote-talk|
-  emote-float.glb`) — it **walks**/**flies**/**falls** mirroring the followed
-  visitor and **gestures** while answering. The **conversation runs in the
-  world chat** (greeting, the 3 artwork-led starters, and the answer — private
-  per visitor via local `world.chat(..., false)`); the above-head bubble is a
-  **minimal loader** that only shows the "consulting the library…" state while
-  waiting.
+  interact** (with **gravity** — it falls to the floor with you, never hovers).
+  The blueprint keeps the `.vrm` as its `model`; the script grabs the engine's
+  avatar node via **`app.get('avatar')`** and drives built-in emotes
+  (`asset://mp-idle|mp-walk|emote-talk|emote-float|emote-fall.glb`) — it
+  **walks/flies/falls** mirroring the followed visitor and **gestures** while
+  answering. (NB: a null blueprint `model` crashes the engine's `App.build` →
+  red cube + a bricked world tick loop, so the model is always the vrm.) The
+  **conversation runs entirely in the world chat** — a dynamic "Welcome to
+  <exhibition> — how can I help you?" greeting and free-text Q&A (no preset
+  options), private per visitor via local `world.chat(..., false)`; the
+  above-head bubble is a **minimal always-visible label** (welcome ↔ a
+  "consulting the library…" loader while a question is in flight).
   Per-player private answers are fetched server-side from `POST /v1/guide/ask`
   (exhibition context + Cortex + optional Art DeCC0 persona via the dialog's
   "DeCC0 persona" token id, **default 2875 = Oblak**). When the Directus has a

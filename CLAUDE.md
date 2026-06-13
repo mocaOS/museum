@@ -120,7 +120,7 @@ sync). Each room = one Hyperfy app — artworks hang on baked slot anchors
 from the export (works for un_MUSEUM `Auto_NNN` slots that never exist as
 GLB nodes), curated images upload into the world as assets, `app.configure`
 exposes room-level refinement props, and an embedded in-world slot editor
-(hold E at a work) lets builders fine-place pieces with rank-checked,
+(hold E at a work) lets **scene admins** fine-place pieces with admin-gated,
 world-storage-persisted adjustments. Spawns are idempotent (deterministic
 ids from the exhibition id → re-spawning updates rooms in place, preserving
 ALL in-world refinements) and end with a verification pass. **The museum

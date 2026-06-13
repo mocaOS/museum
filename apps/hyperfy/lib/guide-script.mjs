@@ -2,11 +2,12 @@
  * Generates the Hyperfy app script for the MOCA museum guide — a walking,
  * talking VRM avatar that visitors talk to about the exhibition they're in.
  *
- * The script owns the guide's body as an `avatar` node (the blueprint model is
- * null), so it can drive locomotion + gesture emotes as the guide follows the
- * visitor. A single billboarded speech bubble above the head greets the visitor,
- * shows clickable artwork questions, types out answers, and (when enabled) the
- * guide speaks them aloud via an audio node fed by the guide API's TTS.
+ * The blueprint keeps the `.vrm` as its model; the script grabs the engine's
+ * avatar node (`app.get('avatar')`) and drives locomotion + gesture emotes as
+ * the guide follows the visitor (with gravity). A minimal billboarded bubble
+ * above the head shows a welcome label / loader; the whole conversation —
+ * greeting and free-text Q&A — runs in the WORLD CHAT, and (when enabled) the
+ * guide speaks its answers aloud via an audio node fed by the guide API's TTS.
  *
  * Answers are AGENTIC and per-player: the SERVER side of the script calls
  * the MOCA API (`POST /v1/guide/ask`) — which combines the registered
@@ -502,7 +503,7 @@ if (world.isClient) {
     speakAnswer(au)
   })
 
-  // ---- per-frame: locomotion emote, typewriter reveal, thinking dots, facing
+  // ---- per-frame: locomotion emote, loader/thinking dots, facing -----------
   let sinceCheck = 0
   let greeted = false
   let pX = app.position.x, pY = app.position.y, pZ = app.position.z
