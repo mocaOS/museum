@@ -1581,7 +1581,7 @@
         "operationId": "guideAsk",
         "summary": "Ask the museum guide",
         "security": [],
-        "description": "Answer a visitor\u2019s question about a registered exhibition. Combines the exhibition context with the museum\u2019s Cortex Library (RAG with citations) and answers in persona \u2014 Omnimorph by default, or any Art DeCC0 via `decc0`, a Soulweaver soul via `soulRef`, or a curator-supplied SOUL.md via `soul` (first match wins: soul > soulRef > decc0). Pass the running conversation in `history` so the guide reacts to the dialogue, not just the last question. Falls back to a context-only answer (`fallback: true`) when the Library is unreachable. Rate-limited per IP (~20/min).",
+        "description": "Answer a visitor\u2019s question about a registered exhibition. Combines the exhibition context with the museum\u2019s Cortex Library (RAG with citations) and answers in persona \u2014 Oblak (DeCC0 #2875) by default, or any Art DeCC0 via `decc0`, a Soulweaver soul via `soulRef`, or a curator-supplied SOUL.md via `soul` (first match wins: soul > soulRef > decc0). Pass the running conversation in `history` so the guide reacts to the dialogue, not just the last question. Falls back to a context-only answer (`fallback: true`) when the Library is unreachable. Rate-limited per IP (~20/min).",
         "requestBody": {
           "required": true,
           "content": {
@@ -2572,7 +2572,7 @@
           },
           "persona": {
             "type": "string",
-            "description": "Name of the persona that answered (Omnimorph or a DeCC0)."
+            "description": "Name of the persona that answered (Oblak or another DeCC0)."
           },
           "suggestions": {
             "type": "array",

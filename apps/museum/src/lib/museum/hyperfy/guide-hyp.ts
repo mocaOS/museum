@@ -149,8 +149,9 @@ export async function buildGuideHyp(
     url: "https://museumofcryptoart.com/rooms/world",
     desc: `${guideName} — the AI guide of "${exhibition.name}". Hold E to talk.`,
     image: null,
-    // The script renders the bundled .vrm as an animatable avatar node (props.avatarUrl).
-    model: null,
+    // The bundled .vrm renders as the app's avatar node; the script grabs it
+    // (app.get('avatar')) to animate it. (model:null would crash App.build.)
+    model: avatarAssetUrl,
     script: scriptAssetUrl,
     props: {
       guideName,

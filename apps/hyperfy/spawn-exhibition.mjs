@@ -55,7 +55,7 @@
  *                             the guide answers from — and drops a talking
  *                             VRM avatar into the world (hold E to chat).
  *   --guide-name <name>       the guide's display name (default "Oblak")
- *   --guide-avatar <path|url> .vrm to embody (default: the museum's Omnimorph)
+ *   --guide-avatar <path|url> .vrm to embody (default: Oblak, the #2875 guide body)
  *   --decc0 <token id>        Art DeCC0 persona the guide adopts (default
  *                             2875 = Oblak; souls come from the MOCA Codex
  *                             via /v1/decc0s)
@@ -117,15 +117,15 @@ const GUIDE = flag("guide");
 const GUIDE_NAME = opt("guide-name", "Oblak");
 const GUIDE_SPEAK = !flag("no-speak");
 const GUIDE_VOICE = opt("voice", "");
-// Default body: the in-repo Omnimorph VRM when running from the monorepo,
-// otherwise the museum-hosted copy.
-const LOCAL_OMNIMORPH = new URL("../museum/public/avatars/omnimorph-3321.vrm", import.meta.url).pathname;
+// Default body: the in-repo DeCC0 guide VRM (Oblak, #2875) when running from
+// the monorepo, otherwise the museum-hosted copy.
+const LOCAL_AVATAR = new URL("../museum/public/avatars/decc0.vrm", import.meta.url).pathname;
 const GUIDE_AVATAR = opt(
   "guide-avatar",
   process.env.MOCA_GUIDE_AVATAR
-  || (existsSync(LOCAL_OMNIMORPH)
-    ? LOCAL_OMNIMORPH
-    : "https://museumofcryptoart.com/avatars/omnimorph-3321.vrm"),
+  || (existsSync(LOCAL_AVATAR)
+    ? LOCAL_AVATAR
+    : "https://museumofcryptoart.com/avatars/decc0.vrm"),
 );
 const DECC0_ID = Number(opt("decc0", "2875")) || 0;
 const MOCA_API = (opt("api", process.env.MOCA_API_URL || "https://api.moca.qwellco.de")).replace(/\/+$/, "");
@@ -525,8 +525,9 @@ if (GUIDE) {
         version: 0,
         ...meta,
         image: null,
-        // The script renders the VRM as an animatable avatar node (props.avatarUrl).
-        model: null,
+        // The .vrm renders as the app's avatar node; the script grabs it
+        // (app.get('avatar')) to animate it. (model:null would crash App.build.)
+        model: avatarUrl,
         script: guideScriptUrl,
         props,
         preload: false,
@@ -539,12 +540,12 @@ if (GUIDE) {
       });
       stats.created++;
       console.log("  guide blueprint created");
-    } else if (existing.script !== guideScriptUrl || existing.props?.avatarUrl !== avatarUrl) {
+    } else if (existing.model !== avatarUrl || existing.script !== guideScriptUrl) {
       session.send("blueprintModified", {
         id: bpId,
         version: (existing.version ?? 0) + 1,
         ...meta,
-        model: null,
+        model: avatarUrl,
         script: guideScriptUrl,
         props: { ...existing.props, ...props },
       });

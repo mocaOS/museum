@@ -305,41 +305,82 @@ export function registerGuideRoutes(
   const allowAsk = createIpLimiter(ASK_PER_MIN);
 
   // ---- text-to-speech (Venice) -----------------------------------------------
-  // The guide speaks its answers in-world. We synthesize once per (answer,voice)
-  // and serve the bytes at GET /guide/tts/:id.mp3 — the in-world audio node
-  // loads that URL. Cached in-memory with a short TTL; no Venice key → silently
-  // text-only.
-  const TTS_TTL_MS = 10 * 60_000;
+  // The guide speaks its answers in-world. Synthesis is LAZY and decoupled from
+  // the text reply: /guide/ask registers the answer text under a content-hash id
+  // and returns the audio URL immediately (Venice can take 10-40s — we must NOT
+  // block the text reply on it). The in-world audio node then GETs
+  // /guide/tts/:id.mp3, which synthesizes on first hit and caches the bytes.
+  // No Venice key → no audioUrl, silently text-only.
+  const TTS_TTL_MS = 15 * 60_000;
   const TTS_MAX_ENTRIES = 80;
   const ttsCache = new Map<string, { at: number; bytes: Buffer; ct: string }>();
+  const ttsPending = new Map<string, { at: number; text: string; voice: string }>();
+  const ttsInflight = new Map<string, Promise<{ bytes: Buffer; ct: string } | null>>();
 
-  function pruneTts(): void {
+  function prune<T extends { at: number }>(map: Map<string, T>): void {
     const now = Date.now();
-    for (const [k, v] of ttsCache) if (now - v.at > TTS_TTL_MS) ttsCache.delete(k);
-    while (ttsCache.size > TTS_MAX_ENTRIES) {
-      const oldest = ttsCache.keys().next().value;
+    for (const [k, v] of map) if (now - v.at > TTS_TTL_MS) map.delete(k);
+    while (map.size > TTS_MAX_ENTRIES) {
+      const oldest = map.keys().next().value;
       if (oldest === undefined) break;
-      ttsCache.delete(oldest);
+      map.delete(oldest);
     }
   }
 
   /**
-   * Synthesize `answer` with the given voice, cache it, and return an absolute
-   * audio URL the in-world guide can play — or null when TTS is unavailable.
+   * Register an answer for speech and return the audio URL the in-world guide
+   * plays — WITHOUT synthesizing yet (that happens lazily on the first GET, so
+   * the text reply is never blocked on TTS). Null when TTS is unavailable.
    */
-  async function synthVoice(answer: string, voice: string): Promise<string | null> {
-    if (!venice?.configured || !publicUrl) return null;
-    const id = hash32(`${voice}:${answer}`).toString(36);
-    if (!ttsCache.has(id)) {
-      const { status, bytes, contentType } = await venice.synthesize(answer, voice);
-      if (status !== 200 || !bytes) {
-        warnUpstream(`Venice TTS failed (status ${status}) — answer stays text-only.`);
-        return null;
-      }
-      pruneTts();
-      ttsCache.set(id, { at: Date.now(), bytes, ct: contentType || "audio/mpeg" });
+  // Cap spoken text so Venice synth stays fast/bounded (a 1500-char answer can
+  // take 40-60s — long enough that the in-world audio loader may give up). The
+  // full answer is in the chat; the voice speaks a concise lead, cut at a
+  // sentence boundary.
+  const TTS_MAX_CHARS = 800;
+  function spokenLead(answer: string): string {
+    const text = String(answer || "").replace(/\s+/g, " ").trim();
+    if (text.length <= TTS_MAX_CHARS) return text;
+    const cut = text.slice(0, TTS_MAX_CHARS);
+    const end = Math.max(cut.lastIndexOf(". "), cut.lastIndexOf("! "), cut.lastIndexOf("? "));
+    return (end > 400 ? cut.slice(0, end + 1) : cut).trim();
+  }
+
+  function prepareVoice(answer: string, voice: string): string | null {
+    if (!venice?.configured) return null;
+    const text = spokenLead(answer);
+    if (!text) return null;
+    const id = hash32(`${voice}:${text}`).toString(36);
+    if (!ttsCache.has(id) && !ttsPending.has(id)) {
+      prune(ttsPending);
+      ttsPending.set(id, { at: Date.now(), text, voice });
     }
-    return `${publicUrl}/v1/guide/tts/${id}.mp3`;
+    // Absolute when PUBLIC_URL is set; otherwise a relative path the in-world
+    // guide resolves against its own API base — so TTS works even if PUBLIC_URL
+    // isn't configured on the Directus deployment.
+    return `${publicUrl || ""}/v1/guide/tts/${id}.mp3`;
+  }
+
+  /** Synthesize a pending id (deduped across concurrent GETs); cache + return. */
+  async function synthPending(id: string): Promise<{ bytes: Buffer; ct: string } | null> {
+    const cached = ttsCache.get(id);
+    if (cached) return { bytes: cached.bytes, ct: cached.ct };
+    const pending = ttsPending.get(id);
+    if (!pending || !venice?.configured) return null;
+    if (!ttsInflight.has(id)) {
+      ttsInflight.set(id, (async () => {
+        const { status, bytes, contentType } = await venice!.synthesize(pending.text, pending.voice);
+        if (status !== 200 || !bytes) {
+          warnUpstream(`Venice TTS failed (status ${status}) — guide stays text-only for this turn.`);
+          return null;
+        }
+        prune(ttsCache);
+        const entry = { at: Date.now(), bytes, ct: contentType || "audio/mpeg" };
+        ttsCache.set(id, entry);
+        ttsPending.delete(id);
+        return { bytes: entry.bytes, ct: entry.ct };
+      })().finally(() => ttsInflight.delete(id)));
+    }
+    return ttsInflight.get(id)!;
   }
 
   // ---- context store: guide_exhibitions collection + in-memory fallback ----
@@ -820,11 +861,13 @@ export function registerGuideRoutes(
 
       const ask: CortexAskBody = {
         question,
-        top_k: 5,
-        // The guide is a knowledge-graph experience: ask Cortex to blend graph
-        // traversal into retrieval explicitly, not just rely on the upstream
-        // default (so it can't silently change out from under the guide).
-        use_graph: true,
+        // Visitors want a FAST reply, not deep research — use the lean chat
+        // path: never agentic, no multi-hop graph traversal, a small top_k.
+        // (The latency floor is Cortex's answer-generation LLM, ~10-15s, which
+        // the guide can't cut from here; in-world can't stream the tokens.)
+        top_k: 4,
+        use_graph: false,
+        use_agentic: false,
         conversation_history: [
           { role: "user", content: contextBlock(ctx, persona) },
           { role: "assistant", content: `Understood — I am ${persona.name}, guiding visitors through “${ctx.name}”.` },
@@ -863,11 +906,12 @@ export function registerGuideRoutes(
         .replace(/\s*\[src_[^\]]*\]/g, "")
         .trim();
 
-      // Speak it (unless the caller opted out) — synth once, hand back a URL the
-      // in-world guide's audio node plays. Best-effort: never blocks the answer.
+      // Speak it (unless the caller opted out) — hand back a URL the in-world
+      // audio node plays; synthesis is lazy (on first GET) so the text reply is
+      // never blocked on Venice.
       const speak = body.speak !== false;
       const voice = clampText(body.voice, 40) || venice?.defaultVoice || "";
-      const audioUrl = speak ? await synthVoice(answer, voice).catch(() => null) : null;
+      const audioUrl = speak ? prepareVoice(answer, voice) : null;
 
       res.json({
         data: {
@@ -896,14 +940,19 @@ export function registerGuideRoutes(
 
   // Serve a synthesized answer's audio (public, keyless like the rest of the
   // guide). The id is minted by /guide/ask; bytes live in the short-TTL cache.
-  router.get("/guide/tts/:file", (req: any, res: any) => {
+  router.get("/guide/tts/:file", async (req: any, res: any) => {
     const id = String(req.params.file || "").replace(/\.mp3$/i, "").replace(/[^\w]/g, "").slice(0, 16);
-    const hit = id && ttsCache.get(id);
-    if (!hit) {
+    let audio: { bytes: Buffer; ct: string } | null = null;
+    try {
+      audio = id ? await synthPending(id) : null;
+    } catch (e: any) {
+      return errorJson(res, 502, e?.message || "TTS synthesis failed", "UPSTREAM");
+    }
+    if (!audio) {
       return errorJson(res, 404, "Audio expired or not found — ask the guide again.", "NOT_FOUND");
     }
-    res.set("Content-Type", hit.ct || "audio/mpeg");
-    res.set("Cache-Control", "public, max-age=300");
-    res.send(hit.bytes);
+    res.set("Content-Type", audio.ct || "audio/mpeg");
+    res.set("Cache-Control", "public, max-age=900");
+    res.send(audio.bytes);
   });
 }

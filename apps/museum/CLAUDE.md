@@ -140,16 +140,18 @@ no accounts. Code lives in `src/components/museum/three/`:
   context with the MOCA API (`POST /v1/guide/exhibitions`, the explicit
   opt-in moment where curation data reaches MOCA servers), uploads the
   chosen `.vrm` (catalog `public/avatars/avatars.json`, default
-  `omnimorph-3321.vrm`), and spawns the generated `guide-script.ts` app. The
+  `decc0.vrm` — Oblak, the #2875 body), and spawns the generated
+  `guide-script.ts` app. The
   guide **spawns beside the entry-nearest room and follows a visitor once they
   interact**; the script renders the VRM as a **script-owned `avatar` node**
   (blueprint `model:null`, `props.avatarUrl`) so it can drive the engine's
   built-in locomotion/gesture emotes (`asset://mp-idle|mp-walk|emote-talk|
-  emote-float.glb`) — it **walks** while following and **gestures** while
-  answering. A single billboarded **speech bubble above the head** (replaces
-  the old panel) greets with the exhibition title, shows the 3 artwork-led
-  suggested questions, animates a "consulting the library…" thinking state,
-  then **types out** the answer; free text via world chat still works.
+  emote-float.glb`) — it **walks**/**flies**/**falls** mirroring the followed
+  visitor and **gestures** while answering. The **conversation runs in the
+  world chat** (greeting, the 3 artwork-led starters, and the answer — private
+  per visitor via local `world.chat(..., false)`); the above-head bubble is a
+  **minimal loader** that only shows the "consulting the library…" state while
+  waiting.
   Per-player private answers are fetched server-side from `POST /v1/guide/ask`
   (exhibition context + Cortex + optional Art DeCC0 persona via the dialog's
   "DeCC0 persona" token id, **default 2875 = Oblak**). When the Directus has a

@@ -129,7 +129,7 @@ export async function spawnExhibition(
   if (guide) {
     rooms.push({
       uid: GUIDE_UID,
-      title: `Museum guide “${guide.name || "Tsahafi"}”`,
+      title: `Exhibit curator “${guide.name || "Oblak"}”`,
       status: "connecting" as RoomSpawnStatus,
     });
   }
@@ -546,8 +546,9 @@ async function pushGuide(
       version: 0,
       ...meta,
       image: null,
-      // The script renders the VRM as an animatable avatar node — see props.avatarUrl.
-      model: null,
+      // The .vrm renders as the app's avatar node; the script grabs it
+      // (app.get('avatar')) to animate it. (model:null would crash App.build.)
+      model: avatarUrl,
       script: guideScriptUrl,
       props,
       preload: false,
@@ -559,15 +560,12 @@ async function pushGuide(
       disabled: false,
     });
     status = "created";
-  } else if (
-    existing.script !== guideScriptUrl ||
-    (existing.props as { avatarUrl?: string })?.avatarUrl !== avatarUrl
-  ) {
+  } else if (existing.model !== avatarUrl || existing.script !== guideScriptUrl) {
     session.send("blueprintModified", {
       id: bpId,
       version: (existing.version ?? 0) + 1,
       ...meta,
-      model: null,
+      model: avatarUrl,
       script: guideScriptUrl,
       props: { ...(existing.props as object), ...props },
     });

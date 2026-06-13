@@ -125,7 +125,7 @@ world-storage-persisted adjustments. Spawns are idempotent (deterministic
 ids from the exhibition id → re-spawning updates rooms in place, preserving
 ALL in-world refinements) and end with a verification pass. **The museum
 guide** (`--guide` / the dialog's Museum guide toggle): an agentic VRM avatar
-(default `omnimorph-3321.vrm`, catalog at `apps/museum/public/avatars/`) that
+(default `decc0.vrm` — Oblak, Art DeCC0 #2875; catalog at `apps/museum/public/avatars/`) that
 visitors hold E to talk to — per-player private Q&A about the exhibition,
 served by the MOCA API's public `/v1/guide/*` endpoints (context registered at
 spawn, enriched from Directus, answered via Cortex + optional Art DeCC0

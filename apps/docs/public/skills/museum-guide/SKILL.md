@@ -142,7 +142,7 @@ Envelope everywhere: `{ "data": …, "meta"? }` / `{ "errors": [{ "message",
   Hyperfy world in build mode. Its exhibition id / DeCC0 persona / API are
   inspector props, so one file can be retargeted to any registered
   exhibition.
-- Default avatar is **Omnimorph** (`museumofcryptoart.com/avatars/omnimorph-3321.vrm`);
+- Default avatar is **Oblak**, Art DeCC0 #2875 (`museumofcryptoart.com/avatars/decc0.vrm`);
   the catalog at `/avatars/avatars.json` grows as DeCC0 VRMs are produced.
 - Spawning a guide is the curator's explicit opt-in to publish the
   exhibition context to the MOCA API — exports without a guide never leave

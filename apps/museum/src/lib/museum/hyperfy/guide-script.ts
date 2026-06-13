@@ -149,33 +149,56 @@ const OFFLINE = 'My deeper knowledge is offline right now \\u2014 walk the rooms
 // transform replication needed; they agree because the input is the same.
 const FOLLOW_STANDOFF = 1.8
 const FOLLOW_LERP = 2.6
+const GRAVITY = 24 // m/s² — the curator falls like a player, never hovers
+let guideVy = 0
 function moveGuide(dt, followId, home) {
   const A = app.position
-  if (followId) {
-    let p = null
-    try { p = world.getPlayer(followId) } catch (e) {}
-    if (p && p.position) {
-      const dx = p.position.x - A.x
-      const dz = p.position.z - A.z
-      const dist = Math.sqrt(dx * dx + dz * dz) || 0.0001
-      let tx = A.x
-      let tz = A.z
-      if (dist > FOLLOW_STANDOFF) {
-        tx = p.position.x - (dx / dist) * FOLLOW_STANDOFF
-        tz = p.position.z - (dz / dist) * FOLLOW_STANDOFF
-      }
-      const k = Math.min(1, FOLLOW_LERP * dt)
-      app.position.set(A.x + (tx - A.x) * k, A.y + (p.position.y - A.y) * k, A.z + (tz - A.z) * k)
-      const yaw = Math.atan2(p.position.x - app.position.x, p.position.z - app.position.z) + Math.PI
-      app.quaternion.set(0, Math.sin(yaw / 2), 0, Math.cos(yaw / 2))
-      return true
+  let target = null
+  if (followId) { try { target = world.getPlayer(followId) } catch (e) {} }
+
+  // Resolve where the curator wants to be: a standoff behind the followed
+  // player, or its home post. tx/tz horizontal, ty the level to settle at.
+  let tx = A.x, tz = A.z, ty = A.y
+  const following = !!(target && target.position)
+  if (following) {
+    const dx = target.position.x - A.x
+    const dz = target.position.z - A.z
+    const dist = Math.sqrt(dx * dx + dz * dz) || 0.0001
+    if (dist > FOLLOW_STANDOFF) {
+      tx = target.position.x - (dx / dist) * FOLLOW_STANDOFF
+      tz = target.position.z - (dz / dist) * FOLLOW_STANDOFF
     }
+    ty = target.position.y
+  } else if (home) {
+    tx = home.x; tz = home.z; ty = home.y
+  } else {
+    return false
   }
-  if (home) {
-    const k = Math.min(1, FOLLOW_LERP * dt)
-    app.position.set(A.x + (home.x - A.x) * k, A.y + (home.y - A.y) * k, A.z + (home.z - A.z) * k)
+
+  // Horizontal: smooth follow.
+  const k = Math.min(1, FOLLOW_LERP * dt)
+  const nx = A.x + (tx - A.x) * k
+  const nz = A.z + (tz - A.z) * k
+
+  // Vertical: gravity. When the target/ground is BELOW, fall (accelerating)
+  // instead of slow-lerping — so the curator drops to the floor with you and
+  // doesn't keep walking in mid-air. When above (you flew up), rise smoothly.
+  let ny
+  if (A.y > ty + 0.03) {
+    guideVy = Math.max(guideVy - GRAVITY * dt, -40)
+    ny = A.y + guideVy * dt
+    if (ny <= ty) { ny = ty; guideVy = 0 }
+  } else {
+    guideVy = 0
+    ny = A.y + (ty - A.y) * k
   }
-  return false
+  app.position.set(nx, ny, nz)
+
+  if (following) {
+    const yaw = Math.atan2(target.position.x - app.position.x, target.position.z - app.position.z) + Math.PI
+    app.quaternion.set(0, Math.sin(yaw / 2), 0, Math.cos(yaw / 2))
+  }
+  return following
 }
 
 // ---------------------------------------------------------------- server ----
@@ -342,31 +365,31 @@ if (world.isClient) {
   let followId = (app.state && app.state.follow) || null
   app.on('moca:guide:follow', (d) => { followId = d && d.id != null ? d.id : null })
 
-  // ---- the body: a script-owned avatar we can animate ----------------------
-  // The blueprint model is null, so the script owns the body via an avatar node
-  // and drives the engine's built-in emote clips for locomotion + gesture.
+  // ---- the body: the blueprint .vrm renders as an 'avatar' node ------------
+  // Hyperfy loads a .vrm model as a group whose child is an avatar node with
+  // id 'avatar' (App.build → glb.toNodes()). We grab that node and drive the
+  // engine's built-in emote clips for locomotion + gesture. (Setting the
+  // blueprint model to null instead would crash App.build — it assumes a model.)
   const EMOTE = {
     idle: 'asset://mp-idle.glb',
     walk: 'asset://mp-walk.glb?s=1.5',
     talk: 'asset://emote-talk.glb',
     float: 'asset://emote-float.glb',
+    fall: 'asset://emote-fall.glb',
   }
   let body = null
+  function avatarNode() {
+    if (!body) { try { body = app.get('avatar') } catch (e) {} }
+    return body
+  }
   let curEmote = null
   function setEmote(url) {
-    if (!body || url === curEmote) return
+    const b = avatarNode()
+    if (!b || url === curEmote) return
     curEmote = url
-    try { body.emote = url } catch (e) {}
+    try { b.emote = url } catch (e) {}
   }
-  if (AVATAR_URL) {
-    try {
-      body = app.create('avatar', { src: AVATAR_URL })
-      app.add(body)
-      setEmote(EMOTE.idle)
-    } catch (e) {
-      console.error('[moca-guide] avatar failed', e && e.message)
-    }
-  }
+  setEmote(EMOTE.idle)
 
   try {
     const tag = app.create('nametag', { label: NAME })
@@ -394,116 +417,71 @@ if (world.isClient) {
     }
   }
 
-  // ---- conversation state ---------------------------------------------------
-  let mode = 'idle'       // idle | thinking | talking
+  // ---- conversation lives in the world chat; the bubble shows only loaders --
+  let mode = 'idle'       // idle | thinking
   let thinkT = 0
-  let fullAnswer = ''
-  let shownChars = 0
-  let bodyText = null
-  let suggestViews = []
-  let currentSuggestions = BAKED_SUGGESTIONS
-  const MAX_BUBBLE_CHARS = 1100
 
   function thinkingLine() {
     const dots = '.'.repeat(1 + (Math.floor(thinkT * 2) % 3))
     return NAME + ' is consulting the library' + dots
   }
-  function setBody(s) {
-    if (!bodyText) return
-    try {
-      const v = String(s || '')
-      bodyText.value = v.length > MAX_BUBBLE_CHARS ? v.slice(0, MAX_BUBBLE_CHARS - 1) + '\\u2026' : v
-    } catch (e) {}
+  // All talk goes to THIS client's chat only (false = local), so each visitor's
+  // conversation stays private — same per-player model as before.
+  function chatSay(body) {
+    try { world.chat({ from: NAME, body: body }, false) } catch (e) {}
   }
-  function setSuggestions(list) {
-    currentSuggestions = (list && list.length ? list : BAKED_SUGGESTIONS).slice(0, 3)
-    suggestViews.forEach((b, i) => {
-      const q = currentSuggestions[i]
-      try {
-        b.view.visible = !!q
-        if (q) b.text.value = (i + 1) + '.  ' + q
-      } catch (e) {}
+  function postAnswer(text, persona) {
+    const chunks = String(text || '').match(/[\\s\\S]{1,300}/g) || []
+    chunks.slice(0, 6).forEach((c) => {
+      try { world.chat({ from: persona || NAME, body: c }, false) } catch (e) {}
     })
   }
-  function ask(text) {
-    if (!text) return
-    app.send('moca:guide:ask', { text })
-    mode = 'thinking'; thinkT = 0; fullAnswer = ''; shownChars = 0
-    setBody(thinkingLine())
+  function welcome() {
+    chatSay('Welcome to \\u201c' + EXHIBITION.name + '\\u201d! How can I help you? Just type your message into the chat.')
   }
 
-  // ---- the speech bubble above the head (this player's private view) --------
-  function buildBubble() {
+  // ---- the bubble above the head: a welcome label that becomes the loader ---
+  // Always shown (so it's never empty). Idle → "Welcome to …"; while a question
+  // is in flight → the consulting line; back to the welcome once the answer is
+  // posted to chat. We swap the TEXT (don't toggle visibility — some clients
+  // don't reliably hide a ui node, which left the loader stuck).
+  let statusText = null
+  const IDLE_LABEL = 'Welcome to \\u201c' + EXHIBITION.name + '\\u201d'
+  function showStatus(s) {
+    if (!statusText) return
+    try { statusText.value = s || IDLE_LABEL } catch (e) {}
+  }
+  function buildStatus() {
     try {
       const bubble = app.create('ui', {
         space: 'world',
-        width: 520,
-        height: 380,
-        backgroundColor: 'rgba(8, 8, 8, 0.92)',
-        borderRadius: 18,
-        padding: 18,
+        width: 460,
+        height: 76,
+        backgroundColor: 'rgba(8, 8, 8, 0.9)',
+        borderRadius: 14,
+        padding: 14,
         flexDirection: 'column',
-        gap: 9,
+        justifyContent: 'center',
         billboard: 'y',
         doubleside: true,
+        pointerEvents: false,
       })
-      bubble.size = 0.0038
-      bubble.position.set(0, 2.6, 0)
-
-      const header = app.create('uitext', {
-        value: NAME + ' \\u00b7 \\u201c' + EXHIBITION.name + '\\u201d',
-        fontSize: 16,
-        color: '#ffffff',
-        fontWeight: 'bold',
-        lineHeight: 1.2,
-      })
-      bubble.add(header)
-
-      bodyText = app.create('uitext', {
-        value: GREETING,
-        fontSize: 13,
+      bubble.size = 0.0036
+      bubble.position.set(0, 2.5, 0)
+      statusText = app.create('uitext', {
+        value: IDLE_LABEL,
+        fontSize: 14,
         color: '#e6e6e6',
-        lineHeight: 1.38,
+        textAlign: 'center',
+        lineHeight: 1.3,
       })
-      bubble.add(bodyText)
-
-      suggestViews = []
-      for (let i = 0; i < 3; i++) {
-        const view = app.create('uiview', {
-          backgroundColor: 'rgba(255, 255, 255, 0.08)',
-          borderRadius: 10,
-          padding: 9,
-        })
-        const text = app.create('uitext', { value: ' ', fontSize: 12, color: '#ffffff', lineHeight: 1.25 })
-        view.add(text)
-        view.cursor = 'pointer'
-        ;(function (idx) {
-          view.onPointerDown = () => {
-            const q = currentSuggestions[idx]
-            if (q) ask(q)
-          }
-          view.onPointerEnter = () => { try { view.backgroundColor = 'rgba(255, 255, 255, 0.16)' } catch (e) {} }
-          view.onPointerLeave = () => { try { view.backgroundColor = 'rgba(255, 255, 255, 0.08)' } catch (e) {} }
-        })(i)
-        bubble.add(view)
-        suggestViews.push({ view, text })
-      }
-
-      const hint = app.create('uitext', {
-        value: 'Hold E or type your question in the chat \\u00b7 a number (1\\u20133) picks a suggestion.',
-        fontSize: 10.5,
-        color: '#9a9a9a',
-        lineHeight: 1.25,
-      })
-      bubble.add(hint)
-
+      bubble.add(statusText)
       app.add(bubble)
-      setSuggestions(currentSuggestions)
     } catch (e) {
-      console.error('[moca-guide] bubble failed', e && e.message)
+      console.error('[moca-guide] status bubble failed', e && e.message)
     }
   }
-  buildBubble()
+  buildStatus()
 
   // ---- hold E to engage (nudges the server to start following) --------------
   try {
@@ -511,62 +489,72 @@ if (world.isClient) {
     act.label = 'Talk to ' + NAME
     act.distance = TALK_DIST
     act.duration = 0.3
-    act.onTrigger = () => { app.send('moca:guide:open', {}) }
+    act.onTrigger = () => { welcome(); app.send('moca:guide:open', {}) }
     act.position.set(0, 1.2, 0)
     app.add(act)
   } catch (e) {
-    /* action nodes unavailable — chat + suggestions still work */
+    /* action nodes unavailable — chat still works */
   }
 
-  app.on('moca:guide:hello', (d) => {
-    if (d && Array.isArray(d.suggestions)) setSuggestions(d.suggestions)
-  })
   app.on('moca:guide:thinking', () => {
-    mode = 'thinking'; thinkT = 0; fullAnswer = ''; shownChars = 0
-    setBody(thinkingLine())
+    mode = 'thinking'; thinkT = 0
+    showStatus(thinkingLine())
   })
   app.on('moca:guide:answer', (d) => {
     if (!d) return
-    if (Array.isArray(d.suggestions)) setSuggestions(d.suggestions)
-    fullAnswer = String(d.text || '')
-    shownChars = 0
-    mode = 'talking'
-    speakAnswer(d.audioUrl)
+    mode = 'idle'
+    showStatus('')
+    postAnswer(String(d.text || ''), str(d.persona, NAME))
+    // audioUrl may be relative (PUBLIC_URL unset on the API) — resolve it
+    // against the API base the guide already talks to.
+    const au = typeof d.audioUrl === 'string' && d.audioUrl
+      ? (d.audioUrl.charAt(0) === '/' ? API + d.audioUrl : d.audioUrl)
+      : null
+    speakAnswer(au)
   })
 
   // ---- per-frame: locomotion emote, typewriter reveal, thinking dots, facing
   let sinceCheck = 0
   let greeted = false
   let pX = app.position.x, pY = app.position.y, pZ = app.position.z
+  // Followed player's previous position — used to mirror their vertical state.
+  let fpX = 0, fpY = 0, fpZ = 0, haveFp = false
   app.on('update', (dt) => {
     const following = moveGuide(dt, followId, HOME)
 
-    // The guide's own per-frame displacement → locomotion emote.
+    // Locomotion emote: mirror the FOLLOWED player's motion so the curator
+    // flies when they fly up, falls when they drop, and walks on the ground.
+    // (The player proxy has no velocity/grounded flag, so derive it from their
+    // per-frame position; HOME.y is the curator's ground post = ground ref.)
     const mdt = Math.max(dt, 0.001)
-    const sdx = app.position.x - pX, sdy = app.position.y - pY, sdz = app.position.z - pZ
-    pX = app.position.x; pY = app.position.y; pZ = app.position.z
-    const hSpeed = Math.sqrt(sdx * sdx + sdz * sdz) / mdt
-    const vSpeed = Math.abs(sdy) / mdt
-    let want
-    if (hSpeed > 0.18 || vSpeed > 0.35) {
-      want = (vSpeed > hSpeed && vSpeed > 0.5) ? EMOTE.float : EMOTE.walk
+    let want = (mode === 'thinking') ? EMOTE.talk : EMOTE.idle
+    let fp = null
+    if (followId) { try { fp = world.getPlayer(followId) } catch (e) {} }
+    if (fp && fp.position) {
+      if (haveFp) {
+        const fvy = (fp.position.y - fpY) / mdt
+        const fdx = fp.position.x - fpX, fdz = fp.position.z - fpZ
+        const fhs = Math.sqrt(fdx * fdx + fdz * fdz) / mdt
+        const air = fp.position.y - HOME.y // height above the ground post
+        if (air > 1.5) want = fvy < -1.2 ? EMOTE.fall : EMOTE.float // airborne: dropping → fall, else fly/hover
+        else if (fvy < -1.2) want = EMOTE.fall // dropping near the ground
+        else if (fhs > 0.2) want = EMOTE.walk // walking
+      }
+      fpX = fp.position.x; fpY = fp.position.y; fpZ = fp.position.z; haveFp = true
     } else {
-      want = (mode === 'thinking' || mode === 'talking') ? EMOTE.talk : EMOTE.idle
+      haveFp = false
+      // Not following — animate the curator's own motion (e.g. easing home).
+      const sdx = app.position.x - pX, sdz = app.position.z - pZ
+      if (Math.sqrt(sdx * sdx + sdz * sdz) / mdt > 0.18) want = EMOTE.walk
     }
+    pX = app.position.x; pY = app.position.y; pZ = app.position.z
     setEmote(want)
 
-    // Thinking ellipsis, then typewriter-reveal the answer (no in-world SSE —
-    // the wrapped fetch can't stream — so we reveal the whole answer here).
+    // Animate the loader above the head while waiting; the answer itself
+    // streams into the world chat (see the answer handler).
     if (mode === 'thinking') {
       thinkT += dt
-      setBody(thinkingLine())
-    } else if (mode === 'talking') {
-      if (shownChars < fullAnswer.length) {
-        shownChars = Math.min(fullAnswer.length, shownChars + Math.max(2, Math.ceil(dt * 45)))
-        setBody(fullAnswer.slice(0, shownChars))
-      } else {
-        mode = 'idle'
-      }
+      showStatus(thinkingLine())
     }
 
     sinceCheck += dt
@@ -580,9 +568,7 @@ if (world.isClient) {
     const distSq = dx * dx + dz * dz
     if (!greeted && distSq < (TALK_DIST + 4) * (TALK_DIST + 4)) {
       greeted = true
-      try {
-        world.chat({ from: NAME, body: 'Welcome to \\u201c' + EXHIBITION.name + '\\u201d! Hold E to talk to me, or just type your question.' }, false)
-      } catch (e) {}
+      welcome()
     }
     // When not following, face whoever is closest (VRM faces local -Z → +PI).
     if (!following && distSq < 49 && distSq > 0.04) {

@@ -126,8 +126,7 @@ and never cite the collection, Cortex isn't being reached:
 
 - `--guide-name <name>` — display name (default **Oblak**)
 - `--guide-avatar <path|url>` — any `.vrm`; defaults to the in-repo
-  `omnimorph-3321.vrm` (the museum's default body until the first Art DeCC0
-  VRMs land — the site's catalog lives at
+  `decc0.vrm` (Oblak, the #2875 guide body — the site's catalog lives at
   `museumofcryptoart.com/avatars/avatars.json`). The guide renders it as a
   script-owned avatar node and animates it (walks while following, gestures
   while answering) using the engine's built-in emote clips.

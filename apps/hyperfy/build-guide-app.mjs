@@ -43,13 +43,13 @@ if (!file) {
 const GUIDE_NAME = opt("guide-name", "Oblak");
 const GUIDE_SPEAK = !flag("no-speak");
 const GUIDE_VOICE = opt("voice", "");
-const LOCAL_OMNIMORPH = new URL("../museum/public/avatars/omnimorph-3321.vrm", import.meta.url).pathname;
+const LOCAL_AVATAR = new URL("../museum/public/avatars/decc0.vrm", import.meta.url).pathname;
 const GUIDE_AVATAR = opt(
   "guide-avatar",
   process.env.MOCA_GUIDE_AVATAR
-  || (existsSync(LOCAL_OMNIMORPH)
-    ? LOCAL_OMNIMORPH
-    : "https://museumofcryptoart.com/avatars/omnimorph-3321.vrm"),
+  || (existsSync(LOCAL_AVATAR)
+    ? LOCAL_AVATAR
+    : "https://museumofcryptoart.com/avatars/decc0.vrm"),
 );
 const DECC0_ID = Number(opt("decc0", "2875")) || 0;
 const MOCA_API = (opt("api", process.env.MOCA_API_URL || "https://api.moca.qwellco.de")).replace(/\/+$/, "");
@@ -168,8 +168,9 @@ const hyp = buildHyp({
     url: "https://museumofcryptoart.com/rooms/world",
     desc: `${GUIDE_NAME} — the AI guide of "${exhibition.name}". Hold E to talk.`,
     image: null,
-    // The script renders the bundled .vrm as an animatable avatar node (props.avatarUrl).
-    model: null,
+    // The bundled .vrm renders as the app's avatar node; the script grabs it
+    // (app.get('avatar')) to animate it. (model:null would crash App.build.)
+    model: avatarAssetUrl,
     script: scriptAssetUrl,
     props: {
       guideName: GUIDE_NAME,

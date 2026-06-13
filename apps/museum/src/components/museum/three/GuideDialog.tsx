@@ -34,9 +34,9 @@ interface GuideAvatar {
 }
 
 const DEFAULT_AVATAR: GuideAvatar = {
-  id: "omnimorph-3321",
-  name: "Omnimorph",
-  url: "/avatars/omnimorph-3321.vrm",
+  id: "oblak-2875",
+  name: "Oblak",
+  url: "/avatars/decc0.vrm",
 };
 
 interface Decc0Hit {
@@ -75,7 +75,16 @@ const DEFAULT_CONFIG: GuideConfig = {
 function loadConfig(): GuideConfig {
   try {
     const raw = window.localStorage.getItem(GUIDE_KEY);
-    if (raw) return { ...DEFAULT_CONFIG, ...(JSON.parse(raw) as Partial<GuideConfig>) };
+    if (raw) {
+      const merged = { ...DEFAULT_CONFIG, ...(JSON.parse(raw) as Partial<GuideConfig>) };
+      // Migrate the previous default persona (4209 Tsahafi) to the new one.
+      if (merged.decc0 === "4209") {
+        merged.decc0 = "2875";
+        merged.decc0Name = "Oblak";
+      }
+      if (merged.guideName === "Tsahafi") merged.guideName = "Oblak";
+      return merged;
+    }
   } catch {
     /* noop */
   }
@@ -473,10 +482,10 @@ export default function GuideDialog({
             </span>
             <div>
               <div className="text-sm font-medium" style={{ color: "var(--fg1)" }}>
-                Museum guide
+                Exhibit curator
               </div>
               <div className="mt-0.5 text-[11px] leading-relaxed" style={{ color: "var(--fg3)" }}>
-                Send an AI guide into your exhibition — it knows the rooms,
+                Send an AI curator into your exhibition — it knows the rooms,
                 architects, artists and works, and answers visitors in
                 character.
               </div>

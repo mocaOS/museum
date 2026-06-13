@@ -4,6 +4,7 @@ import { type ReactNode, useEffect, useState } from "react";
 import type { HyperfyExhibition } from "./hyperfy-export";
 import { buildGuideHyp, downloadGuideHyp } from "@/lib/museum/hyperfy/guide-hyp";
 import {
+  GUIDE_UID,
   type SpawnProgress,
   type SpawnResult,
   spawnExhibition,
@@ -38,9 +39,9 @@ interface GuideAvatar {
 }
 
 const DEFAULT_AVATAR: GuideAvatar = {
-  id: "omnimorph-3321",
-  name: "Omnimorph",
-  url: "/avatars/omnimorph-3321.vrm",
+  id: "oblak-2875",
+  name: "Oblak",
+  url: "/avatars/decc0.vrm",
 };
 
 /**
@@ -70,9 +71,10 @@ function loadTarget(): StoredTarget {
         url: p.url || "",
         key: p.key || "",
         guide: p.guide !== false,
-        guideName: p.guideName || "Oblak",
+        // Migrate the previous default persona (4209 Tsahafi) to the new one.
+        guideName: !p.guideName || p.guideName === "Tsahafi" ? "Oblak" : p.guideName,
         guideAvatar: p.guideAvatar || DEFAULT_AVATAR.id,
-        guideDecc0: p.guideDecc0 || "2875",
+        guideDecc0: !p.guideDecc0 || p.guideDecc0 === "4209" ? "2875" : p.guideDecc0,
       };
     }
   } catch {
@@ -166,6 +168,20 @@ const STATUS_TEXT: Record<string, string> = {
   unchanged: "Already up to date",
   failed: "Failed",
 };
+
+// The exhibit curator isn't a room — give its row its own wording.
+const CURATOR_STATUS_TEXT: Record<string, string> = {
+  model: "Uploading curator model…",
+  script: "Uploading curator…",
+  spawning: "Placing curator…",
+  updated: "Curator updated",
+};
+
+const statusLabel = (uid: string, status: string, error?: string): string =>
+  error
+  || (uid === GUIDE_UID ? CURATOR_STATUS_TEXT[status] : undefined)
+  || STATUS_TEXT[status]
+  || status;
 
 export default function SpawnHyperfyDialog({
   open,
@@ -541,7 +557,7 @@ export default function SpawnHyperfyDialog({
                     onChange={e => setGuideOn(e.target.checked)}
                     className="accent-[var(--accent)]"
                   />
-                  Museum guide
+                  Exhibit curator
                   <span className="text-[10.5px]" style={{ color: "var(--fg3)" }}>
                     an AI avatar visitors can talk to
                   </span>
@@ -639,7 +655,7 @@ export default function SpawnHyperfyDialog({
                         title="Bundle the guide as a portable Hyperfy app file — drop it into any world in build mode, no world URL or admin key needed. Building it registers the exhibition context with the MOCA API."
                       >
                         {hypBusy ? <Spinner /> : <IconDownload size={13} />}
-                        {hypBusy ? "Building…" : "Download guide app (.hyp)"}
+                        {hypBusy ? "Building…" : "Download curator app (.hyp)"}
                       </button>
                       {hypMsg && (
                         <span className="text-[10.5px]" style={{ color: hypMsg.startsWith("✗") ? "var(--destructive, oklch(0.55 0.2 25))" : "var(--fg3)" }}>
@@ -728,7 +744,7 @@ export default function SpawnHyperfyDialog({
                     }}
                     title={r.error}
                   >
-                    {r.error || STATUS_TEXT[r.status] || r.status}
+                    {statusLabel(r.uid, r.status, r.error)}
                   </span>
                 </div>
               ))}
