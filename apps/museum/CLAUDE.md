@@ -100,7 +100,10 @@ no accounts. Code lives in `src/components/museum/three/`:
   actions + clear), **Curate** (per-room fill progress, slot chips, active-slot
   scale/reset/remove, embedded artwork browser, auto-fill), **Exhibits** (saved
   exhibits + **Spawn to Hyperfy** primary CTA + file export). Slot clicks in 3D
-  auto-reveal the Curate tab.
+  auto-reveal the Curate tab. While curating, a **source toggle** (`MOCA
+  collections` | `Multipass`) swaps the embedded browser between the museum
+  collections (`ArtworkBrowser`) and the **Multipass importer**
+  (`MultipassImporter`); both hang through the same `onPickArt` path.
 - **`ControlsHelp.tsx`** — bottom-right nav cluster (zoom in/out, reset view, help
   icon) plus the grouped controls reference that slides in on the right (H toggles).
 - **`ArtworkPlane.tsx`** — one hung work: textured plane + matte frame, sized to the
@@ -109,7 +112,30 @@ no accounts. Code lives in `src/components/museum/three/`:
   corner-handle resize; both write a per-slot override `{dx, dy, scale}`.
 - **`ArtworkPicker.tsx`** — exports `ArtworkBrowser`, the embeddable search/browse
   grid used by the sidebar's Curate tab (`/api/museum/artworks`,
-  `/api/museum/collections`), scoped by collection, click to hang.
+  `/api/museum/collections`), scoped by collection, click to hang. Also exports
+  the shared `ArtworkGrid` (the 2-col clickable card grid) and `thumbUrl`, reused
+  by `MultipassImporter` so both sources render identical cards.
+- **`MultipassImporter.tsx`** — the **Multipass importer** in the Curate panel:
+  drop a wallet address to pull that wallet's curations from the **legacy MOCA
+  app** (`app.museumofcryptoart.com/member/<address>`) and hang them on room
+  walls. The wallet's **repertoires** (curated collections, e.g. `cryptoart` →
+  "Community Collection") and **exhibitions** become a grouped tab dropdown;
+  picking a tab paginates its works (24/page, order preserved) and clicking one
+  hangs it via the same `onPickArt` contract as `ArtworkBrowser`, so drag/resize,
+  auto-fill, and Hyperfy export all work unchanged. Data comes from
+  `/api/museum/multipass` (address → `{member, tabs}`) and
+  `/api/museum/multipass/items` (legacy item ids → `NftView[]`); the mapping
+  lives in **`src/lib/museum/multipass.ts`**, which reads the public legacy
+  **Strapi v3** backend at `api.museumofcryptoart.com` (`/users/{address}` for
+  the curations, `/items?id_in=…` to resolve works) and maps each legacy item to
+  the builder's `NftView` (artist from `metadata.createdBy`, original-file aspect
+  ratio, video clip + still poster — video clips often sit on the dead
+  `openseauserdata.com` host that the transform-in proxy revives). Legacy item
+  ids are offset by `MULTIPASS_ID_OFFSET` (1e9) so a Multipass work and a museum
+  work never collide in the builder's `id`-keyed auto-fill dedup; unknown wallets
+  (legacy `204`/`404`) surface as "no profile". The API routes are zod-validated
+  and hardcode the legacy host (no SSRF surface). NB: the toggle only appears once
+  you're actively curating a placed room — you need a wall slot to hang into.
 - **`ExhibitsPanel.tsx`** — save/load/update/delete named exhibits (embedded in the
   sidebar's Exhibits tab).
 - **`SpawnHyperfyDialog.tsx`** — spawns the current exhibition into any

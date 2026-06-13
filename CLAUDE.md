@@ -8,7 +8,7 @@ Museum of Crypto Art (MOCA) — an open-source, AI-powered museum tech stack. Tu
 
 ### Frontends & domains
 
-- **`apps/museum`** (`moca-museum`) — **Next.js 16** app. This is the **current public-facing site served at `museumofcryptoart.com`**. It renders the galleries/collections/exhibitions (live from Directus) including the **3D exhibition world builder** at `/rooms/world` (place rooms, hang/curate artworks, save exhibits to localStorage), static content (writings/timeline/incubator from `src/content/*.json`), and the **Library** — an anonymous, single-read-only-key chat front-end for the Cortex RAG backend (`library.moca.qwellco.de`). See `apps/museum/CLAUDE.md` for its full architecture. It is **self-contained** — NOT a Turborepo workspace, with its own `Dockerfile`/`docker-compose.yml`, deployed standalone on Coolify (port 3331).
+- **`apps/museum`** (`moca-museum`) — **Next.js 16** app. This is the **current public-facing site served at `museumofcryptoart.com`**. It renders the galleries/collections/exhibitions (live from Directus) including the **3D exhibition world builder** at `/rooms/world` (place rooms, hang/curate artworks — from the museum collections or imported from a wallet's legacy MOCA Multipass curations — save exhibits to localStorage), static content (writings/timeline/incubator from `src/content/*.json`), and the **Library** — an anonymous, single-read-only-key chat front-end for the Cortex RAG backend (`library.moca.qwellco.de`). See `apps/museum/CLAUDE.md` for its full architecture. It is **self-contained** — NOT a Turborepo workspace, with its own `Dockerfile`/`docker-compose.yml`, deployed standalone on Coolify (port 3331).
 - **`apps/web`** (`web`) — **Nuxt 3** frontend (Vue 3.5, TailwindCSS v4, shadcn-nuxt, TanStack Vue Query). The earlier frontend, mapped to `v2.museumofcryptoart.com` (see `packages/config`). Part of the Turborepo workspace; this is what `yarn dev:web` runs.
 
 When someone says "the museum site" / `museumofcryptoart.com`, they mean **`apps/museum`** (Next.js).
@@ -220,6 +220,9 @@ Directus, and legacy Nuxt), are in `.claude/docs/conventions.md`.**
 - **The Graph** — Blockchain data indexing
 - **R2R** — RAG/semantic search for the AI Library feature in `apps/web` (Nuxt `useR2R`); the `apps/museum` Library uses Cortex instead
 - **LiteLLM** — LLM proxy (optional, for chat)
-- **Strapi v3** — Legacy CMS at `api.museumofcryptoart.com`
+- **Strapi v3** — Legacy CMS at `api.museumofcryptoart.com` (powers the old
+  `app.museumofcryptoart.com`). Still read live by `apps/museum`'s **Multipass
+  importer** — `/users/{address}` (a wallet's curated repertoires/exhibitions)
+  and `/items?id_in=…` (resolve curated works); see `apps/museum/CLAUDE.md`.
 - **Reown AppKit** — Multi-chain wallet connection
 - **Infisical** — Secrets management (used for agent config)
