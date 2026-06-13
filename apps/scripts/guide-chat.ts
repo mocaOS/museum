@@ -22,6 +22,7 @@ import readline from "node:readline";
 import { createCortexClient } from "../api/extensions/directus-extension-moca/src/v1/cortex";
 import { createDecc0sClient } from "../api/extensions/directus-extension-moca/src/v1/decc0s";
 import { registerGuideRoutes } from "../api/extensions/directus-extension-moca/src/v1/guide";
+import { createSoulsClient } from "../api/extensions/directus-extension-moca/src/v1/souls";
 
 // ---------------------------------------------------------------- env ----
 const env: Record<string, string> = { ...process.env } as Record<string, string>;
@@ -71,7 +72,8 @@ const router = {
 };
 const cortex = createCortexClient(env);
 const decc0s = createDecc0sClient(env);
-registerGuideRoutes(router, { itemsService, cortex, decc0s, errorJson });
+const souls = createSoulsClient(env);
+registerGuideRoutes(router, { itemsService, cortex, decc0s, souls, errorJson });
 
 async function call(key: string, { body, params, query }: any = {}) {
   const req = { body: body || {}, params: params || {}, query: query || {}, headers: {}, ip: "local" };

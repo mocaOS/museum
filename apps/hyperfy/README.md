@@ -108,6 +108,22 @@ the context the guide answers from. Question starters come from Cortex (plus
 deterministic templates as instant fallback), get baked into the app for
 offline resilience, and rotate with every answer.
 
+**Troubleshooting — the guide only gives generic answers.** Its deep knowledge
+comes from MOCA's Cortex Library via `POST /v1/guide/ask`. If answers are vague
+and never cite the collection, Cortex isn't being reached:
+
+- **Most common:** `CORTEX_API_URL` / `CORTEX_API_KEY` are not set on the
+  **Directus** deployment that serves `/v1/guide/*` (`api.moca.qwellco.de`) —
+  a separate service from the museum app. Without them every answer is a
+  context-only `fallback: true`. The API logs a `[moca-guide]` warning at boot
+  in that case; check the Directus logs.
+- **Otherwise:** transient Cortex errors. The guide retries one fast 5xx and
+  logs throttled `[moca-guide]` upstream warnings; a healthy Cortex
+  `POST /api/ask` must answer without blocking (sync LLM calls that pin its
+  event loop cause cascading 500s under load — keep generation off the loop).
+  A guide answer carrying `fallback: true` always means Cortex was unreachable
+  for that turn.
+
 - `--guide-name <name>` — display name (default **Tsahafi**)
 - `--guide-avatar <path|url>` — any `.vrm`; defaults to the in-repo
   `omnimorph-3321.vrm` (the museum's default body until the first Art DeCC0

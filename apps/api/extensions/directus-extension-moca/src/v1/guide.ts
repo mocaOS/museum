@@ -225,6 +225,63 @@ export function registerGuideRoutes(
 ) {
   const { itemsService, cortex, decc0s, souls, errorJson } = deps;
 
+  // Make the most common deployment mistake loud: without CORTEX_API_URL /
+  // CORTEX_API_KEY on THIS (Directus) service the guide still answers, but
+  // only from the exhibition context — no Library, no knowledge-graph
+  // retrieval. In-world that reads as "the guide can't really talk", with no
+  // error anywhere. Surface it once at boot so an operator sees it in the logs.
+  if (!cortex.configured) {
+    console.warn(
+      "[moca-guide] CORTEX_API_URL/CORTEX_API_KEY are not set on this Directus deployment — " +
+        "the museum guide will answer from exhibition context ONLY (no Cortex Library / knowledge-graph " +
+        "retrieval; every /v1/guide/ask response is marked fallback:true). Set both env vars (see " +
+        "apps/api/.env.example) and restart to hook the knowledge graph in.",
+    );
+  }
+  // One warn per upstream failure burst, so a flaky/misconfigured Cortex is
+  // visible without flooding the logs on every visitor question.
+  let lastUpstreamWarn = 0;
+  const warnUpstream = (msg: string) => {
+    const now = Date.now();
+    if (now - lastUpstreamWarn > 30_000) {
+      lastUpstreamWarn = now;
+      console.warn(`[moca-guide] ${msg}`);
+    }
+  };
+
+  /**
+   * Cortex Q&A is slow (~20s) and occasionally returns a transient 5xx. A
+   * single failed call would otherwise drop the guide to an offline,
+   * context-only answer — visitors read that as "the guide doesn't really
+   * know anything". One retry on a transient failure converts most of those
+   * blips back into real knowledge-graph answers; only a genuinely-down
+   * Cortex pays the second call before we fall back. 4xx (bad request) is not
+   * retried — it won't get better.
+   */
+  const RETRY_IF_FAILED_WITHIN_MS = 30_000;
+  async function askCortexResilient(ask: CortexAskBody): Promise<{ status: number; body: any }> {
+    let last: { status: number; body: any } = { status: 0, body: null };
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const t0 = Date.now();
+      try {
+        last = await cortex.ask(ask);
+        if (last.status === 200 && last.body?.answer) return last;
+        if (last.status < 500) return last; // 4xx won't improve on retry
+      } catch (e: any) {
+        last = { status: 0, body: { _error: e?.message } };
+      }
+      // Only retry a FAST failure (e.g. a quick 500). A slow failure already
+      // burned the visitor's patience; retrying would just double the wait
+      // for an answer that's unlikely to come — fall straight back instead.
+      if (attempt === 0) {
+        if (Date.now() - t0 > RETRY_IF_FAILED_WITHIN_MS) break;
+        warnUpstream(`Cortex ask transient failure (status ${last.status || "threw"}) — retrying once.`);
+        await new Promise((r) => setTimeout(r, 600));
+      }
+    }
+    return last;
+  }
+
   const allowRegister = createIpLimiter(REGISTER_PER_MIN);
   const allowAsk = createIpLimiter(ASK_PER_MIN);
 
@@ -706,14 +763,22 @@ export function registerGuideRoutes(
       const ask: CortexAskBody = {
         question,
         top_k: 5,
+        // The guide is a knowledge-graph experience: ask Cortex to blend graph
+        // traversal into retrieval explicitly, not just rely on the upstream
+        // default (so it can't silently change out from under the guide).
+        use_graph: true,
         conversation_history: [
           { role: "user", content: contextBlock(ctx, persona) },
           { role: "assistant", content: `Understood — I am ${persona.name}, guiding visitors through “${ctx.name}”.` },
           ...history,
         ],
       };
-      const { status, body: upstream } = await cortex.ask(ask);
+      const { status, body: upstream } = await askCortexResilient(ask);
       if (status !== 200 || !upstream?.answer) {
+        warnUpstream(
+          `Cortex ask returned ${status}${upstream?.answer ? "" : " with no answer"} (after retry) — ` +
+            "answering “" + ctx.name + "” from exhibition context only.",
+        );
         return res.json({
           data: {
             answer: fallbackAnswer(ctx, question),
@@ -749,7 +814,18 @@ export function registerGuideRoutes(
         },
       });
     } catch (e: any) {
-      errorJson(res, 502, e?.message || "The guide is unavailable", "UPSTREAM");
+      // A Cortex network error or timeout shouldn't take the guide dark —
+      // it still has the authoritative exhibition context. Keep it talking,
+      // flag the answer as a fallback, and surface the failure in the logs.
+      warnUpstream(`guide ask threw (${e?.message || "unknown"}) — answering “${ctx.name}” from exhibition context only.`);
+      res.json({
+        data: {
+          answer: fallbackAnswer(ctx, question),
+          persona: FALLBACK_PERSONA_NAME,
+          suggestions: buildSuggestions(ctx, hash32(`${id}:${question}`)),
+          fallback: true,
+        },
+      });
     }
   });
 }

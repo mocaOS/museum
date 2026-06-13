@@ -98,7 +98,16 @@ source of truth.
   `GET /v1/guide/exhibitions/:id[/suggestions]` serve it; `POST /v1/guide/ask`
   answers in-world visitor questions by combining that context with Cortex and
   an optional Art DeCC0 `moltbot` persona; Cortex-generated question starters
-  fill in asynchronously after registration).
+  fill in asynchronously after registration). **Cortex is resilient by design:**
+  `/v1/guide/ask` sends `use_graph: true` explicitly, retries one *fast*
+  transient Cortex 5xx (`askCortexResilient`), and on any failure (5xx, timeout,
+  or `CORTEX_*` unset) degrades to an exhibition-context-only answer marked
+  `fallback: true` instead of erroring — so the in-world guide never goes dark.
+  Failures are logged (`[moca-guide]` warnings: once at boot if `CORTEX_*` is
+  missing, throttled on upstream errors), so a guide that only gives generic
+  answers is diagnosable from the Directus logs. **Requires `CORTEX_API_URL` +
+  `CORTEX_API_KEY` on this Directus deployment** (see Env below) — they are what
+  hook the knowledge graph in; without them every answer is a `fallback`.
 - **Auth** (`src/v1/auth.ts`): keys in the **`moca_api_keys`** collection
   (admin-managed; generate with `echo "moca_$(openssl rand -hex 24)"`), sent
   as `X-API-Key` or `Authorization: Bearer`. In-memory key cache (60 s) +
@@ -108,7 +117,9 @@ source of truth.
   matches the DeCC0s docs conventions.
 - **Env**: optional `MOCA_API_RATE_LIMIT`, `DECC0S_API_URL` (defaults to
   `https://api.decc0s.com`), `CORTEX_API_URL` + `CORTEX_API_KEY` (read-only;
-  unset → `/v1/library/*` answers 503), `SOULWEAVER_API_URL` +
+  unset → `/v1/library/*` answers 503 **and** the museum guide answers from
+  exhibition context only, `fallback: true`, with a `[moca-guide]` boot
+  warning), `SOULWEAVER_API_URL` +
   `SOULWEAVER_API_HEADERS` (defaults to the public deployment at
   `https://soulweaver.museumofcryptoart.com`; override for self-hosted);
   reuses `PUBLIC_URL` for asset links and `CODEX_DIR` for codex documents.

@@ -145,7 +145,13 @@ no accounts. Code lives in `src/components/museum/three/`:
   world chat, per-player private answers fetched server-side from
   `POST /v1/guide/ask` (exhibition context + Cortex + optional Art DeCC0
   persona via the dialog's "DeCC0 persona" token id, default 4209 =
-  Tsahafi). The dialog's **Download guide app (.hyp)** button
+  Tsahafi). That endpoint lives in `apps/api` (`src/v1/guide.ts`) and is
+  Cortex-resilient: it retries a fast transient 5xx and degrades to a
+  context-only `fallback: true` answer rather than erroring, so the in-world
+  guide stays alive even when Cortex is slow/down — but it **requires
+  `CORTEX_API_URL`/`CORTEX_API_KEY` on the Directus deployment** to hook the
+  knowledge graph in (without them every answer is a context-only fallback).
+  The dialog's **Download guide app (.hyp)** button
   (`guide-hyp.ts` + `hyp.ts`) bundles the same guide as a drag-droppable
   Hyperfy app file — registers the context, then builds
   VRM+script into the engine's `.hyp` format; no world URL/key needed.
