@@ -33,6 +33,8 @@ export interface StoredPlacement {
   roomId: number;
   position: [number, number, number];
   rotationY: number;
+  /** Curator size multiplier on the tile-normalized room (default 1). */
+  scale?: number;
   assignments: Assignments;
   overrides?: SlotOverrides;
 }
@@ -46,6 +48,8 @@ export interface WorldLayout {
    */
   exhibitionId?: string;
   placements: StoredPlacement[];
+  /** Where visitors enter the Hyperfy world (tile space; default: engine spawn). */
+  spawn?: { position: [number, number, number]; rotationY: number };
 }
 
 export function newExhibitionId(): string {
@@ -62,10 +66,12 @@ function normalizeLayout(parsed: unknown): WorldLayout | null {
   if (!p || (p.version !== 1 && p.version !== 2) || !Array.isArray(p.placements)) {
     return null;
   }
+  const spawn = (p as { spawn?: WorldLayout["spawn"] }).spawn;
   return {
     version: 2,
     exhibitionId: p.exhibitionId,
-    placements: p.placements.map((pl) => ({
+    spawn,
+    placements: p.placements.map(pl => ({
       ...pl,
       assignments: pl.assignments || {},
       overrides: pl.overrides || {},
@@ -124,7 +130,7 @@ function readExhibits(): StoredExhibit[] {
     if (!raw) return [];
     const parsed = JSON.parse(raw) as ExhibitsFile;
     if (parsed?.version !== 1 || !Array.isArray(parsed.exhibits)) return [];
-    return parsed.exhibits.filter((e) => e && e.id && normalizeLayout(e.layout));
+    return parsed.exhibits.filter(e => e && e.id && normalizeLayout(e.layout));
   } catch {
     return [];
   }
@@ -135,7 +141,7 @@ function writeExhibits(exhibits: StoredExhibit[]): void {
   try {
     window.localStorage.setItem(
       EXHIBITS_KEY,
-      JSON.stringify({ version: 1, exhibits } satisfies ExhibitsFile)
+      JSON.stringify({ version: 1, exhibits } satisfies ExhibitsFile),
     );
   } catch {
     /* quota — keep in memory only */
@@ -148,14 +154,14 @@ export function listExhibits(): StoredExhibit[] {
 }
 
 export function getExhibit(id: string): StoredExhibit | null {
-  return readExhibits().find((e) => e.id === id) ?? null;
+  return readExhibits().find(e => e.id === id) ?? null;
 }
 
 /** Save a new exhibit, or overwrite an existing one when `id` is given. */
 export function saveExhibit(name: string, layout: WorldLayout, id?: string): StoredExhibit {
   const exhibits = readExhibits();
   const now = Date.now();
-  const existing = id ? exhibits.find((e) => e.id === id) : undefined;
+  const existing = id ? exhibits.find(e => e.id === id) : undefined;
   const normalized = normalizeLayout(layout) ?? { version: 2 as const, placements: [] };
   if (existing) {
     existing.name = name.trim() || existing.name;
@@ -181,13 +187,65 @@ export function saveExhibit(name: string, layout: WorldLayout, id?: string): Sto
 
 export function renameExhibit(id: string, name: string): void {
   const exhibits = readExhibits();
-  const it = exhibits.find((e) => e.id === id);
+  const it = exhibits.find(e => e.id === id);
   if (!it) return;
   it.name = name.trim() || it.name;
   it.updatedAt = Date.now();
   writeExhibits(exhibits);
+  notifyExhibitsChanged();
 }
 
 export function deleteExhibit(id: string): void {
-  writeExhibits(readExhibits().filter((e) => e.id !== id));
+  writeExhibits(readExhibits().filter(e => e.id !== id));
+  notifyExhibitsChanged();
+}
+
+// --- The current (working) exhibit --------------------------------------------
+
+/**
+ * Fired whenever the exhibits library changes (sync, rename, delete) so the
+ * Exhibits panel can refresh without prop drilling.
+ */
+export const EXHIBITS_CHANGED_EVENT = "moca:exhibits-changed";
+
+function notifyExhibitsChanged(): void {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event(EXHIBITS_CHANGED_EVENT));
+  }
+}
+
+/** The exhibit entry that represents the working layout, if any. */
+export function findCurrentExhibit(exhibitionId: string | undefined): StoredExhibit | null {
+  if (!exhibitionId) return null;
+  return readExhibits().find(e => e.layout.exhibitionId === exhibitionId) ?? null;
+}
+
+/** Display name of the working exhibition ("Unnamed exhibit" until renamed). */
+export function currentExhibitName(exhibitionId: string | undefined): string {
+  return findCurrentExhibit(exhibitionId)?.name ?? "Unnamed exhibit";
+}
+
+/**
+ * Keep the working layout represented in the exhibits library: the exhibit
+ * whose layout shares the working `exhibitionId` tracks every change ("the
+ * exhibit you're building"). Created as "Unnamed exhibit" on the builder's
+ * first start (and again once rooms land after a Clear — a cleared world is
+ * a new show, and the old entry stays as its last state).
+ */
+export function syncCurrentExhibit(layout: WorldLayout): void {
+  if (typeof window === "undefined" || !layout.exhibitionId) return;
+  const exhibits = readExhibits();
+  const current = exhibits.find(e => e.layout.exhibitionId === layout.exhibitionId);
+  if (current) {
+    current.layout = layout;
+    current.updatedAt = Date.now();
+    writeExhibits(exhibits);
+    notifyExhibitsChanged();
+    return;
+  }
+  // Don't litter the library with empty entries on every Clear — only the
+  // very first start gets one before any room is placed.
+  if (!layout.placements.length && exhibits.length > 0) return;
+  saveExhibit("Unnamed exhibit", layout);
+  notifyExhibitsChanged();
 }

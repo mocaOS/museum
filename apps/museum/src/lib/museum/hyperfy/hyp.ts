@@ -16,6 +16,8 @@
  * build-guide-app.mjs.
  */
 
+import { sha256Hex } from "./hash";
+
 export interface HypAsset {
   /** Engine asset kind: 'avatar' | 'model' | 'script' | 'texture' | … */
   type: string;
@@ -31,12 +33,7 @@ function byteLength(b: ArrayBuffer | Uint8Array) {
 
 /** Content-addressed asset url for raw bytes, like the engine's own uploads. */
 export async function hypAssetUrl(bytes: ArrayBuffer | Uint8Array, ext: string): Promise<string> {
-  const buf = bytes instanceof Uint8Array
-    ? bytes.slice().buffer
-    : bytes;
-  const digest = await crypto.subtle.digest("SHA-256", buf);
-  const hash = [ ...new Uint8Array(digest) ].map(b => b.toString(16).padStart(2, "0")).join("");
-  return `asset://${hash}.${ext}`;
+  return `asset://${await sha256Hex(bytes)}.${ext}`;
 }
 
 export function buildHyp({ blueprint, assets }: { blueprint: object; assets: HypAsset[] }): Blob {

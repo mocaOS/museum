@@ -17,6 +17,7 @@
  */
 
 import { Packr } from "msgpackr";
+import { sha1Bytes, sha256Hex } from "./hash";
 
 // hyperfy v0.16.0 src/core/packets.js — order is the protocol.
 const PACKET_NAMES = [
@@ -44,7 +45,7 @@ const PACKET_NAMES = [
   "pong",
 ] as const;
 
-const ID_BY_NAME = new Map<string, number>(PACKET_NAMES.map((n, i) => [n, i]));
+const ID_BY_NAME = new Map<string, number>(PACKET_NAMES.map((n, i) => [ n, i ]));
 const packr = new Packr({ structuredClone: true }); // must match the engine's Packr options
 
 export function writePacket(name: string, data: unknown): Uint8Array {
@@ -72,6 +73,7 @@ export interface HyperfyEntity {
 }
 
 interface Snapshot {
+  id?: string;
   blueprints?: unknown;
   entities?: unknown;
   hasAdminCode?: boolean;
@@ -103,6 +105,8 @@ export class HyperfySession {
   blueprints: Map<string, HyperfyBlueprint>;
   entities: Map<string, HyperfyEntity>;
   hasAdminCode: boolean;
+  /** Our own player/socket id — lets the spawner move itself (spawn point). */
+  selfId: string | undefined;
   kicked: unknown = null;
   closed = false;
 
@@ -112,6 +116,7 @@ export class HyperfySession {
     this.blueprints = toMapById(snapshot.blueprints);
     this.entities = toMapById(snapshot.entities);
     this.hasAdminCode = !!snapshot.hasAdminCode;
+    this.selfId = snapshot.id;
   }
 
   static connect({
@@ -124,7 +129,7 @@ export class HyperfySession {
     timeoutMs?: number;
   }): Promise<HyperfySession> {
     const base = url.replace(/\/+$/, "");
-    const wsUrl = base.replace(/^http/, "ws") + `/ws?name=${encodeURIComponent(name)}`;
+    const wsUrl = `${base.replace(/^http/, "ws")}/ws?name=${encodeURIComponent(name)}`;
     return new Promise((resolve, reject) => {
       let session: HyperfySession | null = null;
       let ws: WebSocket;
@@ -184,7 +189,7 @@ export class HyperfySession {
    */
   async grantAdmin(code: string) {
     this.send("command", { args: [ "admin", code ] });
-    await new Promise(r => setTimeout(r, 900));
+    await new Promise(resolve => setTimeout(resolve, 900));
     if (this.kicked) throw new Error("Kicked while claiming admin rights.");
   }
 
@@ -217,8 +222,9 @@ export async function uploadAsset({
 }): Promise<string> {
   const base = baseUrl.replace(/\/+$/, "");
   const buf = bytes instanceof ArrayBuffer ? bytes : (bytes.buffer as ArrayBuffer).slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
-  const digest = await crypto.subtle.digest("SHA-256", buf);
-  const hash = [ ...new Uint8Array(digest) ].map(b => b.toString(16).padStart(2, "0")).join("");
+  // hash.ts falls back to pure JS where crypto.subtle doesn't exist (plain
+  // http origins) — spawning must work from any self-hosted museum install.
+  const hash = await sha256Hex(buf);
   const filename = `${hash}.${ext}`;
   try {
     const check = await fetch(`${base}/api/upload-check?filename=${filename}`);
@@ -242,17 +248,18 @@ export async function uploadAsset({
  */
 export async function deterministicUuid(key: string): Promise<string> {
   const data = new TextEncoder().encode(`moca-hyperfy:${key}`);
-  const digest = await crypto.subtle.digest("SHA-1", data);
-  const b = new Uint8Array(digest).slice(0, 16);
-  b[6] = (b[6] & 0x0f) | 0x50; // version 5
-  b[8] = (b[8] & 0x3f) | 0x80; // RFC 4122 variant
+  const b = (await sha1Bytes(data)).slice(0, 16);
+  b[6] = (b[6] & 0x0F) | 0x50; // version 5
+  b[8] = (b[8] & 0x3F) | 0x80; // RFC 4122 variant
   const hex = [ ...b ].map(x => x.toString(16).padStart(2, "0")).join("");
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
-export const yawToQuaternion = (y: number): [number, number, number, number] => [
-  0,
-  Math.sin(y / 2),
-  0,
-  Math.cos(y / 2),
-];
+export function yawToQuaternion(y: number): [number, number, number, number] {
+  return [
+    0,
+    Math.sin(y / 2),
+    0,
+    Math.cos(y / 2),
+  ];
+}

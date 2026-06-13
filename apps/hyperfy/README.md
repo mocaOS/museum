@@ -23,10 +23,12 @@ world builder (browser, localStorage)
 ```
 
 The exhibition format carries everything: a stable exhibition `id`, room GLB
-URLs, placements (position/rotation), per-room GLB measurements (`footprint`,
-`groundOffset`), and per-slot artworks with CORS-enabled texture URLs, true
-aspect ratios, video URLs for motion works, and the curator's move/resize
-overrides.
+URLs, placements (position/rotation/**curator room sizing**), per-room GLB
+measurements (`footprint`, `groundOffset`), per-slot artworks with
+CORS-enabled texture URLs, true aspect ratios, video URLs for motion works,
+the curator's move/resize overrides — and the exhibition's **spawn point**
+(set in the builder's Exhibits tab; the spawner walks its own player there
+and runs `/spawn set`, so visitors always enter where the curator intended).
 
 **Layout translation.** The builder normalizes every room onto an 8-unit
 tile (scaled to fit, centered, floor at y=0); Hyperfy renders GLBs at native
@@ -57,11 +59,13 @@ huge and stream fine.)
 **Refinable in-engine.** Each room app ships an inspector panel
 (`app.configure`): artwork scale, wall gap, placards on/off, art lighting,
 video volume, slot editing. Any admin (`/admin <code>` in the world chat)
-presses Tab, right-clicks a room, and tunes it — live, for everyone. P unpins
-a room to grab/rotate/scale it; the curation travels with it.
+presses Tab, right-clicks a room, and tunes it — live, for everyone. Rooms
+arrive **unpinned**: grab one to move it, X deletes it, the curation travels
+with it (spawn with `--pinned` / "Lock layout" to protect the arrangement;
+P toggles a room's pin in-world).
 
-**Per-slot refinement in-world.** Flip the room's **Slot editing** toggle and
-builders/admins can hold **E** at any hung work to edit it in place: arrow
+**Per-slot refinement in-world.** Slot editing is **on by default**:
+builders/admins hold **E** at any hung work to edit it in place: arrow
 keys nudge it along the wall (Shift = faster), the scroll wheel resizes, R
 resets, Enter/Esc finishes. Every change syncs live to everyone, is
 rank-checked server-side, and persists in the world's `storage.json` keyed by
@@ -104,7 +108,7 @@ the context the guide answers from. Question starters come from Cortex (plus
 deterministic templates as instant fallback), get baked into the app for
 offline resilience, and rotate with every answer.
 
-- `--guide-name <name>` — display name (default **Omnimorph**)
+- `--guide-name <name>` — display name (default **Tsahafi**)
 - `--guide-avatar <path|url>` — any `.vrm`; defaults to the in-repo
   `omnimorph-3321.vrm` (the museum's default body until the first Art DeCC0
   VRMs land — the site's catalog lives at
@@ -165,7 +169,8 @@ directly (`lib/protocol.mjs`, pinned to Hyperfy **v0.16.0** packet ids — bump
 the table there if the engine's `src/core/packets.js` changes). Options:
 `--tile-size` (meters one builder tile maps to, default 16 — room size and
 spacing together), `--art-size` (base artwork meters, also the per-room
-inspector default), `--unpinned`, `--relayout`, `--fresh`, `--no-verify`,
+inspector default), `--pinned` (lock the layout; rooms arrive grabbable by
+default), `--relayout`, `--fresh`, `--no-verify`,
 `--name`.
 
 Browser path: the same logic lives in

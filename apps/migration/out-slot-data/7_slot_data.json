@@ -1,0 +1,408 @@
+{
+  "version": 1,
+  "room": 35,
+  "model": "dc2badc8-44ae-4e72-8c02-df2d2e5d4a11",
+  "generated_at": "2026-06-13T01:17:16.096Z",
+  "slots": [
+    {
+      "id": "Slot_001",
+      "index": 1,
+      "source": "authored",
+      "position": [
+        -7,
+        6.000000953674316,
+        -5.774999141693115
+      ],
+      "quaternion": [
+        0,
+        0,
+        0,
+        1
+      ],
+      "width": 1,
+      "height": 1,
+      "facing": [
+        0,
+        0,
+        1
+      ],
+      "flipped": false,
+      "ambiguous": false
+    },
+    {
+      "id": "Slot_002",
+      "index": 2,
+      "source": "authored",
+      "position": [
+        1.774999976158142,
+        7.999999523162842,
+        2.0000011920928955
+      ],
+      "quaternion": [
+        0,
+        1,
+        0,
+        0
+      ],
+      "width": 2.000000238418579,
+      "height": 2.000000238418579,
+      "facing": [
+        0,
+        0,
+        -1
+      ],
+      "flipped": true,
+      "ambiguous": true
+    },
+    {
+      "id": "Slot_003",
+      "index": 3,
+      "source": "authored",
+      "position": [
+        4.224999904632568,
+        7.999999523162842,
+        2.0000011920928955
+      ],
+      "quaternion": [
+        0,
+        1,
+        0,
+        0
+      ],
+      "width": 2.000000238418579,
+      "height": 2.000000238418579,
+      "facing": [
+        0,
+        0,
+        -1
+      ],
+      "flipped": true,
+      "ambiguous": true
+    },
+    {
+      "id": "Slot_004",
+      "index": 4,
+      "source": "authored",
+      "position": [
+        -6,
+        11.999999046325684,
+        5.7750020027160645
+      ],
+      "quaternion": [
+        0,
+        1,
+        0,
+        0
+      ],
+      "width": 2,
+      "height": 2,
+      "facing": [
+        0,
+        0,
+        -1
+      ],
+      "flipped": true,
+      "ambiguous": false
+    },
+    {
+      "id": "Slot_005",
+      "index": 5,
+      "source": "authored",
+      "position": [
+        -7,
+        15.000000953674316,
+        -5.774997711181641
+      ],
+      "quaternion": [
+        0,
+        0,
+        0,
+        1
+      ],
+      "width": 1,
+      "height": 1,
+      "facing": [
+        0,
+        0,
+        1
+      ],
+      "flipped": false,
+      "ambiguous": false
+    },
+    {
+      "id": "Slot_006",
+      "index": 6,
+      "source": "authored",
+      "position": [
+        5.775000095367432,
+        17.000001907348633,
+        -6.999997138977051
+      ],
+      "quaternion": [
+        0,
+        0,
+        0,
+        1
+      ],
+      "width": 1.0000001192092896,
+      "height": 1.0000001192092896,
+      "facing": [
+        0,
+        0,
+        1
+      ],
+      "flipped": false,
+      "ambiguous": true
+    },
+    {
+      "id": "Slot_007",
+      "index": 7,
+      "source": "authored",
+      "position": [
+        7,
+        17,
+        -5.774997234344482
+      ],
+      "quaternion": [
+        0,
+        0,
+        0,
+        1
+      ],
+      "width": 1,
+      "height": 1,
+      "facing": [
+        0,
+        0,
+        1
+      ],
+      "flipped": false,
+      "ambiguous": false
+    },
+    {
+      "id": "Slot_008",
+      "index": 8,
+      "source": "authored",
+      "position": [
+        -3.7750000953674316,
+        21.000001907348633,
+        -6.999996662139893
+      ],
+      "quaternion": [
+        0,
+        0,
+        0,
+        1
+      ],
+      "width": 1.0000001192092896,
+      "height": 1.0000001192092896,
+      "facing": [
+        0,
+        0,
+        1
+      ],
+      "flipped": false,
+      "ambiguous": true
+    },
+    {
+      "id": "Slot_009",
+      "index": 9,
+      "source": "authored",
+      "position": [
+        -7,
+        21,
+        -3.774996757507324
+      ],
+      "quaternion": [
+        0,
+        0,
+        0,
+        1
+      ],
+      "width": 1,
+      "height": 1,
+      "facing": [
+        0,
+        0,
+        1
+      ],
+      "flipped": false,
+      "ambiguous": false
+    },
+    {
+      "id": "Slot_010",
+      "index": 10,
+      "source": "authored",
+      "position": [
+        -5,
+        23,
+        -3.774996280670166
+      ],
+      "quaternion": [
+        0,
+        0,
+        0,
+        1
+      ],
+      "width": 1,
+      "height": 1,
+      "facing": [
+        0,
+        0,
+        1
+      ],
+      "flipped": false,
+      "ambiguous": false
+    },
+    {
+      "id": "Slot_011",
+      "index": 11,
+      "source": "authored",
+      "position": [
+        -3.7750000953674316,
+        23,
+        -4.999996185302734
+      ],
+      "quaternion": [
+        0,
+        0,
+        0,
+        1
+      ],
+      "width": 1.0000001192092896,
+      "height": 1.0000001192092896,
+      "facing": [
+        0,
+        0,
+        1
+      ],
+      "flipped": false,
+      "ambiguous": true
+    },
+    {
+      "id": "Slot_012",
+      "index": 12,
+      "source": "authored",
+      "position": [
+        -5.264999866485596,
+        21.25,
+        5.775003433227539
+      ],
+      "quaternion": [
+        0,
+        1,
+        0,
+        0
+      ],
+      "width": 1,
+      "height": 1,
+      "facing": [
+        0,
+        0,
+        -1
+      ],
+      "flipped": true,
+      "ambiguous": false
+    },
+    {
+      "id": "Slot_013",
+      "index": 13,
+      "source": "authored",
+      "position": [
+        -6.735000133514404,
+        21.25,
+        5.775003433227539
+      ],
+      "quaternion": [
+        0,
+        1,
+        0,
+        0
+      ],
+      "width": 1,
+      "height": 1,
+      "facing": [
+        0,
+        0,
+        -1
+      ],
+      "flipped": true,
+      "ambiguous": false
+    },
+    {
+      "id": "Slot_014",
+      "index": 14,
+      "source": "authored",
+      "position": [
+        -5.264999866485596,
+        22.75,
+        5.775003910064697
+      ],
+      "quaternion": [
+        0,
+        1,
+        0,
+        0
+      ],
+      "width": 1,
+      "height": 1,
+      "facing": [
+        0,
+        0,
+        -1
+      ],
+      "flipped": true,
+      "ambiguous": false
+    },
+    {
+      "id": "Slot_015",
+      "index": 15,
+      "source": "authored",
+      "position": [
+        -6.735000133514404,
+        22.75,
+        5.775003910064697
+      ],
+      "quaternion": [
+        0,
+        1,
+        0,
+        0
+      ],
+      "width": 1,
+      "height": 1,
+      "facing": [
+        0,
+        0,
+        -1
+      ],
+      "flipped": true,
+      "ambiguous": false
+    },
+    {
+      "id": "Slot_016",
+      "index": 16,
+      "source": "authored",
+      "position": [
+        5.775000095367432,
+        22.000001907348633,
+        -5.999996185302734
+      ],
+      "quaternion": [
+        0,
+        0,
+        0,
+        1
+      ],
+      "width": 2.000000238418579,
+      "height": 2.000000238418579,
+      "facing": [
+        0,
+        0,
+        1
+      ],
+      "flipped": false,
+      "ambiguous": true
+    }
+  ]
+}

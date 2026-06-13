@@ -29,6 +29,52 @@ export interface RoomSlot {
   auto?: boolean;
 }
 
+/**
+ * One slot as baked into `rooms.slot_data` by `apps/migration/bake-slot-data.ts`
+ * — the publicly served JSON (Directus `/items/rooms`, `/v1/rooms/:id/slots`).
+ * Same room-local frame as `RoomSlot`; the quaternion is already
+ * facing-resolved and re-levelled, so consumers hang works on it verbatim.
+ */
+export interface BakedSlot {
+  id: string;
+  index: number;
+  /** "authored" = Slot_NNN node in the GLB; "generated" = surface-sampled. */
+  source: "authored" | "generated";
+  position: [number, number, number];
+  quaternion: [number, number, number, number];
+  width: number;
+  height: number;
+  /** Resolved facing direction (unit vector, room-local). */
+  facing: [number, number, number];
+  /** True when the authored normal pointed into the wall and was flipped. */
+  flipped: boolean;
+  /** True when the clearance probe was inconclusive (interior tie-break used). */
+  ambiguous: boolean;
+}
+
+/** The `rooms.slot_data` JSON document. */
+export interface RoomSlotData {
+  version: 1;
+  room: number;
+  /** Directus file id of the GLB the slots were computed from. */
+  model: string;
+  generated_at: string;
+  slots: BakedSlot[];
+}
+
+/** Rehydrate baked JSON slots into the builder's runtime shape. */
+export function bakedToRoomSlots(data: RoomSlotData): RoomSlot[] {
+  return data.slots.map(s => ({
+    id: s.id,
+    index: s.index,
+    position: new THREE.Vector3(...s.position),
+    quaternion: new THREE.Quaternion(...s.quaternion),
+    width: s.width,
+    height: s.height,
+    auto: s.source === "generated",
+  }));
+}
+
 const SLOT_NAME = /slot[_\s-]*(\d+)/i;
 const PLACEHOLDER_MAT = /slot\s*placeholder/i;
 
@@ -73,7 +119,7 @@ export function extractSlots(root: THREE.Object3D): RoomSlot[] {
         bb.getSize(size);
         // The quad's two largest local extents are the frame's W and H; the
         // third (near-zero thickness) is the wall normal axis.
-        const dims = [size.x, size.y, size.z].sort((a, b) => b - a);
+        const dims = [ size.x, size.y, size.z ].sort((a, b) => b - a);
         width = dims[0] * scale.x;
         height = dims[1] * scale.y;
       }
@@ -109,7 +155,7 @@ export function setPlaceholdersVisible(root: THREE.Object3D, visible: boolean) {
 export function fitToFrame(
   ratio: number,
   frameW: number,
-  frameH: number
+  frameH: number,
 ): { width: number; height: number } {
   const r = ratio > 0 ? ratio : 1;
   const frameRatio = frameW / frameH;

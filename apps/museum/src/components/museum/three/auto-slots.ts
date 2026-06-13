@@ -108,7 +108,7 @@ function findTri(cumArea: Float64Array, r: number): number {
 }
 
 /** Upright orientation: local +Z along `normal`, +Y as close to world up as the surface allows. */
-function surfaceOrientation(normal: THREE.Vector3): THREE.Quaternion {
+export function surfaceOrientation(normal: THREE.Vector3): THREE.Quaternion {
   const z = normal.clone().normalize();
   // Project world up onto the slot plane; on near-horizontal surfaces (works
   // lying on a limb) fall back to a horizontal reference so "up" stays stable.

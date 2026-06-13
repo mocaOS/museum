@@ -90,7 +90,7 @@ app.configure([
   { key: 'placards', type: 'toggle', label: 'Placards', hint: 'Title and artist under each work', trueLabel: 'Shown', falseLabel: 'Hidden', initial: true },
   { key: 'litArt', type: 'toggle', label: 'Art lighting', hint: 'Unlit shows true colors; lit reacts to world light', trueLabel: 'World lit', falseLabel: 'Unlit', initial: false },
   { key: 'videoVolume', type: 'range', label: 'Video volume', hint: 'Spatial volume of motion works', min: 0, max: 1, step: 0.05, initial: 0.5 },
-  { key: 'editSlots', type: 'toggle', label: 'Slot editing', hint: 'Builders hold E at a work to move/resize it in place', trueLabel: 'On', falseLabel: 'Off', initial: false },
+  { key: 'editSlots', type: 'toggle', label: 'Slot editing', hint: 'Builders hold E at a work to move/resize it in place', trueLabel: 'On', falseLabel: 'Off', initial: true },
 ])
 
 // Baked slot anchors (GLB-local) + the curated works that hang on them.
@@ -111,7 +111,7 @@ const WALL_GAP = num(props.wallGap, 0.05)
 const PLACARDS = bool(props.placards, true)
 const LIT = bool(props.litArt, false)
 const VOLUME = num(props.videoVolume, 0.5)
-const EDIT_SLOTS = bool(props.editSlots, false)
+const EDIT_SLOTS = bool(props.editSlots, true)
 
 // In-world refinements persist under the entity id — deterministic across
 // re-spawns, so they survive curation updates, rebuilds and restarts.
@@ -241,7 +241,7 @@ for (const art of ARTWORKS) {
           adj.add(placard)
           placard.position.set(dx, dy - height / 2 - 0.16 * M, (WALL_GAP + 0.01) * M)
         }
-        HUNG[art.slotId] = { adj, baked: anchor.baked, title: art.title }
+        HUNG[art.slotId] = { adj, baked: anchor.baked, title: art.title, plac: placard, artH: height }
       } catch (e) {
         // Some GLB nodes can't parent — fall back to the anchor's local spot.
         app.add(node)
@@ -267,6 +267,40 @@ for (const art of ARTWORKS) {
   } catch (e) {
     console.error('[moca] artwork failed', art.slotId, e && e.message)
   }
+}
+
+// ---- placard anti-overlap ----------------------------------------------
+// Works can hang close enough that their labels collide. Within this room
+// (rooms sit on separate tiles, so cross-room overlap can't happen), any two
+// placards on the same wall that would intersect get staggered: the second
+// one steps down until every label reads clean.
+try {
+  const entries = []
+  for (const id in HUNG) {
+    const h = HUNG[id]
+    if (h.plac && h.baked) entries.push(h)
+  }
+  const W = 0.62 * M // placard width in GLB-local units (240px × ui.size)
+  const STEP = 0.3 * M
+  for (let i = 0; i < entries.length; i++) {
+    for (let j = i + 1; j < entries.length; j++) {
+      const a = entries[i]
+      const b = entries[j]
+      const qa = a.baked.q
+      const qb = b.baked.q
+      const facing = qa[0] * qb[0] + qa[1] * qb[1] + qa[2] * qb[2] + qa[3] * qb[3]
+      if (Math.abs(facing) < 0.92) continue // different walls
+      const ddx = a.baked.p[0] - b.baked.p[0]
+      const ddz = a.baked.p[2] - b.baked.p[2]
+      if (Math.sqrt(ddx * ddx + ddz * ddz) > W) continue
+      const ya = a.baked.p[1] - a.artH / 2
+      const yb = b.baked.p[1] - b.artH / 2
+      if (Math.abs(ya - yb) > STEP) continue
+      try { b.plac.position.y -= STEP } catch (e) {}
+    }
+  }
+} catch (e) {
+  /* labels may overlap on exotic GLBs — never break the hang */
 }
 
 // ---- in-world slot refinement -----------------------------------------
@@ -360,7 +394,7 @@ if (world.isClient) {
           doubleside: true,
           pointerEvents: false,
         })
-        ui.size = 0.003 * M
+        ui.size = 0.0036 * M
         ui.add(app.create('uitext', { value: 'Editing — ' + (title || 'artwork'), fontSize: 13, color: '#ffffff', fontWeight: 'bold' }))
         ui.add(app.create('uitext', { value: 'Arrows move · Shift = faster · scroll resizes', fontSize: 11, color: '#b3b3b3' }))
         ui.add(app.create('uitext', { value: 'R resets · Enter or Esc finishes', fontSize: 11, color: '#b3b3b3' }))
@@ -373,6 +407,9 @@ if (world.isClient) {
     function endEdit(commit) {
       if (!editing) return
       const { slotId, control, panel } = editing
+      try { HUNG[slotId].adj.rotation.z = 0 } catch (e) {}
+      const hp = HUNG[slotId] && HUNG[slotId].plac
+      if (hp) { try { hp.visible = true } catch (e) {} }
       try { if (panel) HUNG[slotId].adj.remove(panel) } catch (e) {}
       try { control.release() } catch (e) {}
       if (commit) sendAdjust(slotId)
@@ -395,13 +432,18 @@ if (world.isClient) {
         try { control[k].capture = true } catch (e) {}
       }
       try { control.scrollDelta.capture = true } catch (e) {}
+      // The help panel replaces the placard while editing — never both.
+      if (h.plac) { try { h.plac.visible = false } catch (e) {} }
       const panel = makeHelpPanel(h.title)
       if (panel) {
         h.adj.add(panel)
+        // Keep the how-to readable: near the work's top edge but never
+        // higher than ~eye-and-a-bit, even for huge pieces.
         const ph = h.baked ? h.baked.h : 2
-        panel.position.set(0, ph * 0.5 + 0.5 * M, (WALL_GAP + 0.05) * M)
+        panel.position.set(0, Math.min(ph * 0.5 + 0.4 * M, 1.5 * M), (WALL_GAP + 0.12) * M)
       }
-      editing = { slotId, control, panel, sinceSend: 0, dirty: false }
+      // A quick wiggle says "this one is active now".
+      editing = { slotId, control, panel, sinceSend: 0, dirty: false, wiggle: 0.5 }
       EDITING_SLOT = slotId
     }
 
@@ -411,6 +453,17 @@ if (world.isClient) {
       const a = live[slotId]
       const h = HUNG[slotId]
       if (!a || !h || !control) { endEdit(false); return }
+
+      // Activation wiggle: a damped shake on the work so the selection is
+      // unmistakable, settling back to exactly where it was.
+      if (editing.wiggle > 0) {
+        editing.wiggle -= dt
+        const left = Math.max(editing.wiggle, 0)
+        try {
+          h.adj.rotation.z = Math.sin((0.5 - left) * 26) * 0.07 * (left / 0.5)
+          if (left <= 0) h.adj.rotation.z = 0
+        } catch (e) {}
+      }
 
       const fast = (control.shiftLeft && control.shiftLeft.down) || (control.shiftRight && control.shiftRight.down)
       const speed = (fast ? 1.8 : 0.45) * M * dt

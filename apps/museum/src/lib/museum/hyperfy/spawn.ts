@@ -80,6 +80,11 @@ export interface SpawnOptions {
    * size of that tile in-world; room size and spacing scale together.
    */
   tileMeters?: number;
+  /**
+   * Lock rooms in place (default false — rooms arrive grabbable, movable and
+   * deletable by anyone with build rights; visitors can't touch them either
+   * way). P in-world toggles a room's pin.
+   */
   pinned?: boolean;
   /** Move already-spawned rooms back to the museum layout. */
   relayout?: boolean;
@@ -106,7 +111,7 @@ export async function spawnExhibition(
     key,
     artSize = 2,
     tileMeters = 16,
-    pinned = true,
+    pinned = false,
     relayout = false,
     guide,
     onProgress,
@@ -171,7 +176,8 @@ export async function spawnExhibition(
         let rootScale = 1;
         let position: number[];
         if (fp && fp > 0 && Array.isArray(go)) {
-          rootScale = tileMeters / fp;
+          // Curator room sizing from the builder multiplies the tile fit.
+          rootScale = (tileMeters / fp) * (placement.scale || 1);
           const ox = rootScale * go[0];
           const oy = rootScale * go[1];
           const oz = rootScale * go[2];
@@ -323,7 +329,11 @@ export async function spawnExhibition(
           const legacyUnscaled
             = Math.abs(eScale[0] - 1) < 1e-6 && Math.abs(rootScale - 1) > 1e-3;
           if (relayout || legacyUnscaled) {
-            session.send("entityModified", { id: enId, position, quaternion, scale: scaleArr });
+            session.send("entityModified", { id: enId, position, quaternion, scale: scaleArr, pinned });
+          } else if (!!(existingEntity as { pinned?: boolean }).pinned !== pinned) {
+            // Pin state follows this spawn's intent — heal rooms spawned back
+            // when pinning was the default, so they're grabbable right away.
+            session.send("entityModified", { id: enId, pinned });
           }
         }
 
@@ -334,6 +344,27 @@ export async function spawnExhibition(
       } catch (err) {
         result.failed++;
         setStatus(placement.uid, "failed", err instanceof Error ? err.message : String(err));
+      }
+    }
+
+    // ---- spawn point ----------------------------------------------------
+    // The curator's chosen entry point: move our own (invisible) player
+    // there and tell the engine `/spawn set` — visitors then enter the
+    // exhibition exactly where the builder intended.
+    if (exhibition.spawn && Array.isArray(exhibition.spawn.position) && session.selfId) {
+      try {
+        const k = tileMeters / BUILDER_TILE;
+        const sp = exhibition.spawn;
+        const pos = [ k * sp.position[0], k * (sp.position[1] || 0) + 0.2, k * sp.position[2] ];
+        session.send("entityModified", {
+          id: session.selfId,
+          position: pos,
+          quaternion: yawToQuaternion(sp.rotationY || 0),
+        });
+        await new Promise(resolve => setTimeout(resolve, 400));
+        session.send("command", { args: [ "spawn", "set" ] });
+      } catch {
+        /* spawn point is a nicety — never fail the spawn over it */
       }
     }
 
@@ -465,7 +496,7 @@ async function pushGuide(
   cx /= exhibition.placements.length || 1;
   cz /= exhibition.placements.length || 1;
   const gPosition = [ cx, 0, cz + tileMeters * 0.55 ];
-  const gQuaternion = yawToQuaternion(Math.PI);
+  const gQuaternion = yawToQuaternion(0); // VRM forward is -Z: yaw 0 faces the exhibition center
 
   const bpId = await deterministicUuid(`${exhibitionKey}:guide:blueprint`);
   const enId = await deterministicUuid(`${exhibitionKey}:guide:entity`);
@@ -518,7 +549,8 @@ async function pushGuide(
     status = "unchanged";
   }
 
-  if (!session.entities.get(enId)) {
+  const existingGuide = session.entities.get(enId);
+  if (!existingGuide) {
     session.send("entityAdded", {
       id: enId,
       type: "app",
@@ -531,6 +563,8 @@ async function pushGuide(
       pinned,
       state: {},
     });
+  } else if (!!(existingGuide as { pinned?: boolean }).pinned !== pinned) {
+    session.send("entityModified", { id: enId, pinned });
   }
   return { bpId, enId, status };
 }
@@ -552,7 +586,7 @@ export async function spawnGuide(
     url,
     key,
     tileMeters = 16,
-    pinned = true,
+    pinned = false,
     guide,
     onStatus,
   }: {

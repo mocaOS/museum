@@ -82,6 +82,19 @@ no accounts. Code lives in `src/components/museum/three/`:
   Q/E rotate, wheel **zoom-to-cursor**, RMB orbit, MMB pan, double-click room to
   focus), room placement/dragging/rotation (right-click cancels placing, R/Shift+R
   rotate, C curates the selection), curate mode, keyboard map, cursor feedback.
+  The **camera director** (`CameraApi`) exposes scenario verbs — `frameRoom`,
+  `frameExhibition` (Home / reset button), `birdsEye(uid)`, FOV-fitted
+  `focusSlot` — that resolve framing from live datapoints (per-room measured
+  world bounds via `onBounds`, exhibition extents, the camera's actual FOV)
+  instead of fixed distances; long fly-tos arc up over the world via a decaying
+  `lift` that any manual input cancels. **Perf invariants (don't regress):**
+  room GLBs get three-mesh-bvh bounds trees (refcounted per shared geometry —
+  pointer events + clearance probes would otherwise walk every triangle per
+  mousemove), the event raycaster runs `firstHitOnly`, `PlacedRoom` is
+  memoized behind uid-routed referentially-stable callbacks (`actionsRef`),
+  the placement ghost and room dragging update imperatively / grid-gated
+  (never a React render per mousemove), and far-away `VideoTexture` works
+  auto-pause (`ArtworkPlane` distance cull with hysteresis).
 - **`BuilderSidebar.tsx`** — the unified exhibition-management panel on the left
   (collapsible to an icon rail): **Build** (searchable room library + selected-room
   actions + clear), **Curate** (per-room fill progress, slot chips, active-slot
@@ -147,6 +160,24 @@ no accounts. Code lives in `src/components/museum/three/`:
 - **`slots.ts`** — slot extraction from room GLBs. Authoring convention: room
   models carry `Slot_001…Slot_NNN` placeholder quads (material "Slot Placeholder");
   their transforms/bboxes define hang position, orientation, and frame size.
+  Also defines the `RoomSlotData`/`BakedSlot` types for **`rooms.slot_data`**,
+  the baked per-room slot JSON (anchors + resolved facing) written by
+  `apps/migration/bake-slot-data.ts` and served publicly (Directus read policy
+  + keyless `GET /v1/rooms/:id/slots` on the MOCA API). When a room ships
+  fresh `slot_data` (file-id-matched against the GLB being loaded — see
+  `freshSlotData()` in `/rooms/world/page.tsx`), the builder uses it wholesale
+  and skips extraction, generation, and the runtime facing probe.
+- **`slot-facing.ts`** — slot facing resolution: a clearance probe (fan of
+  BVH raycasts on both sides of each slot plane, `THREE.DoubleSide` so
+  single-sided walls register from behind) decides which side of the wall a
+  slot actually faces — the side with enough free depth to stand and view the
+  work. Replaces the old bounding-box-center "inward flip" heuristic, which
+  misfaced slots on pillars, corridor walls, non-convex rooms, and un_MUSEUM
+  embedded slots; the interior tie-break only remains for ambiguous slots
+  (both sides open/closed), so those never regress. Final quaternions are
+  re-levelled upright (+Z facing, +Y up). Runtime fallback only — baked
+  `slot_data` wins; `apps/migration/bake-slot-data.ts` is the 1:1 offline
+  port (keep in sync). Auto-generated slots keep their sampled surface normal.
 - **`auto-slots.ts`** — runtime fallback slot generation for models with **no**
   `Slot_NNN` placeholders (un_MUSEUMs not yet processed by the embed script —
   single-mesh sculptures whose slot *amount* lives onchain, synced into Directus
@@ -161,7 +192,10 @@ no accounts. Code lives in `src/components/museum/three/`:
   loads `model_optimized ?? model` (see `/rooms/world/page.tsx`), while the HQ
   `model` stays untouched for the `/rooms/[id]` viewer. Embedded slots also make
   Hyperfy exports work for un_MUSEUMs (the spawner resolves `Slot_NNN` nodes in
-  the GLB it uploads).
+  the GLB it uploads). After (re-)embedding, run
+  `apps/migration/bake-slot-data.ts` to refresh `rooms.slot_data` — stale
+  bakes are dropped by the file-id check and the builder falls back to the
+  runtime path above.
 - **`world-storage.ts`** — localStorage persistence. Working layout under
   `moca-world-layout-v1` (payload is **v2**: placements + assignments + slot
   overrides + `exhibitionId`, the stable identity Hyperfy spawns key their

@@ -81,6 +81,9 @@ export class HyperfySession {
     this.blueprints = toMapById(snapshot.blueprints);
     this.entities = toMapById(snapshot.entities);
     this.hasAdminCode = !!snapshot.hasAdminCode;
+    // Our own player/socket id — the spawner can move itself (e.g. to stand
+    // at the exhibition spawn point before `/spawn set`).
+    this.selfId = snapshot.id;
     this.chat = [];
     this.closed = false;
   }

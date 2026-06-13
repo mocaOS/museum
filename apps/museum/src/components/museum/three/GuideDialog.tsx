@@ -114,6 +114,13 @@ function saveTarget(url: string, key: string) {
   }
 }
 
+/** Latest version key of an additively-versioned map ("v0.1", "v0.2", …). */
+function latestVersion(map: Record<string, unknown>): string | null {
+  const keys = Object.keys(map).filter(k => map[k] && typeof map[k] === "object");
+  if (!keys.length) return null;
+  return keys.sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))[keys.length - 1];
+}
+
 /** Name from a SOUL.md heading ("# SOUL.md — Name" / "# Name"), else null. */
 function soulHeadingName(text: string): string | null {
   const m = text.match(/^#\s*(?:SOUL\.md\s*[—-]\s*)?(.+)$/m);
@@ -199,6 +206,12 @@ export default function GuideDialog({
   const [ hits, setHits ] = useState<Decc0Hit[]>([]);
   const [ searching, setSearching ] = useState(false);
 
+  // The selected persona, made visible: identity card + readable SOUL.md.
+  const [ persona, setPersona ] = useState<{ id: number; name: string; thumb: string | null } | null>(null);
+  const [ soulDoc, setSoulDoc ] = useState<string | null>(null);
+  const [ soulOpen, setSoulOpen ] = useState(false);
+  const [ soulLoading, setSoulLoading ] = useState(false);
+
   const [ busy, setBusy ] = useState<"send" | "hyp" | null>(null);
   const [ msg, setMsg ] = useState<{ ok: boolean; text: string } | null>(null);
 
@@ -230,6 +243,67 @@ export default function GuideDialog({
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [ open, busy, onClose ]);
+
+  // Resolve the selected DeCC0's identity (name + portrait) so the curator
+  // always SEES who the guide will be.
+  useEffect(() => {
+    if (!open || config.source !== "decc0") return;
+    const id = Number.parseInt(config.decc0, 10);
+    setSoulDoc(null);
+    setSoulOpen(false);
+    if (!id || id < 1 || id > 10000) {
+      setPersona(null);
+      return;
+    }
+    const ctrl = new AbortController();
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(
+          `${DECC0S_API}/items/codex/${id}?fields=id,name,thumbnail_character`,
+          { signal: ctrl.signal },
+        );
+        if (!res.ok) throw new Error(String(res.status));
+        const { data } = await res.json();
+        setPersona({
+          id,
+          name: (Array.isArray(data.name) ? data.name[0] : data.name) || `#${id}`,
+          thumb: data.thumbnail_character
+            ? `${DECC0S_API}/assets/${data.thumbnail_character}?key=s128`
+            : null,
+        });
+      } catch {
+        setPersona(null);
+      }
+    }, 300);
+    return () => {
+      ctrl.abort();
+      clearTimeout(timer);
+    };
+  }, [ open, config.source, config.decc0 ]);
+
+  const loadSoul = async () => {
+    if (soulOpen) {
+      setSoulOpen(false);
+      return;
+    }
+    setSoulOpen(true);
+    if (soulDoc || soulLoading) return;
+    const id = Number.parseInt(config.decc0, 10);
+    if (!id) return;
+    setSoulLoading(true);
+    try {
+      const res = await fetch(`${DECC0S_API}/items/codex/${id}?fields=moltbot`);
+      const { data } = await res.json();
+      const ver = data?.moltbot ? latestVersion(data.moltbot) : null;
+      const v = ver ? data.moltbot[ver] : null;
+      const text = [ v?.identity, v?.soul ].filter(Boolean).join("\n\n");
+      setSoulDoc(text || "No SOUL.md found for this DeCC0.");
+    } catch {
+      setSoulDoc("Could not load the SOUL — the Codex may be unreachable.");
+    } finally {
+      setSoulLoading(false);
+    }
+  };
 
   // Debounced DeCC0 search against the public Codex.
   useEffect(() => {
@@ -512,11 +586,62 @@ export default function GuideDialog({
                   ))}
                 </div>
               )}
-              <span className="text-[10.5px]" style={{ color: "var(--fg3)" }}>
-                {config.decc0Name
-                  ? <>Selected: <span style={{ color: "var(--fg1)" }}>{config.decc0Name}</span> (#{config.decc0}) — its soul comes from the MOCA Codex.</>
-                  : <>DeCC0 #{config.decc0 || "—"} — default 4209 is Tsahafi, the scholar-curator.</>}
-              </span>
+              {persona
+                ? (
+                    <div
+                      className={`
+                        flex items-center gap-2.5 rounded-[var(--radius)] border
+                        px-2.5 py-2
+                      `}
+                      style={{ borderColor: "var(--border)", background: "var(--card)" }}
+                    >
+                      {persona.thumb && (
+                        <img
+                          src={persona.thumb}
+                          alt=""
+                          className={`
+                            h-10 w-10 shrink-0 rounded-[var(--radius-sm)]
+                            object-cover
+                          `}
+                        />
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-[12.5px]" style={{ color: "var(--fg1)" }}>
+                          {persona.name}
+                        </div>
+                        <div className="font-mono text-[10px]" style={{ color: "var(--fg3)" }}>
+                          DeCC0 #{persona.id} · soul from the MOCA Codex
+                        </div>
+                      </div>
+                      <button
+                        onClick={loadSoul}
+                        className={`
+                          shrink-0 rounded-full px-2.5 py-1 text-[10.5px]
+                          transition-colors
+                        `}
+                        style={{ background: "var(--muted)", color: "var(--fg1)" }}
+                      >
+                        {soulOpen ? "Hide SOUL" : "Read SOUL.md"}
+                      </button>
+                    </div>
+                  )
+                : (
+                    <span className="text-[10.5px]" style={{ color: "var(--fg3)" }}>
+                      DeCC0 #{config.decc0 || "—"} — default 4209 is Tsahafi, the scholar-curator.
+                    </span>
+                  )}
+              {soulOpen && (
+                <pre
+                  className={`
+                    max-h-44 overflow-y-auto rounded-[var(--radius)] border
+                    p-2.5 font-mono text-[10px] leading-relaxed
+                    whitespace-pre-wrap
+                  `}
+                  style={{ borderColor: "var(--border)", background: "var(--card)", color: "var(--fg2)" }}
+                >
+                  {soulLoading ? "Reading the Codex…" : soulDoc}
+                </pre>
+              )}
             </div>
           )}
 

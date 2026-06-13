@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "room": 52,
+  "model": "7cd852a9-4edd-4fda-b330-b2b9c8e0988e",
+  "generated_at": "2026-06-13T01:17:30.979Z",
+  "slots": [
+    {
+      "id": "Slot_001",
+      "index": 1,
+      "source": "authored",
+      "position": [
+        0,
+        15.25,
+        0
+      ],
+      "quaternion": [
+        0,
+        -0.7071067094802832,
+        0,
+        0.7071068528928047
+      ],
+      "width": 4.249999854528755,
+      "height": 4.25,
+      "facing": [
+        -0.9999999999999796,
+        0,
+        2.0281593304805062e-7
+      ],
+      "flipped": false,
+      "ambiguous": false
+    }
+  ]
+}

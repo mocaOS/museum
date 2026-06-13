@@ -83,6 +83,8 @@ export interface HyperfyPlacement {
   };
   position: [number, number, number];
   rotationY: number;
+  /** Curator size multiplier on the tile-normalized room (default 1). */
+  scale?: number;
   /** Baked slot transforms (GLB-local) — the anchors artworks hang on. */
   slots?: HyperfySlot[];
   artworks: HyperfyArtwork[];
@@ -101,6 +103,11 @@ export interface HyperfyExhibition {
   createdAt: string;
   generator: string;
   placements: HyperfyPlacement[];
+  /**
+   * Where visitors enter the world (tile space, converted by the spawners).
+   * Optional — without it the world keeps its engine default spawn.
+   */
+  spawn?: { position: [number, number, number]; rotationY: number };
 }
 
 function absolute(url: string): string {
@@ -114,7 +121,8 @@ function absolute(url: string): string {
 export function buildHyperfyExhibition(opts: {
   id?: string;
   name: string;
-  placed: { uid: string; room: WorldRoom; position: [number, number, number]; rotationY: number }[];
+  spawn?: { position: [number, number, number]; rotationY: number };
+  placed: { uid: string; room: WorldRoom; position: [number, number, number]; rotationY: number; scale?: number }[];
   assignments: Record<string, Assignments>;
   overrides: Record<string, SlotOverrides>;
   /** Per-placement GLB measurements (uid → norm), lifted from the loaded models. */
@@ -124,6 +132,7 @@ export function buildHyperfyExhibition(opts: {
     format: HYPERFY_EXPORT_FORMAT,
     id: opts.id,
     name: opts.name,
+    spawn: opts.spawn,
     createdAt: new Date().toISOString(),
     generator:
       typeof window !== "undefined" ? window.location.origin : "museumofcryptoart.com",
@@ -141,6 +150,7 @@ export function buildHyperfyExhibition(opts: {
         slots: opts.norms?.[p.uid]?.slots,
         position: p.position,
         rotationY: p.rotationY,
+        scale: p.scale,
         artworks: Object.entries(opts.assignments[p.uid] || {}).map(
           ([ slotId, art ]: [string, NftView]) => {
             const image = artworkTextureUrl(art, 1024);

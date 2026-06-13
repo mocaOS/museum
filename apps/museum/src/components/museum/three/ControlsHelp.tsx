@@ -8,6 +8,7 @@ const GROUPS: { title: string; rows: [string, string][] }[] = [
     rows: [
       [ "W A S D / arrows", "Pan" ],
       [ "Q / E", "Rotate" ],
+      [ "T / G", "Up / down" ],
       [ "Scroll", "Zoom to cursor" ],
       [ "Right-drag", "Orbit" ],
       [ "Middle-drag", "Pan" ],

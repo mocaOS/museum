@@ -49,8 +49,8 @@ Hand whoever curates two things: the **world URL** and the **admin key**
     --url https://your-world.example.com --key YOUR_ADMIN_CODE
   ```
 
-Each curated room arrives as **its own app**, pinned in place, with the
-artworks attached to it. Spawning is **idempotent**: pushing the same
+Each curated room arrives as **its own app**, unpinned and ready to
+rearrange, with the artworks attached to it. Spawning is **idempotent**: pushing the same
 exhibition again updates the existing rooms in place — curation changes flow
 in, while the way you've arranged the rooms in-world is preserved.
 
@@ -63,8 +63,8 @@ chat, type `/admin <your code>`, then:
 | --- | --- |
 | **Tab** | toggle build mode |
 | **Right-click a room** | open its inspector — the **App pane** has the curation controls: artwork scale, wall gap, placards on/off, art lighting, video volume, slot editing. Changes apply live for everyone. |
-| **P** on a room | unpin it, then **grab / 1–4** to move, rotate or scale it — the artworks travel with the room, always |
-| **Slot editing** toggle + hold **E** at a work | edit the piece in place: arrows nudge (Shift = faster), scroll resizes, R resets, Enter finishes. Synced live, saved in the world — survives restarts and curation updates. |
+| **Grab / 1–4** on a room | move, rotate or scale it — the artworks travel with the room, always. **P** pins/unpins (lock a finished arrangement) |
+| Hold **E** at a work | edit the piece in place (on by default): arrows nudge (Shift = faster), scroll resizes, R resets, Enter finishes. Synced live, saved in the world — survives restarts and curation updates. |
 | **R** | duplicate · **X** delete |
 | Right-click → **Download** | export a room as a portable `.hyp` file |
 

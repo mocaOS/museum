@@ -390,6 +390,55 @@
         }
       }
     },
+    "/v1/rooms/{id}/slots": {
+      "get": {
+        "tags": [
+          "Rooms"
+        ],
+        "operationId": "getRoomSlots",
+        "summary": "Get a room's baked slot data",
+        "security": [],
+        "description": "Baked artwork anchors for the room's builder GLB: per-slot position, frame size, and a facing-resolved orientation (local +Z points at the viewer, +Y upright). Computed offline by probing the room geometry on both sides of every slot plane \u2014 clients can hang works on these anchors verbatim, with no normal-flipping heuristics.\n\n**Public** \u2014 no API key required, like the guide endpoints: 3D clients (the world builder, Hyperfy spawns, third-party viewers) consume this anonymously.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "Room id (see `GET /v1/rooms`)."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Baked slot data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/RoomSlotData"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Room not found, or no slot data baked for it yet",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/decc0s": {
       "get": {
         "tags": [
@@ -2000,6 +2049,13 @@
               "null"
             ],
             "description": "Optimized GLB download URL (draco-compressed, webp textures) with embedded Slot_NNN placeholder nodes \u2014 the variant the exhibition builder uses. For un_MUSEUMs (no authored slots in the model) the slots are generated deterministically from the onchain slot amount. Null until the variant has been generated."
+          },
+          "slot_data_url": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "URL of the room's baked slot data (`GET /v1/rooms/{id}/slots`) \u2014 per-slot anchors with resolved facing. Null until the data has been baked."
           }
         }
       },
@@ -2535,6 +2591,99 @@
           "fallback": {
             "type": "boolean",
             "description": "True when the answer was built from exhibition context alone (Library unreachable)."
+          }
+        }
+      },
+      "RoomSlot": {
+        "type": "object",
+        "description": "One artwork anchor in the room's GLB, in room-local coordinates (the GLB's own units, identity transform). The quaternion is facing-resolved: local +Z points at the viewer and +Y is re-levelled to world up, so clients can hang a work on it verbatim \u2014 no normal flipping or up-vector guessing needed.",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Stable slot id \u2014 `Slot_NNN` for slots that exist as GLB nodes, `Auto_NNN` for generated anchors on models without placeholder nodes (un_MUSEUMs)."
+          },
+          "index": {
+            "type": "integer",
+            "description": "1-based slot number."
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "authored",
+              "generated"
+            ],
+            "description": "`authored` = extracted from a Slot_NNN placeholder node in the GLB; `generated` = deterministically surface-sampled from the onchain slot amount."
+          },
+          "position": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "minItems": 3,
+            "maxItems": 3,
+            "description": "Anchor center `[x, y, z]`, room-local."
+          },
+          "quaternion": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "minItems": 4,
+            "maxItems": 4,
+            "description": "Orientation `[x, y, z, w]`, room-local. Local +Z = resolved facing direction, +Y = upright."
+          },
+          "width": {
+            "type": "number",
+            "description": "Frame width in room-local units."
+          },
+          "height": {
+            "type": "number",
+            "description": "Frame height in room-local units."
+          },
+          "facing": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "minItems": 3,
+            "maxItems": 3,
+            "description": "Resolved facing direction (unit vector, room-local) \u2014 equal to the quaternion's +Z, included for convenience."
+          },
+          "flipped": {
+            "type": "boolean",
+            "description": "True when the placeholder's authored normal pointed into the wall and was flipped during facing resolution."
+          },
+          "ambiguous": {
+            "type": "boolean",
+            "description": "True when the geometry probe found both sides of the slot equally open/closed and the room-interior tie-break decided the facing."
+          }
+        }
+      },
+      "RoomSlotData": {
+        "type": "object",
+        "description": "Baked slot anchors for one room, computed offline from the room's builder GLB (`model_optimized` if present, else `model`) by probing the geometry around each slot to resolve which side of the wall it faces.",
+        "properties": {
+          "version": {
+            "type": "integer",
+            "const": 1
+          },
+          "room": {
+            "type": "integer",
+            "description": "Room id."
+          },
+          "model": {
+            "type": "string",
+            "description": "Directus file id of the GLB the slots were computed from. Compare against the room's current model file before trusting the anchors."
+          },
+          "generated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "slots": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RoomSlot"
+            }
           }
         }
       }

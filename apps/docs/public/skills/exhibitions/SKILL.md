@@ -9,7 +9,7 @@ multiplayer exhibitions into Hyperfy worlds.
 curl -H "X-API-Key: $KEY" "https://api.moca.qwellco.de/v1/rooms"
 ```
 
-→ `{ id, title, architect, series, slots, image_url, model_url, model_optimized_url }`.
+→ `{ id, title, architect, series, slots, image_url, model_url, model_optimized_url, slot_data_url }`.
 Use `model_optimized_url` — a draco-compressed GLB that always carries slots
 (un_MUSEUM sculptures get theirs generated from the onchain slot amount);
 `model_url` is the untouched HQ original. **The convention:** the model contains
@@ -17,6 +17,22 @@ placeholder quads named `Slot_001 … Slot_NNN` (material "Slot Placeholder").
 Their transforms are the wall anchors; their bounding boxes the frame sizes;
 `slots` is the count. Hide the placeholders, hang art at their transforms,
 fit each work preserving its `ratio` (letterbox inside the slot).
+
+**Don't trust a placeholder's raw normal** — some are authored facing into
+their wall. Prefer the baked slot data (public, no key needed):
+
+```bash
+curl "https://api.moca.qwellco.de/v1/rooms/3/slots"
+```
+
+→ `{ version, room, model, slots: [{ id, index, source, position, quaternion,
+width, height, facing, flipped, ambiguous }] }`, room-local GLB units. Each
+`quaternion` is already facing-resolved (local +Z points at the viewer, +Y
+upright — computed by probing the room geometry on both sides of every slot),
+so hang works on it verbatim. `model` is the Directus file id the data was
+computed from — compare it against the room's current model before trusting
+the anchors. Null `slot_data_url` = not baked yet; fall back to the
+placeholder transforms.
 
 ## The exhibition format
 
@@ -27,6 +43,7 @@ their browser). Export produces `*.moca-exhibition.json`:
 {
   "format": "moca-exhibition@1",
   "id": "stable-uuid",                                     // identity for idempotent re-spawns
+  "spawn": { "position": [x, 0, z], "rotationY": 1.57 },   // optional: where visitors enter
   "placements": [{
     "uid": "p0",
     "room": {
@@ -35,6 +52,7 @@ their browser). Export produces `*.moca-exhibition.json`:
       "groundOffset": [x, y, z]     // (-center.x, -bbox.min.y, -center.z), raw units
     },
     "position": [x, 0, z], "rotationY": 0.785,   // tile space: 8 units = one room tile
+    "scale": 1.2,                                // curator room sizing (default 1)
     "slots": [{                                  // baked anchors, GLB-local —
       "id": "Slot_001",                          // works for Auto_NNN too (un_MUSEUM
       "position": [x, y, z],                     // slots exist only at builder runtime,
@@ -70,7 +88,8 @@ Flags: `--tile-size 16` (meters one builder tile maps to — the builder
 normalizes every room onto an 8-unit tile; the spawner reproduces that layout
 by scaling each room to `tileSize/footprint` and converting positions by
 `tileSize/8`, offset by the rotated `groundOffset·scale`), `--art-size 2`
-(base meters, also the in-world inspector default), `--unpinned`,
+(base meters, also the in-world inspector default), `--pinned` (lock the
+layout — rooms arrive unpinned/grabbable by default),
 `--relayout` (reapply museum room positions), `--fresh` (independent copy),
 `--no-verify`. Generated scripts receive the room's `rootScale` and divide
 meter values by it, so artwork/placard sizes stay metric inside scaled rooms.
@@ -88,7 +107,7 @@ touches positions admins set in-world. A post-spawn verification reconnects
 and confirms every room exists — a wrong key fails loudly.
 
 In-world slot editor (embedded in the generated script): with the room's
-"Slot editing" toggle on, builders/admins hold E at a work, nudge with
+"Slot editing" prop on (the default), builders/admins hold E at a work, nudge with
 arrows, resize with scroll, R resets, Enter finishes. Protocol: client sends
 app event `moca:adjust {slot, dx, dy, s}` (or `{slot, reset:true}`); the
 server validates sender rank (`world.getPlayer(networkId).builder`), clamps
@@ -107,7 +126,7 @@ HTTP API is CORS-open), then over `{world}/ws` send msgpackr-packed
 `[packetId, data]` frames: `command {args:["admin", CODE]}` for builder rank
 (connect anonymously — the admin command toggles), `blueprintAdded` /
 `blueprintModified` (version must increase) and `entityAdded` (position,
-yaw→quaternion, `pinned: true`). The generated app script does
+yaw→quaternion, `pinned: false` by default — rooms arrive grabbable). The generated app script does
 `app.get('Slot_001')`, hides it, parents an `image`/`video` node with the
 artwork's ratio and overrides, plus an optional `ui` placard.
 

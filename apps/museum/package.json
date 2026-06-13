@@ -26,6 +26,7 @@
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1",
     "three": "^0.180.0",
+    "three-mesh-bvh": "^0.8.3",
     "zod": "^4.3.6"
   },
   "devDependencies": {

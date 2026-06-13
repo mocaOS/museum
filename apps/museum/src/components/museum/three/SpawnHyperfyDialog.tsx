@@ -43,6 +43,24 @@ const DEFAULT_AVATAR: GuideAvatar = {
   url: "/avatars/omnimorph-3321.vrm",
 };
 
+/**
+ * Museum API override saved in the Museum guide dialog ("moca-guide-config-v1")
+ * — one setting drives BOTH spawn paths, so a local/self-hosted API set there
+ * also powers guides spawned from this dialog.
+ */
+function guideApiOverride(): string | undefined {
+  try {
+    const raw = window.localStorage.getItem("moca-guide-config-v1");
+    if (raw) {
+      const url = String((JSON.parse(raw) as { apiUrl?: string }).apiUrl || "").trim();
+      if (url) return url;
+    }
+  } catch {
+    /* default API */
+  }
+  return undefined;
+}
+
 function loadTarget(): StoredTarget {
   try {
     const raw = window.localStorage.getItem(TARGET_KEY);
@@ -163,11 +181,13 @@ export default function SpawnHyperfyDialog({
   const [ artSize, setArtSize ] = useState(2);
   const [ tileMeters, setTileMeters ] = useState(16);
   const [ relayout, setRelayout ] = useState(false);
+  const [ lockLayout, setLockLayout ] = useState(false);
   const [ guideOn, setGuideOn ] = useState(true);
   const [ guideName, setGuideName ] = useState("Tsahafi");
   const [ guideAvatarId, setGuideAvatarId ] = useState(DEFAULT_AVATAR.id);
   const [ guideDecc0, setGuideDecc0 ] = useState("4209");
   const [ avatars, setAvatars ] = useState<GuideAvatar[]>([ DEFAULT_AVATAR ]);
+  const [ persona, setPersona ] = useState<{ id: number; name: string; thumb: string | null } | null>(null);
   const [ hypBusy, setHypBusy ] = useState(false);
   const [ hypMsg, setHypMsg ] = useState<string | null>(null);
   const [ phase, setPhase ] = useState<"form" | "spawning" | "done">("form");
@@ -199,6 +219,40 @@ export default function SpawnHyperfyDialog({
         /* the bundled default still works */
       });
   }, [ open ]);
+
+  // Resolve the DeCC0 persona's identity so the curator SEES who rides along.
+  useEffect(() => {
+    if (!open || !guideOn) return;
+    const id = Number.parseInt(guideDecc0, 10);
+    if (!id || id < 1 || id > 10000) {
+      setPersona(null);
+      return;
+    }
+    const ctrl = new AbortController();
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(
+          `https://api.decc0s.com/items/codex/${id}?fields=id,name,thumbnail_character`,
+          { signal: ctrl.signal },
+        );
+        if (!res.ok) throw new Error(String(res.status));
+        const { data } = await res.json();
+        setPersona({
+          id,
+          name: (Array.isArray(data.name) ? data.name[0] : data.name) || `#${id}`,
+          thumb: data.thumbnail_character
+            ? `https://api.decc0s.com/assets/${data.thumbnail_character}?key=s128`
+            : null,
+        });
+      } catch {
+        setPersona(null);
+      }
+    }, 300);
+    return () => {
+      ctrl.abort();
+      clearTimeout(timer);
+    };
+  }, [ open, guideOn, guideDecc0 ]);
 
   useEffect(() => {
     if (!open) return;
@@ -242,11 +296,13 @@ export default function SpawnHyperfyDialog({
         artSize,
         tileMeters,
         relayout,
+        pinned: lockLayout,
         guide: guideOn
           ? {
               name: guideName.trim() || "Tsahafi",
               avatarUrl: avatar.url,
               decc0Id: Number.isNaN(decc0Id) ? undefined : decc0Id,
+              apiUrl: guideApiOverride(),
             }
           : undefined,
         onProgress: setProgress,
@@ -272,6 +328,7 @@ export default function SpawnHyperfyDialog({
         name: guideName.trim() || "Tsahafi",
         avatarUrl: avatar.url,
         decc0Id: Number.isNaN(decc0Id) ? undefined : decc0Id,
+        apiUrl: guideApiOverride(),
       });
       downloadGuideHyp(blob, filename);
       setHypMsg(
@@ -451,6 +508,19 @@ export default function SpawnHyperfyDialog({
                   />
                   Reapply room layout
                 </label>
+                <label
+                  className="flex cursor-pointer items-center gap-2 text-[11px]"
+                  style={{ color: "var(--fg2)" }}
+                  title="Pin the rooms so they can't be grabbed in build mode (P in-world unpins). Off by default: anyone with build rights can rearrange or delete rooms right away."
+                >
+                  <input
+                    type="checkbox"
+                    checked={lockLayout}
+                    onChange={e => setLockLayout(e.target.checked)}
+                    className="accent-[var(--accent)]"
+                  />
+                  Lock layout
+                </label>
               </div>
 
               {/* The museum guide */}
@@ -527,6 +597,29 @@ export default function SpawnHyperfyDialog({
                         />
                       </label>
                     </div>
+                    {persona && (
+                      <div className="flex items-center gap-2">
+                        {persona.thumb && (
+                          <img
+                            src={persona.thumb}
+                            alt=""
+                            className={`
+                              h-7 w-7 shrink-0 rounded-[var(--radius-sm)]
+                              object-cover
+                            `}
+                          />
+                        )}
+                        <span className="text-[11px]" style={{ color: "var(--fg2)" }}>
+                          <span style={{ color: "var(--fg1)" }}>{persona.name}</span>
+                          {" "}
+                          <span className="font-mono text-[10px]" style={{ color: "var(--fg3)" }}>
+                            #{persona.id}
+                          </span>
+                          {" "}
+                          guides this exhibition.
+                        </span>
+                      </div>
+                    )}
                     <span className="block text-[10.5px] leading-relaxed" style={{ color: "var(--fg3)" }}>
                       Spawning a guide registers this exhibition&apos;s context —
                       rooms, architects, artists, works — with the MOCA API, so
@@ -661,10 +754,9 @@ export default function SpawnHyperfyDialog({
                           <span className="mt-2 block" style={{ color: "var(--fg3)" }}>
                             Refine inside the world: Tab toggles build mode,
                             right-click a room for its curation controls
-                            (artwork scale, placards, lighting), P unpins a room
-                            so you can rearrange it — the artworks move with it.
-                            Turn on “Slot editing” in a room&apos;s App pane and
-                            hold E at any work to nudge and resize it in place.
+                            (artwork scale, placards, lighting), grab a room to
+                            rearrange it — the artworks move with it — and hold
+                            E at any work to nudge and resize it in place.
                             Spawn again anytime to push curation updates — all
                             in-world refinements are kept.
                           </span>

@@ -40,7 +40,9 @@
  *                             room size and spacing scale together
  *   --art-size <m>            base artwork size in meters (default 2; also the
  *                             in-world inspector default per room)
- *   --unpinned                spawn rooms unpinned (grabbable by any builder)
+ *   --pinned                  lock rooms in place (default: unpinned — any
+ *                             builder can grab, move or delete them right away;
+ *                             visitors without build rights never can either way)
  *   --relayout                move existing rooms back to the museum layout
  *   --fresh                   ignore previous spawns; create new copies
  *   --no-verify               skip the post-spawn verification pass
@@ -102,7 +104,10 @@ const TILE_METERS = Number(
 );
 const ART_SIZE = Number(opt("art-size", "2"));
 const BOT_NAME = opt("name", "MOCA Exhibition Spawner");
-const UNPINNED = flag("unpinned");
+// Rooms arrive unpinned by default — walk up, grab, rearrange, delete. Build
+// rights are still required, so visitors can't touch anything either way.
+// --pinned locks the layout (press P in-world to unpin a room).
+const PINNED = flag("pinned");
 const RELAYOUT = flag("relayout");
 const FRESH = flag("fresh");
 const VERIFY = !flag("no-verify");
@@ -197,7 +202,8 @@ for (const placement of exhibition.placements) {
     let rootScale = 1;
     let position;
     if (fp > 0 && Array.isArray(go)) {
-      rootScale = TILE_METERS / fp;
+      // Curator room sizing from the builder multiplies the tile fit.
+      rootScale = (TILE_METERS / fp) * (Number(placement.scale) || 1);
       const ox = rootScale * go[0];
       const oy = rootScale * go[1];
       const oz = rootScale * go[2];
@@ -328,18 +334,23 @@ for (const placement of exhibition.placements) {
         scale: scaleArr,
         mover: null,
         uploader: null,
-        pinned: !UNPINNED,
+        pinned: PINNED,
         state: {},
       });
-      console.log(`  placed at [${position.map((n) => n.toFixed(1)).join(", ")}] · scale ${rootScale.toFixed(3)}${UNPINNED ? " (unpinned)" : ""}`);
+      console.log(`  placed at [${position.map((n) => n.toFixed(1)).join(", ")}] · scale ${rootScale.toFixed(3)}${PINNED ? " (pinned)" : ""}`);
     } else {
       const eScale = existingEntity.scale || [1, 1, 1];
       const legacyUnscaled = Math.abs(eScale[0] - 1) < 1e-6 && Math.abs(rootScale - 1) > 1e-3;
       if (RELAYOUT || legacyUnscaled) {
-        session.send("entityModified", { id: enId, position, quaternion, scale: scaleArr });
+        session.send("entityModified", { id: enId, position, quaternion, scale: scaleArr, pinned: PINNED });
         console.log(RELAYOUT
           ? "  moved back to the museum layout (--relayout)"
           : "  healed legacy placement (tile normalization applied)");
+      } else if (!!existingEntity.pinned !== PINNED) {
+        // Pin state follows this spawn's intent — earlier spawns pinned by
+        // default; heal them so rooms are grabbable right away.
+        session.send("entityModified", { id: enId, pinned: PINNED });
+        console.log(PINNED ? "  locked in place" : "  unlocked — grab to rearrange, X deletes");
       } else {
         console.log("  kept where admins arranged it in-world");
       }
@@ -351,6 +362,28 @@ for (const placement of exhibition.placements) {
   } catch (err) {
     stats.failed++;
     console.error(`  ✗ ${err.message}`);
+  }
+}
+
+// ----------------------------------------------------------- spawn point ----
+// The curator's chosen entry point: the spawner walks its own (invisible)
+// player there and tells the engine `/spawn set` — from then on every
+// visitor enters the exhibition exactly where the builder intended.
+if (exhibition.spawn && Array.isArray(exhibition.spawn.position)) {
+  try {
+    const k = TILE_METERS / BUILDER_TILE;
+    const sp = exhibition.spawn;
+    const pos = [k * sp.position[0], k * (sp.position[1] || 0) + 0.2, k * sp.position[2]];
+    session.send("entityModified", {
+      id: session.selfId,
+      position: pos,
+      quaternion: yawToQuaternion(sp.rotationY || 0),
+    });
+    await new Promise((r) => setTimeout(r, 400));
+    session.send("command", { args: ["spawn", "set"] });
+    console.log(`\n→ Spawn point set at [${pos.map((n) => n.toFixed(1)).join(", ")}] — visitors enter there`);
+  } catch (err) {
+    console.warn(`  ⚠ spawn point not set (${err.message})`);
   }
 }
 
@@ -445,7 +478,7 @@ if (GUIDE) {
     cx /= exhibition.placements.length || 1;
     cz /= exhibition.placements.length || 1;
     const gPosition = [cx, 0, cz + TILE_METERS * 0.55];
-    const gQuaternion = yawToQuaternion(Math.PI); // face the exhibition center
+    const gQuaternion = yawToQuaternion(0); // VRM forward is -Z: yaw 0 faces the exhibition center
 
     const bpId = await deterministicUuid(`${exhibitionKey}:guide:blueprint`);
     const enId = await deterministicUuid(`${exhibitionKey}:guide:entity`);
@@ -500,7 +533,8 @@ if (GUIDE) {
       console.log("  guide unchanged");
     }
 
-    if (!session.entities.get(enId)) {
+    const existingGuide = session.entities.get(enId);
+    if (!existingGuide) {
       session.send("entityAdded", {
         id: enId,
         type: "app",
@@ -510,11 +544,14 @@ if (GUIDE) {
         scale: [1, 1, 1],
         mover: null,
         uploader: null,
-        pinned: !UNPINNED,
+        pinned: PINNED,
         state: {},
       });
       console.log(`  guide standing at [${gPosition.map((n) => n.toFixed(1)).join(", ")}]`);
     } else {
+      if (!!existingGuide.pinned !== PINNED) {
+        session.send("entityModified", { id: enId, pinned: PINNED });
+      }
       console.log("  guide kept where admins placed it in-world");
     }
     expected.push({ bpId, enId, title: `Museum guide "${GUIDE_NAME}"` });
@@ -549,7 +586,8 @@ if (VERIFY && expected.length) {
 console.log(`\n✔ ${stats.created} created, ${stats.updated} updated, ${stats.unchanged} unchanged, ${stats.failed} failed — ${stats.artworks} artwork(s) total.`);
 console.log(`\nWalk in: ${BASE_URL}`);
 console.log("Refine in-world (any admin): Tab = build mode · grab a room to rearrange");
-console.log("(P unpins it first) · right-click a room → adjust artwork size, placards,");
+console.log("or X to delete it · hold E at a work to nudge/resize it · right-click a");
+console.log("room → artwork size, placards,");
 console.log("lighting and video volume in the App pane. Re-run this command anytime to");
 console.log("push curation updates — in-world arrangements are preserved.");
 process.exit(stats.failed ? 1 : 0);

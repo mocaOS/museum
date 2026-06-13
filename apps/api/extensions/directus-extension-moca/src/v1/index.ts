@@ -76,6 +76,7 @@ export default defineEndpoint({
             "GET /v1/artworks?collection&search&page&limit",
             "GET /v1/artworks/:id",
             "GET /v1/rooms",
+            "GET /v1/rooms/:id/slots (public — baked slot anchors + resolved facing for the room's GLB)",
             "GET /v1/decc0s?page&limit&search",
             "GET /v1/decc0s/:id?include=profiles,codex",
             "GET /v1/search?q=",
@@ -102,6 +103,36 @@ export default defineEndpoint({
     // The museum guide (public — the in-world visitor flow must be keyless;
     // see guide.ts for the rate limits and the enrichment pipeline).
     registerGuideRoutes(router, { itemsService, cortex, decc0s, souls, errorJson });
+
+    // ---- Room slot data (public) -------------------------------------------
+    // Baked slot anchors + resolved facing for a room's builder GLB
+    // (rooms.slot_data, written by apps/migration/bake-slot-data.ts). Public
+    // like the guide: 3D clients hang artworks on these anchors without a key.
+    router.get("/rooms/:id/slots", async (req, res) => {
+      try {
+        const id = Number.parseInt(req.params.id, 10);
+        if (Number.isNaN(id)) return errorJson(res, 400, "Invalid room id", "BAD_REQUEST");
+        const svc = await itemsService("rooms");
+        let rows: any[];
+        try {
+          rows = await svc.readByQuery({
+            filter: { id: { _eq: id } },
+            fields: ["id", "slot_data"],
+            limit: 1,
+          });
+        } catch {
+          // rooms.slot_data doesn't exist yet (pre-bake instance)
+          return errorJson(res, 404, "No slot data baked for this room", "NOT_FOUND");
+        }
+        if (!rows.length) return errorJson(res, 404, "Room not found", "NOT_FOUND");
+        if (!rows[0].slot_data) {
+          return errorJson(res, 404, "No slot data baked for this room", "NOT_FOUND");
+        }
+        res.json({ data: rows[0].slot_data });
+      } catch (e: any) {
+        errorJson(res, 500, e?.message || "Internal error", "INTERNAL");
+      }
+    });
 
     // Everything below requires a valid MOCA API key.
     router.use(requireKey);
@@ -254,20 +285,25 @@ export default defineEndpoint({
       try {
         const svc = await itemsService("rooms");
         const baseFields = ["id", "title", "architect", "description", "series", "slots", "image", "model", "token_id"];
+        // model_optimized = builder variant (draco/webp-optimized GLB with
+        // embedded Slot_NNN placeholders; un_MUSEUMs get theirs generated
+        // from the onchain slot amount; apps/migration/embed-room-slots.ts).
+        // slot_data = baked slot anchors + resolved facing for that GLB
+        // (apps/migration/bake-slot-data.ts), served per-room at
+        // /v1/rooms/:id/slots. Both fields are created by their script's
+        // first --write run — fall back gracefully on instances that
+        // predate them.
+        const fetchRooms = (extras: string[]) =>
+          svc.readByQuery({ limit: -1, sort: ["id"], fields: [...baseFields, ...extras] });
         let rows: any[];
         try {
-          // model_optimized = builder variant (draco/webp-optimized GLB with
-          // embedded Slot_NNN placeholders; un_MUSEUMs get theirs generated
-          // from the onchain slot amount). `model` stays the untouched HQ
-          // version. The field is created by apps/migration/embed-room-slots.ts
-          // — fall back gracefully on instances that predate it.
-          rows = await svc.readByQuery({
-            limit: -1,
-            sort: ["id"],
-            fields: [...baseFields, "model_optimized"],
-          });
+          rows = await fetchRooms(["model_optimized", "slot_data"]);
         } catch {
-          rows = await svc.readByQuery({ limit: -1, sort: ["id"], fields: baseFields });
+          try {
+            rows = await fetchRooms(["model_optimized"]);
+          } catch {
+            rows = await fetchRooms([]);
+          }
         }
         res.json({
           data: rows.map((r: any) => ({
@@ -281,6 +317,9 @@ export default defineEndpoint({
             image_url: assetUrl(r.image),
             model_url: assetUrl(r.model),
             model_optimized_url: assetUrl(r.model_optimized),
+            // Pointer instead of the inline JSON — slot_data runs to a few KB
+            // per room and most list consumers don't need the anchors.
+            slot_data_url: r.slot_data ? `${publicUrl}/v1/rooms/${r.id}/slots` : null,
           })),
         });
       } catch (e: any) {

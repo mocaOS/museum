@@ -95,6 +95,7 @@ app.configure([
   { key: 'exhibitionName', type: 'text', label: 'Exhibition title', initial: ${inline(config.exhibition.name)} },
   { key: 'talkDistance', type: 'range', label: 'Talk distance', hint: 'How close visitors must be to start talking (meters)', min: 1, max: 8, step: 0.5, initial: 3 },
   { key: 'chatRange', type: 'range', label: 'Chat range', hint: 'How far the guide hears typed chat questions (meters)', min: 4, max: 30, step: 1, initial: 10 },
+  { key: 'welcomeSign', type: 'toggle', label: 'Welcome sign', hint: 'Float the exhibition title and a how-to over the guide', trueLabel: 'Shown', falseLabel: 'Hidden', initial: true },
 ])
 
 const BAKED = ${inline(config.exhibition)}
@@ -117,6 +118,7 @@ const SOUL_REF = ${inline(config.soulRef)}
 const API = str(props.apiUrl, ${inline(config.apiUrl)}).replace(/\\/+$/, '')
 const TALK_DIST = numOr(props.talkDistance, 3)
 const CHAT_RANGE = numOr(props.chatRange, 10)
+const WELCOME_SIGN = props.welcomeSign !== false
 
 const GREETING = 'Welcome to \\u201c' + EXHIBITION.name + '\\u201d! I\\u2019m ' + NAME + ', your guide' +
   (EXHIBITION.artworks ? ' \\u2014 ' + EXHIBITION.rooms + ' room(s), ' + EXHIBITION.artworks + ' works to discover' : '') +
@@ -218,13 +220,12 @@ if (world.isServer) {
     handleAsk(playerId, d.text.trim(), false)
   })
 
-  // Free text: chat from a visitor with an open session, standing near the
-  // guide. "/ask <question>" works from anywhere in chat range, session or not.
+  // Free text: any chat from a visitor standing near the guide is a question
+  // — no panel needed, exactly what the greeting promises. Typing "1"-"3"
+  // picks an offered question. "/ask <question>" also works.
   world.on('chat', (msg) => {
     try {
       if (!msg || !msg.fromId || typeof msg.body !== 'string') return
-      const s = sessions[msg.fromId]
-      if (!s || !s.open) return
       if (msg.body.startsWith('/')) return
       if (!nearGuide(msg.fromId, CHAT_RANGE)) return
       handleAsk(msg.fromId, msg.body.trim(), true)
@@ -257,6 +258,51 @@ if (world.isClient) {
     app.add(tag)
   } catch (e) {
     /* nametags unavailable — the panel still names the guide */
+  }
+
+  // The welcome sign: the exhibition's name over the guide's head, plus the
+  // one line every first-time visitor needs. This doubles as the show's
+  // entrance signage — the guide stands at the exhibition's heart. It hides
+  // while the conversation panel is open so the two never overlap.
+  let welcomeSign = null
+  if (WELCOME_SIGN) {
+    try {
+      const sign = app.create('ui', {
+        space: 'world',
+        width: 460,
+        height: 96,
+        backgroundColor: 'rgba(8, 8, 8, 0.85)',
+        borderRadius: 12,
+        padding: 14,
+        flexDirection: 'column',
+        justifyContent: 'center',
+        gap: 5,
+        billboard: 'y',
+        doubleside: true,
+        pointerEvents: false,
+      })
+      sign.size = 0.0036
+      sign.position.set(0, 3.0, 0)
+      sign.add(app.create('uitext', {
+        value: EXHIBITION.name,
+        fontSize: 20,
+        color: '#ffffff',
+        fontWeight: 'bold',
+        textAlign: 'center',
+        lineHeight: 1.15,
+      }))
+      sign.add(app.create('uitext', {
+        value: 'Museum of Crypto Art \u00B7 hold E to talk to ' + NAME,
+        fontSize: 11.5,
+        color: '#b3b3b3',
+        textAlign: 'center',
+        lineHeight: 1.2,
+      }))
+      app.add(sign)
+      welcomeSign = sign
+    } catch (e) {
+      /* ui nodes unavailable — the nametag still marks the guide */
+    }
   }
 
   // ---- the conversation panel (local to this player) ----------------------
@@ -297,6 +343,7 @@ if (world.isClient) {
   function closePanel() {
     if (!panel) return
     try { app.remove(panel) } catch (e) {}
+    if (welcomeSign) { try { welcomeSign.visible = true } catch (e) {} }
     panel = null
     answerText = null
     statusText = null
@@ -319,8 +366,8 @@ if (world.isClient) {
         billboard: 'y',
         doubleside: true,
       })
-      panel.size = 0.0028
-      panel.position.set(0, 2.5, 0)
+      panel.size = 0.0032
+      panel.position.set(0, 2.05, 0.35)
 
       const header = app.create('uitext', {
         value: NAME + ' \\u00b7 \\u201c' + EXHIBITION.name + '\\u201d',
@@ -373,6 +420,7 @@ if (world.isClient) {
       panel.add(hint)
 
       app.add(panel)
+      if (welcomeSign) { try { welcomeSign.visible = false } catch (e) {} }
       setSuggestions(currentSuggestions)
       app.send('moca:guide:open', {})
     } catch (e) {
@@ -421,8 +469,10 @@ if (world.isClient) {
     }
   })
 
-  // Walking away ends the conversation; the guide turns to face whoever is close.
+  // Walking away ends the conversation; the guide turns to face whoever is
+  // close, and greets each visitor (privately) the first time they come near.
   let sinceCheck = 0
+  let greeted = false
   app.on('update', (dt) => {
     sinceCheck += dt
     if (sinceCheck < 0.25) return
@@ -433,10 +483,34 @@ if (world.isClient) {
     const dx = me.position.x - app.position.x
     const dz = me.position.z - app.position.z
     const distSq = dx * dx + dz * dz
+    if (!greeted && distSq < (TALK_DIST + 3) * (TALK_DIST + 3)) {
+      greeted = true
+      try {
+        world.chat({
+          from: NAME,
+          body: 'Welcome to \u201C' + EXHIBITION.name + '\u201D! I\u2019m ' + NAME + ' \u2014 talk to me right here in the chat.',
+        }, false)
+        const starters = currentSuggestions.slice(0, 3)
+        if (starters.length) {
+          world.chat({
+            from: NAME,
+            body: 'Type just a number to ask: ' + starters.map((q, i) => (i + 1) + ') ' + q).join('  '),
+          }, false)
+        }
+        world.chat({
+          from: NAME,
+          body: '\u2026 or type any question of your own. (Hold E at me for the full panel.)',
+        }, false)
+      } catch (e) {
+        /* chat unavailable — the sign and action prompt still invite */
+      }
+    }
     if (panel && distSq > (TALK_DIST + 4) * (TALK_DIST + 4)) closePanel()
     if (distSq < 36 && distSq > 0.04) {
       try {
-        const yaw = Math.atan2(dx, dz)
+        // VRM rigs face their local -Z: add a half turn so the guide looks
+        // AT the player, not away.
+        const yaw = Math.atan2(dx, dz) + Math.PI
         app.quaternion.set(0, Math.sin(yaw / 2), 0, Math.cos(yaw / 2))
       } catch (e) {}
     }

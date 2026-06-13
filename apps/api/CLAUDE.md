@@ -75,7 +75,11 @@ source of truth.
 - **Routes**: `GET /v1` (public index), then key-gated: `/v1/collections[/:slug]`,
   `/v1/artworks[/:id]` (media normalized like the museum frontend — dead-host
   revival, original-file preference over square-cropped i2c.seadn.io variants,
-  trusted ratios — `src/v1/media.ts`), `/v1/rooms`, `/v1/decc0s[/:id]`
+  trusted ratios — `src/v1/media.ts`), `/v1/rooms` (incl. `slot_data_url`
+  pointers; the per-room baked slot anchors live at the **public, keyless**
+  `GET /v1/rooms/:id/slots` — `rooms.slot_data`, written by
+  `apps/migration/bake-slot-data.ts`: positions + facing-resolved quaternions
+  so 3D clients hang works without normal-flipping heuristics), `/v1/decc0s[/:id]`
   (aggregated + cached 5 min, `include=profiles,codex` for the heavy blobs /
   lore file — `src/v1/decc0s.ts`), `/v1/search?q=`, **the Library**
   (`POST /v1/library/ask`, `POST /v1/library/ask/stream` (SSE passthrough),

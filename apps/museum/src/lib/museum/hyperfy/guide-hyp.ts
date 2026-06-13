@@ -1,4 +1,5 @@
 import { generateGuideScript } from "./guide-script";
+import { randomUuid } from "./hash";
 import { buildHyp, hypAssetUrl } from "./hyp";
 import type { HyperfyExhibition } from "@/components/museum/three/hyperfy-export";
 
@@ -134,7 +135,7 @@ export async function buildGuideHyp(
   const scriptAssetUrl = await hypAssetUrl(scriptBytes, "js");
 
   const blueprint = {
-    id: crypto.randomUUID(), // replaced by the engine on drop
+    id: randomUuid(), // replaced by the engine on drop
     version: 0,
     name: "MOCA · Museum Guide",
     author: "Museum of Crypto Art",

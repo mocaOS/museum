@@ -17,6 +17,8 @@ export interface PlacedSummary {
   architect?: string | null;
   slotsTotal: number;
   slotsFilled: number;
+  /** Curator size multiplier (1 = one tile). */
+  scale: number;
 }
 
 export const SIDEBAR_WIDTH = 340;
@@ -115,6 +117,11 @@ function IconSparkles({ size }: { size?: number }) {
   return <Icon size={size}>
     <path d="M9.94 15.5a2 2 0 0 0-1.44-1.44L2.37 12.5a.5.5 0 0 1 0-.96l6.13-1.58a2 2 0 0 0 1.44-1.44l1.58-6.14a.5.5 0 0 1 .96 0l1.58 6.14a2 2 0 0 0 1.44 1.44l6.13 1.58a.5.5 0 0 1 0 .96l-6.13 1.58a2 2 0 0 0-1.44 1.44l-1.58 6.13a.5.5 0 0 1-.96 0z" />
     <path d="M20 3v4M22 5h-4" />
+  </Icon>;
+}
+function IconClose({ size }: { size?: number }) {
+  return <Icon size={size}>
+    <path d="M18 6 6 18M6 6l12 12" />
   </Icon>;
 }
 function IconCheck({ size }: { size?: number }) {
@@ -326,6 +333,11 @@ export default function BuilderSidebar({
   onExport,
   onSpawn,
   onGuide,
+  onScaleRoom,
+  onSetSpawn,
+  onClearSpawn,
+  hasSpawn,
+  onBrowserQuery,
 }: {
   tab: SidebarTab;
   onTabChange: (tab: SidebarTab) => void;
@@ -366,6 +378,11 @@ export default function BuilderSidebar({
   onExport: () => void;
   onSpawn: () => void;
   onGuide: () => void;
+  onScaleRoom: (uid: string, dir: 1 | -1) => void;
+  onSetSpawn: () => void;
+  onClearSpawn: () => void;
+  hasSpawn: boolean;
+  onBrowserQuery: (q: { slugs: string | null; search: string }) => void;
 }) {
   const TABS: { id: SidebarTab; label: string; icon: ReactNode }[] = [
     { id: "build", label: "Build", icon: <IconGrid /> },
@@ -519,6 +536,19 @@ export default function BuilderSidebar({
               </SmallBtn>
               <SmallBtn onClick={() => onRotateRoom(selected.uid)} title="Rotate 45° (R)">
                 <IconRotate size={13} />
+              </SmallBtn>
+              <SmallBtn onClick={() => onScaleRoom(selected.uid, -1)} title="Shrink room">
+                <IconMinus size={13} />
+              </SmallBtn>
+              <span
+                className="text-[10px]"
+                style={{ color: "var(--fg3)", fontFamily: "var(--font-mono)" }}
+                title="Room size — carried into Hyperfy spawns"
+              >
+                {Math.round((selected.scale || 1) * 100)}%
+              </span>
+              <SmallBtn onClick={() => onScaleRoom(selected.uid, 1)} title="Enlarge room">
+                <IconPlus size={13} />
               </SmallBtn>
               <SmallBtn
                 onClick={() => onRemoveRoom(selected.uid)}
@@ -755,12 +785,13 @@ export default function BuilderSidebar({
                     )
                   : (
                 <span style={{ color: "var(--fg3)" }}>
-                  Select a slot number — or click a glowing frame in the room.
+                  Click any artwork below — it hangs in the first free slot.
+                  Or pick a slot number / glowing frame first.
                 </span>
                     )}
             </div>
 
-            <ArtworkBrowser canPick={!!activeSlotId} onPick={onPickArt} />
+            <ArtworkBrowser canPick onPick={onPickArt} onQuery={onBrowserQuery} />
           </>
         )}
       </div>
@@ -772,6 +803,17 @@ export default function BuilderSidebar({
       >
         <ExhibitsPanel getLayout={getLayout} hasContent={hasContent} onLoad={onLoadLayout} />
         <div className="flex flex-col gap-2 border-t p-3" style={{ borderColor: "var(--border)" }}>
+          <div className="flex items-center gap-1.5">
+            <SmallBtn onClick={onSetSpawn} title="Click the ground in the 3D view to choose where visitors enter the Hyperfy world">
+              <IconFocus size={13} />
+              {hasSpawn ? "Move spawn point" : "Set spawn point"}
+            </SmallBtn>
+            {hasSpawn && (
+              <SmallBtn onClick={onClearSpawn} title="Remove the custom spawn point">
+                <IconClose size={13} />
+              </SmallBtn>
+            )}
+          </div>
           <button
             onClick={onSpawn}
             disabled={!hasContent}

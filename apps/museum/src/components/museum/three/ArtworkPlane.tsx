@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
+import { useFrame } from "@react-three/fiber";
 import type { ThreeEvent } from "@react-three/fiber";
 import type { RoomSlot } from "./slots";
 import { fitToFrame } from "./slots";
@@ -128,6 +129,26 @@ export default function ArtworkPlane({
   }, [url, videoUrl]);
 
   useEffect(() => () => texture?.dispose(), [texture]);
+
+  // Motion pieces only animate near the camera: every VideoTexture uploads a
+  // GPU frame per tick, and a curated world quickly accumulates dozens.
+  // Checked every ~30 frames with play/pause hysteresis so a wall of videos
+  // far across the exhibition costs nothing.
+  const videoCull = useRef({ n: 0, v: new THREE.Vector3() });
+  useFrame(({ camera }) => {
+    if (!(texture instanceof THREE.VideoTexture) || !groupRef.current) return;
+    const c = videoCull.current;
+    if ((c.n = (c.n + 1) % 30) !== 0) return;
+    const video = texture.image as HTMLVideoElement;
+    const d = camera.position.distanceTo(groupRef.current.getWorldPosition(c.v));
+    if (d > 70) {
+      if (!video.paused) video.pause();
+    } else if (d < 58 && video.paused) {
+      video.play().catch(() => {
+        /* autoplay restrictions — the still frame remains */
+      });
+    }
+  });
 
   const ov = override ?? DEFAULT_OVERRIDE;
 
