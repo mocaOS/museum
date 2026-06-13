@@ -1,0 +1,8 @@
+# Runtime world data volume (mounted at /app/world in the container).
+# The engine seeds the database, default collections, and settings on first
+# boot, and uploads rooms/artworks here at runtime — none of it is template
+# source. Deploy starts from an empty `world/` (see docker-compose.yml).
+/world/
+
+# Local secrets
+.env
