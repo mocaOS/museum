@@ -3,6 +3,7 @@
 import { type ReactNode, useMemo, useState } from "react";
 import Link from "next/link";
 import ArtworkBrowser from "./ArtworkPicker";
+import MultipassImporter from "./MultipassImporter";
 import ExhibitsPanel from "./ExhibitsPanel";
 import type { SlotWorld, WorldRoom } from "./WorldBuilder";
 import type { Assignments, WorldLayout } from "./world-storage";
@@ -393,6 +394,10 @@ export default function BuilderSidebar({
   const selected = selectedUid ? placed.find(p => p.uid === selectedUid) ?? null : null;
   const totalWorks = placed.reduce((sum, p) => sum + p.slotsFilled, 0);
   const filledCount = curating ? Object.keys(curAssignments).length : 0;
+
+  // Where the curate browser pulls works from: the museum collections, or a
+  // wallet's legacy MOCA curations (the Multipass importer).
+  const [ curateSrc, setCurateSrc ] = useState<"moca" | "multipass">("moca");
 
   if (collapsed) {
     return (
@@ -791,7 +796,41 @@ export default function BuilderSidebar({
                     )}
             </div>
 
-            <ArtworkBrowser canPick onPick={onPickArt} onQuery={onBrowserQuery} />
+            {/* Source toggle: museum collections vs a wallet's Multipass curations */}
+            <div
+              className="grid grid-cols-2 gap-1 border-b p-1.5"
+              style={{ borderColor: "var(--border)" }}
+            >
+              {([ "moca", "multipass" ] as const).map((src) => {
+                const active = curateSrc === src;
+                return (
+                  <button
+                    key={src}
+                    onClick={() => setCurateSrc(src)}
+                    className={`
+                      flex h-8 items-center justify-center rounded-[var(--radius)]
+                      text-[11px] transition-colors
+                    `}
+                    style={{
+                      background: active ? "var(--muted)" : "transparent",
+                      color: active ? "var(--accent)" : "var(--fg2)",
+                    }}
+                    title={
+                      src === "moca"
+                        ? "Browse the museum's collections"
+                        : "Import a wallet's past MOCA curations"
+                    }
+                  >
+                    {src === "moca" ? "MOCA collections" : "Multipass"}
+                  </button>
+                );
+              })}
+            </div>
+            {curateSrc === "moca" ? (
+              <ArtworkBrowser canPick onPick={onPickArt} onQuery={onBrowserQuery} />
+            ) : (
+              <MultipassImporter canPick onPick={onPickArt} />
+            )}
           </>
         )}
       </div>

@@ -18,13 +18,98 @@ interface ArtworksResponse {
 }
 
 /** Small thumbnail for a grid card: cheap proxied webp, or mp4 for motion works. */
-function thumbUrl(art: NftView): string {
+export function thumbUrl(art: NftView): string {
   const still = art.preview ?? art.display;
   const raw = resolveMediaUrl(still?.url);
   if (!raw) return "";
   return proxiedUrl(
     raw,
     art.isVideo ? { width: 480, format: "mp4", q: 70 } : { width: 240, format: "webp", q: 70 },
+  );
+}
+
+/**
+ * The 2-column clickable artwork grid shared by the museum-collection browser
+ * and the Multipass importer. Cards are disabled until a wall slot is active.
+ */
+export function ArtworkGrid({
+  artworks,
+  canPick,
+  onPick,
+  loading,
+  emptyLabel = "No artworks found.",
+}: {
+  artworks: NftView[];
+  canPick: boolean;
+  onPick: (art: NftView) => void;
+  loading?: boolean;
+  emptyLabel?: string;
+}) {
+  return (
+    <div className="min-h-0 flex-1 overflow-y-auto p-3">
+      <div className="grid grid-cols-2 gap-2">
+        {artworks.map((art) => {
+          const t = thumbUrl(art);
+          return (
+            <button
+              key={art.id}
+              onClick={() => canPick && onPick(art)}
+              disabled={!canPick}
+              className={`
+                group overflow-hidden rounded-[var(--radius)] border text-left
+                transition-transform
+                enabled:hover:-translate-y-0.5
+                disabled:cursor-not-allowed disabled:opacity-50
+              `}
+              style={{ borderColor: "var(--border)", background: "var(--card)" }}
+              title={`${art.name || "Untitled"}${art.artist_name ? ` · ${art.artist_name}` : ""}`}
+            >
+              <div className="aspect-square overflow-hidden" style={{ background: "var(--muted)" }}>
+                {t && art.isVideo ? (
+                  // Motion works have no still poster — show the clip itself,
+                  // muted and looping, like the gallery grids do.
+                  <video
+                    src={t}
+                    muted
+                    loop
+                    autoPlay
+                    playsInline
+                    preload="metadata"
+                    className="h-full w-full object-cover"
+                  />
+                ) : t ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={t} alt={art.name || "Artwork"} loading="lazy" className={`
+                    h-full w-full object-cover
+                  `} />
+                ) : (
+                  <div className={`
+                    flex h-full items-center justify-center text-[10px]
+                  `} style={{ color: "var(--fg3)" }}>
+                    no preview
+                  </div>
+                )}
+              </div>
+              <div className="px-1.5 py-1">
+                <div className="truncate text-[11px]" style={{ color: "var(--fg1)" }}>
+                  {art.name || "Untitled"}
+                </div>
+                {art.artist_name && (
+                  <div className="truncate text-[10px]" style={{ color: "var(--fg3)" }}>
+                    {art.artist_name}
+                  </div>
+                )}
+              </div>
+            </button>
+          );
+        })}
+      </div>
+      {artworks.length === 0 && !loading && (
+        <div className="py-10 text-center text-xs" style={{ color: "var(--fg3)" }}>
+          {emptyLabel}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -157,70 +242,12 @@ export default function ArtworkBrowser({
       </div>
 
       {/* Results grid */}
-      <div className="min-h-0 flex-1 overflow-y-auto p-3">
-        <div className="grid grid-cols-2 gap-2">
-          {data?.artworks.map((art) => {
-            const t = thumbUrl(art);
-            return (
-              <button
-                key={art.id}
-                onClick={() => canPick && onPick(art)}
-                disabled={!canPick}
-                className={`
-                  group overflow-hidden rounded-[var(--radius)] border text-left
-                  transition-transform
-                  enabled:hover:-translate-y-0.5
-                  disabled:cursor-not-allowed disabled:opacity-50
-                `}
-                style={{ borderColor: "var(--border)", background: "var(--card)" }}
-                title={`${art.name || "Untitled"}${art.artist_name ? ` · ${art.artist_name}` : ""}`}
-              >
-                <div className="aspect-square overflow-hidden" style={{ background: "var(--muted)" }}>
-                  {t && art.isVideo ? (
-                    // Motion works have no still poster — show the clip itself,
-                    // muted and looping, like the gallery grids do.
-                    <video
-                      src={t}
-                      muted
-                      loop
-                      autoPlay
-                      playsInline
-                      preload="metadata"
-                      className="h-full w-full object-cover"
-                    />
-                  ) : t ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={t} alt={art.name || "Artwork"} loading="lazy" className={`
-                      h-full w-full object-cover
-                    `} />
-                  ) : (
-                    <div className={`
-                      flex h-full items-center justify-center text-[10px]
-                    `} style={{ color: "var(--fg3)" }}>
-                      no preview
-                    </div>
-                  )}
-                </div>
-                <div className="px-1.5 py-1">
-                  <div className="truncate text-[11px]" style={{ color: "var(--fg1)" }}>
-                    {art.name || "Untitled"}
-                  </div>
-                  {art.artist_name && (
-                    <div className="truncate text-[10px]" style={{ color: "var(--fg3)" }}>
-                      {art.artist_name}
-                    </div>
-                  )}
-                </div>
-              </button>
-            );
-          })}
-        </div>
-        {data && data.artworks.length === 0 && !loading && (
-          <div className="py-10 text-center text-xs" style={{ color: "var(--fg3)" }}>
-            No artworks found.
-          </div>
-        )}
-      </div>
+      <ArtworkGrid
+        artworks={data?.artworks ?? []}
+        canPick={canPick}
+        onPick={onPick}
+        loading={loading}
+      />
 
       {/* Pager */}
       {totalPages > 1 && (
