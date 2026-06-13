@@ -467,18 +467,29 @@ if (GUIDE) {
     );
     const guideScriptUrl = await uploadAsset({ baseUrl: BASE_URL, bytes: guideScript, ext: "js", mime: "text/javascript" });
 
-    // 4. Place the guide at the heart of the exhibition, facing its center.
+    // 4. Stand the guide beside the room nearest the player spawn (world
+    //    origin), on the approach side and facing arrivals, so visitors meet it
+    //    on the way in. After someone talks to it, it follows them (guide-script).
     const k = TILE_METERS / BUILDER_TILE;
-    let cx = 0;
-    let cz = 0;
+    let nearWX = 0;
+    let nearWZ = 0;
+    let best = Infinity;
     for (const p of exhibition.placements) {
-      cx += k * p.position[0];
-      cz += k * p.position[2];
+      const wx = k * p.position[0];
+      const wz = k * p.position[2];
+      const d = wx * wx + wz * wz; // distance² to the spawn point (world origin)
+      if (d < best) { best = d; nearWX = wx; nearWZ = wz; }
     }
-    cx /= exhibition.placements.length || 1;
-    cz /= exhibition.placements.length || 1;
-    const gPosition = [cx, 0, cz + TILE_METERS * 0.55];
-    const gQuaternion = yawToQuaternion(0); // VRM forward is -Z: yaw 0 faces the exhibition center
+    // Offset from that room toward the spawn point so the guide stands on the
+    // path in, not buried inside the room.
+    const len = Math.hypot(nearWX, nearWZ) || 1;
+    const off = TILE_METERS * 0.6;
+    const gx = nearWX - (nearWX / len) * off;
+    const gz = nearWZ - (nearWZ / len) * off;
+    const gPosition = [gx, 0, gz];
+    // Face the spawn point (where arrivals come from); the script re-faces toward
+    // whoever approaches. Same yaw convention as the script: atan2(dx,dz)+π.
+    const gQuaternion = yawToQuaternion(Math.atan2(-gx, -gz) + Math.PI);
 
     const bpId = await deterministicUuid(`${exhibitionKey}:guide:blueprint`);
     const enId = await deterministicUuid(`${exhibitionKey}:guide:entity`);

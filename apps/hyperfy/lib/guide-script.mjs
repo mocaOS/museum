@@ -117,8 +117,61 @@ const GREETING = 'Welcome to \\u201c' + EXHIBITION.name + '\\u201d! I\\u2019m ' 
   '. Pick a question, or just type yours in the chat while you\\u2019re near me.'
 const OFFLINE = 'My deeper knowledge is offline right now \\u2014 walk the rooms and come back to me in a little while.'
 
+// Follow behaviour: after a visitor interacts (hold E or asks a question) the
+// guide trails them. Hyperfy doesn't network script-driven transforms, so BOTH
+// the server and every client run this SAME math against the followed player's
+// (networked, so shared) position — the server so its proximity/chat-range
+// checks track the visitor it's walking with, the clients for the visual. No
+// transform replication needed; they agree because the input is the same.
+const FOLLOW_STANDOFF = 1.8
+const FOLLOW_LERP = 2.6
+function moveGuide(dt, followId, home) {
+  const A = app.position
+  if (followId) {
+    let p = null
+    try { p = world.getPlayer(followId) } catch (e) {}
+    if (p && p.position) {
+      const dx = p.position.x - A.x
+      const dz = p.position.z - A.z
+      const dist = Math.sqrt(dx * dx + dz * dz) || 0.0001
+      let tx = A.x
+      let tz = A.z
+      if (dist > FOLLOW_STANDOFF) {
+        tx = p.position.x - (dx / dist) * FOLLOW_STANDOFF
+        tz = p.position.z - (dz / dist) * FOLLOW_STANDOFF
+      }
+      const k = Math.min(1, FOLLOW_LERP * dt)
+      app.position.set(A.x + (tx - A.x) * k, A.y + (p.position.y - A.y) * k, A.z + (tz - A.z) * k)
+      const yaw = Math.atan2(p.position.x - app.position.x, p.position.z - app.position.z) + Math.PI
+      app.quaternion.set(0, Math.sin(yaw / 2), 0, Math.cos(yaw / 2))
+      return true
+    }
+  }
+  if (home) {
+    const k = Math.min(1, FOLLOW_LERP * dt)
+    app.position.set(A.x + (home.x - A.x) * k, A.y + (home.y - A.y) * k, A.z + (home.z - A.z) * k)
+  }
+  return false
+}
+
 // ---------------------------------------------------------------- server ----
 if (world.isServer) {
+  // Whoever last interacts becomes the follow target (broadcast to clients via
+  // app.send; mirrored to app.state.follow so late-joiners pick it up).
+  const HOME = { x: app.position.x, y: app.position.y, z: app.position.z }
+  let followId = null
+  function setFollow(id) {
+    if (id == null || followId === id) return
+    followId = id
+    try { app.state.follow = id } catch (e) {}
+    app.send('moca:guide:follow', { id })
+  }
+  function clearFollow(id) {
+    if (id != null && followId !== id) return
+    followId = null
+    try { app.state.follow = null } catch (e) {}
+    app.send('moca:guide:follow', { id: null })
+  }
   // playerId -> { open, history: [{role,content}], suggestions, busy, lastAsk }
   const sessions = {}
   const session = (playerId) => {
@@ -149,6 +202,7 @@ if (world.isServer) {
     const digit = /^[1-9]$/.test(text) ? Number(text) : 0
     const question = digit && s.suggestions[digit - 1] ? s.suggestions[digit - 1] : text
     if (!question || question.length < 2) return
+    setFollow(playerId)
     s.busy = true
     s.lastAsk = now
     app.sendTo(playerId, 'moca:guide:thinking', { question })
@@ -201,6 +255,7 @@ if (world.isServer) {
   app.on('moca:guide:open', (d, playerId) => {
     const s = session(playerId)
     s.open = true
+    setFollow(playerId)
     app.sendTo(playerId, 'moca:guide:hello', { suggestions: s.suggestions })
   })
   app.on('moca:guide:close', (d, playerId) => {
@@ -238,12 +293,26 @@ if (world.isServer) {
     }
   })
   world.on('leave', (e) => {
-    if (e && e.playerId) delete sessions[e.playerId]
+    if (e && e.playerId) {
+      delete sessions[e.playerId]
+      clearFollow(e.playerId)
+    }
+  })
+  // Server-authoritative motion so chat-range/proximity track the followed
+  // visitor (clients run the identical math for the visual). Eases back to its
+  // post when no one's being followed.
+  app.on('fixedUpdate', (dt) => {
+    try { moveGuide(dt, followId, HOME) } catch (e) {}
   })
 }
 
 // ---------------------------------------------------------------- client ----
 if (world.isClient) {
+  // The guide's resting post + who it's currently following (server tells us).
+  const HOME = { x: app.position.x, y: app.position.y, z: app.position.z }
+  let followId = (app.state && app.state.follow) || null
+  app.on('moca:guide:follow', (d) => { followId = d && d.id != null ? d.id : null })
+
   try {
     const tag = app.create('nametag', { label: NAME })
     tag.position.set(0, 2.05, 0)
@@ -466,6 +535,9 @@ if (world.isClient) {
   let sinceCheck = 0
   let greeted = false
   app.on('update', (dt) => {
+    // Follow runs every frame for smoothness; returns true when it set facing
+    // (toward the followed visitor) so we don't fight it with per-player facing.
+    const following = moveGuide(dt, followId, HOME)
     sinceCheck += dt
     if (sinceCheck < 0.25) return
     sinceCheck = 0
@@ -498,10 +570,11 @@ if (world.isClient) {
       }
     }
     if (panel && distSq > (TALK_DIST + 4) * (TALK_DIST + 4)) closePanel()
-    if (distSq < 36 && distSq > 0.04) {
+    if (!following && distSq < 36 && distSq > 0.04) {
       try {
         // VRM rigs face their local -Z: add a half turn so the guide looks
-        // AT the player, not away.
+        // AT the player, not away. (Skipped while following — moveGuide already
+        // faces the followed visitor for everyone.)
         const yaw = Math.atan2(dx, dz) + Math.PI
         app.quaternion.set(0, Math.sin(yaw / 2), 0, Math.cos(yaw / 2))
       } catch (e) {}
