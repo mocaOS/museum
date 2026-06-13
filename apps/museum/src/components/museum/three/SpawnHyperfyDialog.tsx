@@ -147,6 +147,13 @@ function IconGlobe({ size }: { size?: number }) {
   </Icon>;
 }
 
+function IconRefresh({ size }: { size?: number }) {
+  return <Icon size={size}>
+    <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+    <path d="M21 3v5h-5" />
+  </Icon>;
+}
+
 function Spinner() {
   return (
     <span
@@ -299,7 +306,10 @@ export default function SpawnHyperfyDialog({
       && typeof window !== "undefined"
       && window.location.protocol === "https:";
 
-  const spawn = async () => {
+  // forceRelayout=true is the "Update exhibit" path: re-sync an already-spawned
+  // world — recognize existing rooms (deterministic ids), push curation +
+  // current room positions/scale (relayout), and add any newly placed rooms.
+  const spawn = async (forceRelayout = false) => {
     if (!urlOk || phase === "spawning") return;
     saveTarget({
       url: normalizedUrl,
@@ -320,7 +330,7 @@ export default function SpawnHyperfyDialog({
         key: key.trim() || undefined,
         artSize,
         tileMeters,
-        relayout,
+        relayout: relayout || forceRelayout,
         pinned: lockLayout,
         guide: guideOn
           ? {
@@ -875,7 +885,22 @@ export default function SpawnHyperfyDialog({
                     Cancel
                   </button>
                   <button
-                    onClick={spawn}
+                    onClick={() => spawn(true)}
+                    disabled={!urlOk || mixedContent || busy}
+                    title="Re-sync an exhibition already in this world: update artworks, add newly placed rooms, and push the current room layout."
+                    className={`
+                      flex h-9 items-center gap-2 rounded-[var(--radius)] border
+                      px-4 text-sm transition-transform
+                      active:scale-[0.98]
+                      disabled:opacity-30
+                    `}
+                    style={{ borderColor: "var(--border)", background: "transparent", color: "var(--fg1)" }}
+                  >
+                    <IconRefresh size={15} />
+                    Update exhibit
+                  </button>
+                  <button
+                    onClick={() => spawn(false)}
                     disabled={!urlOk || mixedContent || busy}
                     className={`
                       flex h-9 items-center gap-2 rounded-[var(--radius)] px-4
@@ -886,7 +911,7 @@ export default function SpawnHyperfyDialog({
                     style={{ background: "var(--accent)", color: "var(--accent-fg)" }}
                   >
                     {busy ? <Spinner /> : <IconGlobe size={15} />}
-                    {busy ? "Spawning…" : "Spawn"}
+                    {busy ? "Working…" : "Spawn"}
                   </button>
                 </>
               )}

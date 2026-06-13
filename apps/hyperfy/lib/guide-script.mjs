@@ -369,9 +369,9 @@ if (world.isClient) {
   let myId = null
   let actionNode = null
   function followingMe() { return followId != null && myId != null && followId === myId }
-  function actionLabel() { return followingMe() ? 'Tell the Curator to stop following' : 'Make the Curator follow you' }
+  function actionLabel() { return followingMe() ? 'Dont follow me' : 'Make the Curator follow you' }
   function refreshActionLabel() { if (actionNode) { try { actionNode.label = actionLabel() } catch (e) {} } }
-  app.on('moca:guide:follow', (d) => { followId = d && d.id != null ? d.id : null; refreshActionLabel() })
+  app.on('moca:guide:follow', (d) => { followId = d && d.id != null ? d.id : null; refreshActionLabel(); maybeFirstWelcome() })
 
   // ---- the body: the blueprint .vrm renders as an 'avatar' node ------------
   // Hyperfy loads a .vrm model as a group whose child is an avatar node with
@@ -454,6 +454,7 @@ if (world.isClient) {
   // posted to chat. We swap the TEXT (don't toggle visibility — some clients
   // don't reliably hide a ui node, which left the loader stuck).
   let statusText = null
+  let statusBubble = null
   const IDLE_LABEL = 'Welcome to \\u201c' + EXHIBITION.name + '\\u201d'
   function showStatus(s) {
     if (!statusText) return
@@ -484,12 +485,61 @@ if (world.isClient) {
         lineHeight: 1.3,
       })
       bubble.add(statusText)
+      statusBubble = bubble
       app.add(bubble)
     } catch (e) {
       console.error('[moca-guide] status bubble failed', e && e.message)
     }
   }
   buildStatus()
+
+  // ---- first-follow welcome: a spacious, readable panel --------------------
+  // The small bubble shows the short "Welcome to …" label while idle/near. The
+  // FIRST time the curator actually follows this visitor, swap that bubble for a
+  // roomy panel carrying the full greeting so they can read it comfortably; it
+  // clears the moment they ask their first question.
+  let welcomedBig = false
+  let bigPanel = null
+  function buildBigWelcome() {
+    try {
+      const ui = app.create('ui', {
+        space: 'world',
+        width: 780,
+        height: 320,
+        backgroundColor: 'rgba(8, 8, 8, 0.92)',
+        borderRadius: 18,
+        padding: 34,
+        flexDirection: 'column',
+        justifyContent: 'center',
+        gap: 12,
+        billboard: 'y',
+        doubleside: true,
+        pointerEvents: false,
+      })
+      ui.size = 0.004
+      ui.position.set(0, 2.8, 0)
+      ui.add(app.create('uitext', { value: NAME + ', your guide', fontSize: 22, color: '#ffffff', fontWeight: 'bold', lineHeight: 1.25 }))
+      ui.add(app.create('uitext', { value: GREETING, fontSize: 17, color: '#e6e6e6', lineHeight: 1.5 }))
+      return ui
+    } catch (e) {
+      return null
+    }
+  }
+  function showBigWelcome() {
+    if (!bigPanel) bigPanel = buildBigWelcome()
+    if (!bigPanel) return
+    try { if (statusBubble) app.remove(statusBubble) } catch (e) {}
+    try { app.add(bigPanel) } catch (e) {}
+  }
+  function hideBigWelcome() {
+    if (bigPanel) { try { app.remove(bigPanel) } catch (e) {} }
+    try { if (statusBubble) app.add(statusBubble) } catch (e) {}
+  }
+  function maybeFirstWelcome() {
+    if (welcomedBig || !followingMe()) return
+    welcomedBig = true
+    showBigWelcome()
+  }
 
   // ---- hold E to engage (nudges the server to start following) --------------
   try {
@@ -514,6 +564,7 @@ if (world.isClient) {
   }
 
   app.on('moca:guide:thinking', () => {
+    hideBigWelcome() // first question clears the welcome panel
     mode = 'thinking'; thinkT = 0
     showStatus(thinkingLine())
   })
@@ -579,7 +630,7 @@ if (world.isClient) {
     sinceCheck = 0
     let me = null
     try { me = world.getPlayer() } catch (e) {}
-    if (me && myId == null && me.id != null) { myId = me.id; refreshActionLabel() }
+    if (me && myId == null && me.id != null) { myId = me.id; refreshActionLabel(); maybeFirstWelcome() }
     if (!me || !me.position) return
     const dx = me.position.x - app.position.x
     const dz = me.position.z - app.position.z
