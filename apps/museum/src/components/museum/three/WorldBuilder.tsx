@@ -703,21 +703,27 @@ const PlacedRoom = memo(({
     setPlaceholdersVisible(cloned, false);
   }, [ cloned ]);
 
-  const { scale, offset, footprint, size } = useMemo(() => {
+  // Measure the model's NATIVE bounds exactly once, keyed on the model only.
+  // (setFromObject reads world-space bounds; `cloned` is later mounted inside
+  // the scaled group below, so re-measuring on every scale change would fold
+  // the applied scale back into the footprint and oscillate — the model
+  // "flipped"/jumped on alternating +/- steps. The native measurement is
+  // scale-independent; we derive `scale` from it.)
+  const { offset, footprint, size } = useMemo(() => {
     const box = new THREE.Box3().setFromObject(cloned);
     const sz = new THREE.Vector3();
     const c = new THREE.Vector3();
     box.getSize(sz);
     box.getCenter(c);
-    const fp = Math.max(sz.x, sz.z) || 1;
-    const s = (TILE / fp) * (placed.scale || 1);
     return {
-      scale: s,
       offset: new THREE.Vector3(-c.x, -box.min.y, -c.z),
-      footprint: fp,
+      footprint: Math.max(sz.x, sz.z) || 1,
       size: sz,
     };
-  }, [ cloned, placed.scale ]);
+  }, [ cloned ]);
+
+  // Tile-fit × the curator's native scale — a pure derivation, never re-measures.
+  const scale = (TILE / footprint) * (placed.scale || 1);
 
   // World bounds for the camera director (the inner group centers the model
   // on the placement origin with its floor at y=0, so center XZ = position).

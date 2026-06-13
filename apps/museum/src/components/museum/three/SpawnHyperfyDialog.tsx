@@ -183,6 +183,15 @@ const statusLabel = (uid: string, status: string, error?: string): string =>
   || STATUS_TEXT[status]
   || status;
 
+/** Human estimate for the upload bar. null → still calibrating. */
+const formatEta = (ms: number | null): string => {
+  if (ms == null) return "estimating…";
+  if (ms <= 1000) return "almost done";
+  const s = Math.round(ms / 1000);
+  if (s < 60) return `~${s}s left`;
+  return `~${Math.floor(s / 60)}m ${s % 60}s left`;
+};
+
 export default function SpawnHyperfyDialog({
   open,
   onClose,
@@ -706,6 +715,34 @@ export default function SpawnHyperfyDialog({
 
           {(phase === "spawning" || phase === "done") && (
             <div className="flex flex-col gap-1.5">
+              {busy && progress?.uploads && progress.uploads.total > 0 && (
+                <div className="mb-1 flex flex-col gap-1">
+                  <div className="flex items-center justify-between text-[11px]" style={{ color: "var(--fg2)" }}>
+                    <span>Uploading rooms &amp; artworks to the world…</span>
+                    <span className="shrink-0 font-mono text-[10.5px]" style={{ color: "var(--fg3)" }}>
+                      {progress.uploads.done}/{progress.uploads.total} · {formatEta(progress.uploads.etaMs)}
+                    </span>
+                  </div>
+                  <div
+                    className="h-1.5 w-full overflow-hidden rounded-full"
+                    style={{ background: "var(--border)" }}
+                  >
+                    <div
+                      className={`
+                        h-full rounded-full transition-[width] duration-300
+                        ease-out
+                      `}
+                      style={{
+                        width: `${Math.round((progress.uploads.done / progress.uploads.total) * 100)}%`,
+                        background: "var(--accent)",
+                      }}
+                    />
+                  </div>
+                  <span className="text-[10.5px]" style={{ color: "var(--fg3)" }}>
+                    Big room models upload once, then cache — re-spawns are much faster.
+                  </span>
+                </div>
+              )}
               {rooms.map(r => (
                 <div
                   key={r.uid}

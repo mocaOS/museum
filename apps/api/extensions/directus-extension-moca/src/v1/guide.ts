@@ -48,7 +48,14 @@ const MAX_ARTWORKS_PER_ROOM = 80;
 const MAX_HISTORY = 8;
 const ROOM_DESC_MAX = 600;
 const ART_DESC_MAX = 400;
-const PERSONA_SOUL_MAX = 4000;
+// The character's voice is everything here, so we give the persona real room —
+// the whole SOUL.md plus aggregated DeCC0 Codex personality (context windows
+// are large). buildSystemContext still compacts the overall window.
+const PERSONA_SOUL_MAX = 12_000;
+const PERSONA_CODEX_MAX = 4_000;
+// Cap the exhibition-facts listing so persona + facts can't blow the overall
+// context window and starve the intro / insights / session-memory blocks.
+const EXHIBITION_FACTS_MAX = 16_000;
 const SUGGESTION_COUNT = 3;
 
 const REGISTER_PER_MIN = 6;
@@ -375,6 +382,13 @@ export function registerGuideRoutes(
         (cortex.configured
           ? "; Cortex mines deeper insights asynchronously."
           : "; CORTEX_* unset, so no async insight mining (fast replies only)."),
+    );
+  } else {
+    console.warn(
+      "[moca-guide] hybrid mode OFF — MUSEUMAGENT_BASEURL / MUSEUMAGENT_API_KEY / MUSEUMAGENT_MODEL " +
+        "are not all set (note the underscore in MUSEUMAGENT_API_KEY). The guide answers on the " +
+        "Cortex-primary path (every /v1/guide/ask returns mode:'cortex', not 'fast'). Set all three " +
+        "and restart to enable fast hybrid replies.",
     );
   }
 
@@ -710,9 +724,41 @@ export function registerGuideRoutes(
     };
   }
 
-  // ---- persona (default guide or an Art DeCC0 via the Codex) ----------------
+  // ---- persona (default guide or an Art DeCC0 from the Codex) ---------------
 
   const personaCache = new Map<number, { at: number; persona: Persona }>();
+
+  /** Coerce a Codex field (string | string[] | other) to a clean string. */
+  const flatText = (v: unknown): string => {
+    if (Array.isArray(v)) return v.filter((x) => typeof x === "string").join(", ");
+    return typeof v === "string" ? v.trim() : "";
+  };
+
+  /**
+   * Aggregate the personality the Codex carries BEYOND the SOUL.md — the lore
+   * and traits that make a DeCC0 itself (description, lineage, affiliations,
+   * artstyle, DNA). The richer the character, the more it has to riff on while
+   * keeping the visitor in flow.
+   */
+  function codexPersonality(d: any): string {
+    const lines: string[] = [];
+    const desc = flatText(d.description);
+    if (desc) lines.push(desc);
+    const facts: string[] = [];
+    const push = (label: string, v: unknown) => {
+      const s = flatText(v);
+      if (s) facts.push(`${label}: ${s}`);
+    };
+    push("Type", d.decc0_type);
+    push("Lineage", d.ancestor);
+    push("Cultural affiliation", d.cultural_affiliation);
+    push("Philosophy", d.philosophical_affiliation);
+    push("Art it loves", d.artstyle_loved);
+    const dna = [d.dna1, d.dna2, d.dna3, d.dna4].map(flatText).filter(Boolean);
+    if (dna.length) facts.push(`Traits: ${dna.join(", ")}`);
+    if (facts.length) lines.push(facts.join(". ") + ".");
+    return lines.join("\n").slice(0, PERSONA_CODEX_MAX);
+  }
 
   async function loadPersona(decc0Id: unknown): Promise<Persona> {
     let id = Number(decc0Id);
@@ -725,19 +771,27 @@ export function registerGuideRoutes(
       if (result.status === 200 && result.data) {
         const d = result.data;
         const name = (Array.isArray(d.name) ? d.name[0] : d.name) || `DeCC0 #${id}`;
-        let prompt = "";
-        const molt = d.moltbot && latestVersion(d.moltbot);
-        if (molt) {
-          const v = d.moltbot[molt];
-          const soul = typeof v?.soul === "string" ? v.soul : "";
+        // The character's SOUL.md (identity + soul). Upstream the Codex stores
+        // its versions in the `moltbot` field; we take the latest.
+        let soul = "";
+        const soulVer = d.moltbot && latestVersion(d.moltbot);
+        if (soulVer) {
+          const v = d.moltbot[soulVer];
+          const soulBody = typeof v?.soul === "string" ? v.soul : "";
           const identity = typeof v?.identity === "string" ? v.identity : "";
-          prompt = `${identity}\n\n${soul}`.trim().slice(0, PERSONA_SOUL_MAX);
+          soul = `${identity}\n\n${soulBody}`.trim();
         }
-        if (!prompt && d.agent_profiles) {
+        if (!soul && d.agent_profiles) {
           const ver = latestVersion(d.agent_profiles);
           const profile = ver ? d.agent_profiles[ver] : null;
-          if (profile?.system) prompt = String(profile.system).slice(0, PERSONA_SOUL_MAX);
+          if (profile?.system) soul = String(profile.system);
         }
+        // Full SOUL.md + the Codex personality fused into one persona prompt.
+        const codex = codexPersonality(d);
+        const prompt = [soul.slice(0, PERSONA_SOUL_MAX), codex && `--- Codex (lore & traits) ---\n${codex}`]
+          .filter(Boolean)
+          .join("\n\n")
+          .trim();
         if (prompt) {
           const persona = { name, prompt };
           personaCache.set(id, { at: Date.now(), persona });
@@ -788,7 +842,7 @@ export function registerGuideRoutes(
   /**
    * Resolve who answers: a custom SOUL (uploaded by the curator, baked into
    * the guide app), a Soulweaver soul by coordinate, an Art DeCC0 by token
-   * id — or the default guide (DeCC0 #4209, Tsahafi).
+   * id — or the default guide (DeCC0 #2875, Oblak).
    */
   async function resolvePersona(body: any): Promise<Persona> {
     // NB: not clampText — a SOUL.md needs its line structure intact.
@@ -817,17 +871,22 @@ export function registerGuideRoutes(
   function contextBlock(ctx: GuideContext, persona: Persona): string {
     const lines: string[] = [];
     lines.push(
-      `[MUSEUM GUIDE BRIEFING — follow this for the whole conversation]`,
+      `[WHO YOU ARE — this voice IS the answer; never break it]`,
       ``,
       persona.prompt,
       ``,
-      `You are currently embodied inside “${ctx.name}”, a walkable 3D exhibition built with the`,
-      `Museum of Crypto Art world builder and spawned into a Hyperfy world. A visitor is standing`,
-      `in front of you. Answer their questions as ${persona.name}, the exhibition's guide.`,
+      `You are ${persona.name}, embodied as a living avatar inside “${ctx.name}”, a walkable 3D`,
+      `exhibition built with the Museum of Crypto Art world builder and spawned into a Hyperfy world.`,
+      `A visitor stands in front of you and you speak with them out loud. Everything you say is in`,
+      `YOUR voice, taste and vibe — the SOUL above is not a topic, it's how you think and talk.`,
       ``,
-      `EXHIBITION FACTS (authoritative — prefer these over retrieved sources when they conflict):`,
+      `EXHIBITION FACTS (authoritative — prefer these over anything retrieved when they conflict):`,
       `Exhibition: “${ctx.name}” — ${ctx.counts.rooms} room(s), ${ctx.counts.artworks} work(s), ${ctx.counts.artists} artist(s).`
     );
+    // Budget the facts listing: a huge exhibition (up to 60 rooms × 80 works)
+    // would otherwise dominate the whole window. Stop cleanly and note the rest.
+    let factsLen = 0;
+    let roomsShown = 0;
     for (const r of ctx.rooms) {
       const head = [
         `Room “${r.title ?? "Untitled"}”`,
@@ -836,8 +895,8 @@ export function registerGuideRoutes(
       ]
         .filter(Boolean)
         .join(" — ");
-      lines.push(``, `• ${head}`);
-      if (r.description) lines.push(`  ${r.description}`);
+      const roomLines = [``, `• ${head}`];
+      if (r.description) roomLines.push(`  ${r.description}`);
       for (const a of r.artworks) {
         const bits = [
           `“${a.title ?? "Untitled"}”`,
@@ -846,15 +905,30 @@ export function registerGuideRoutes(
         ]
           .filter(Boolean)
           .join(" ");
-        lines.push(`  - ${bits}${a.description ? ` — ${a.description}` : ""}`);
+        roomLines.push(`  - ${bits}${a.description ? ` — ${a.description}` : ""}`);
       }
+      const chunk = roomLines.join("\n");
+      if (factsLen + chunk.length > EXHIBITION_FACTS_MAX && roomsShown > 0) {
+        const left = ctx.rooms.length - roomsShown;
+        if (left > 0) lines.push(``, `(…and ${left} more room(s) — ask about any of them and I'll recall the details.)`);
+        break;
+      }
+      lines.push(...roomLines);
+      factsLen += chunk.length + 1;
+      roomsShown++;
     }
     lines.push(
       ``,
-      `STYLE: stay in character, be concise (2–4 sentences unless the visitor asks for depth),`,
-      `be specific — name works, artists, and rooms. If something isn't in the exhibition facts,`,
-      `draw on retrieved museum knowledge; if you still don't know, say so honestly and point`,
-      `the visitor to a work or artist you do know. Never invent artworks or attributions.`
+      `HOW YOU SPEAK:`,
+      `- Always in character — concise (2–4 sentences unless they ask for depth), specific (name`,
+      `  works, artists, rooms), and in your own taste and vibe.`,
+      `- Any "deeper knowledge" you're given is research your runners pulled from the museum's`,
+      `  library. RELAY it as your OWN recollection, reworded in your voice — never quote it, never`,
+      `  say "sources/notes/the library say". It's simply what you know.`,
+      `- KEEP THE VISITOR IN FLOW: always give them something vivid right now and leave a thread`,
+      `  they'll want to pull next, so the conversation never stalls while you dig deeper.`,
+      `- If you truly don't know yet, stay in character, say so lightly, and point them at a work`,
+      `  or artist you do know. Never invent artworks or attributions.`
     );
     return lines.join("\n");
   }
@@ -885,7 +959,7 @@ export function registerGuideRoutes(
     }
 
     if (MOCA_GUIDE_INTRO && budget > 2000) {
-      const intro = MOCA_GUIDE_INTRO.slice(0, Math.min(INTRO_BUDGET, budget - 200));
+      const intro = MOCA_GUIDE_INTRO.slice(0, Math.max(0, Math.min(INTRO_BUDGET, budget - 200)));
       blocks.push(`\n\n[HOW MOCA & ITS EXHIBITIONS WORK — background, the exhibition facts above win on conflict]\n${intro}`);
       budget -= intro.length + 120;
     }
@@ -894,22 +968,35 @@ export function registerGuideRoutes(
       const lines: string[] = [];
       let used = 0;
       // Newest insight first — the freshest thing the visitor asked about.
+      // NB: no source labels here — you relay this as your own recollection.
       for (const ins of [...session.insights].reverse()) {
-        const line = `• ${ins.topic}: ${ins.text}${ins.sources.length ? ` [sources: ${ins.sources.join("; ")}]` : ""}`;
+        const line = `• ${ins.topic}: ${ins.text}`;
         if (used + line.length > Math.min(INSIGHTS_BUDGET, budget)) break;
         lines.push(line);
         used += line.length + 1;
       }
       if (lines.length) {
         blocks.push(
-          `\n\n[DEEPER KNOWLEDGE gathered from the museum Library this session — weave it in naturally when relevant]\n${lines.join("\n")}`,
+          `\n\n[WHAT YOU'VE LEARNED THIS SESSION — your runners pulled this from the museum's library. ` +
+            `It's YOUR knowledge now: relay it in your own voice and vibe, never verbatim, never as "sources".]\n` +
+            lines.join("\n"),
         );
         budget -= used;
       }
     }
 
+    // Keep the visitor in flow: when a deeper retrieval is still in flight from a
+    // prior turn, don't stall — give them something good now and tease what's coming.
+    if (session.pendingInsight && budget > 200) {
+      blocks.push(
+        `\n\n[STILL DIGGING] You've sent runners to pull deeper records on what they just asked — ` +
+          `not back yet. Answer richly from what you already know, stay fully in character, and leave ` +
+          `a hook so they want to keep talking until the deeper detail lands.`,
+      );
+    }
+
     if (session.summary && budget > 200) {
-      blocks.push(`\n\n[SESSION MEMORY — what this visitor has been exploring with you so far]\n${session.summary.slice(0, budget - 60)}`);
+      blocks.push(`\n\n[SESSION MEMORY — what this visitor has been exploring with you so far]\n${session.summary.slice(0, Math.max(0, budget - 60))}`);
     }
 
     return blocks.join("");
@@ -974,8 +1061,10 @@ export function registerGuideRoutes(
     if (!cortex.configured || session.pendingInsight) return;
     const topic = question.replace(/\s+/g, " ").trim().slice(0, 120);
     if (!topic) return;
-    const norm = topic.toLowerCase();
-    if (session.insightTopics.includes(norm)) return; // already mined this turn's topic
+    // Normalize so trivially-reworded repeats ("Who is Oblak?" vs "who is oblak")
+    // don't each burn a Cortex call.
+    const norm = topic.toLowerCase().replace(/[^\w\s]/g, "").replace(/\s+/g, " ").trim();
+    if (session.insightTopics.includes(norm)) return; // already mined this topic
     session.pendingInsight = true;
     try {
       const loc = locationLine(here);
@@ -987,7 +1076,8 @@ export function registerGuideRoutes(
         conversation_history: [
           { role: "user", content: contextBlock(ctx, persona) },
           { role: "assistant", content: `Understood — I am ${persona.name}, guiding visitors through “${ctx.name}”.` },
-          // Narrow retrieval to where the visitor actually is (spatial awareness).
+          // Bias retrieval toward where the visitor is (a soft hint to the RAG
+          // LLM, not a hard collection filter).
           ...(loc ? [{ role: "user", content: loc }] : []),
           ...(session.summary ? [{ role: "user", content: `Conversation so far: ${session.summary}` }] : []),
         ],
@@ -1249,7 +1339,7 @@ export function registerGuideRoutes(
               summarizing: false,
             } as GuideSession);
 
-        const { status: fastStatus, text } = await museumAgent.chat({
+        const { status: fastStatus, text, error: fastError } = await museumAgent.chat({
           timeoutMs: FAST_REPLY_TIMEOUT_MS,
           maxTokens: 700,
           messages: [
@@ -1260,6 +1350,9 @@ export function registerGuideRoutes(
         });
         if (fastStatus === 200 && text) {
           const answer = text.replace(/\s*\[src_[^\]]*\]/g, "").trim();
+          // TTS speaks the AGENT's voice — and only ever this. The gemma reply
+          // already relays any Cortex knowledge in-character, so low-latency
+          // speech and the on-screen text are the one same voice.
           const audioUrl = speak ? prepareVoice(answer, voice) : null;
           res.json({
             data: {
@@ -1285,7 +1378,7 @@ export function registerGuideRoutes(
           return;
         }
         warnUpstream(
-          `MUSEUMAGENT fast reply failed (status ${fastStatus || "threw"}) — ` +
+          `MUSEUMAGENT fast reply failed (status ${fastStatus || "threw"}${fastError ? `: ${fastError}` : ""}) — ` +
             `falling back to ${cortex.configured ? "Cortex" : "exhibition context"}.`,
         );
         // fall through to the Cortex-primary / context-only paths below
@@ -1350,10 +1443,11 @@ export function registerGuideRoutes(
         .replace(/\s*\[src_[^\]]*\]/g, "")
         .trim();
 
-      // Speak it (unless the caller opted out) — hand back a URL the in-world
-      // audio node plays; synthesis is lazy (on first GET) so the text reply is
-      // never blocked on Venice. (speak/voice resolved above.)
-      const audioUrl = speak ? prepareVoice(answer, voice) : null;
+      // TTS speaks ONLY the agent model's voice (the gemma fast path). Here we're
+      // on the Cortex path: voice it only in pure legacy mode (no MUSEUMAGENT —
+      // Cortex IS the guide's brain). When MUSEUMAGENT is configured but this turn
+      // failed over to Cortex, stay text-only rather than speaking raw retrieval.
+      const audioUrl = speak && !museumAgent?.configured ? prepareVoice(answer, voice) : null;
 
       res.json({
         data: {

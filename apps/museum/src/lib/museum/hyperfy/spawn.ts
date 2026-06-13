@@ -41,6 +41,12 @@ export interface SpawnProgress {
   phase: "connect" | "rooms" | "verify" | "done";
   /** Per-placement room state, in exhibition order. */
   rooms: { uid: string; title: string; status: RoomSpawnStatus; error?: string }[];
+  /**
+   * Asset-upload progress across the whole spawn (room GLBs + curated images +
+   * the guide .vrm — the time-dominant work). `etaMs` is a running estimate
+   * from the observed rate; null until the first upload lands, 0 when done.
+   */
+  uploads: { done: number; total: number; etaMs: number | null };
 }
 
 export interface SpawnResult {
@@ -133,14 +139,39 @@ export async function spawnExhibition(
       status: "connecting" as RoomSpawnStatus,
     });
   }
+  // Upload progress: every room GLB + each curated image that isn't already a
+  // world asset + the guide .vrm. (Scripts are tiny — excluded from the ETA.)
+  const uploadsTotal =
+    exhibition.placements.reduce(
+      (n, p) => n + 1 + p.artworks.filter(a => a.imageUrl && !a.imageUrl.startsWith("asset://")).length,
+      0,
+    ) + (guide ? 1 : 0);
+  let uploadsDone = 0;
+  const startedAt = Date.now();
+  const uploads = (): SpawnProgress["uploads"] => {
+    const elapsed = Date.now() - startedAt;
+    const etaMs =
+      uploadsDone >= uploadsTotal
+        ? 0
+        : uploadsDone > 0
+          ? Math.round((elapsed / uploadsDone) * (uploadsTotal - uploadsDone))
+          : null;
+    return { done: uploadsDone, total: uploadsTotal, etaMs };
+  };
+
   const report = (phase: SpawnProgress["phase"]) =>
-    onProgress?.({ phase, rooms: rooms.map(r => ({ ...r })) });
+    onProgress?.({ phase, rooms: rooms.map(r => ({ ...r })), uploads: uploads() });
   const setStatus = (uid: string, status: RoomSpawnStatus, error?: string) => {
     const r = rooms.find(x => x.uid === uid);
     if (r) {
       r.status = status;
       if (error) r.error = error;
     }
+    report("rooms");
+  };
+  /** Count one finished asset upload and push a progress tick. */
+  const bumpUpload = () => {
+    uploadsDone++;
     report("rooms");
   };
 
@@ -214,6 +245,7 @@ export async function spawnExhibition(
           ext: "glb",
           mime: "model/gltf-binary",
         });
+        bumpUpload();
 
         // 2. Curated images become world assets — the exhibition lives in
         //    the world itself, not as hotlinks to museum infrastructure.
@@ -242,6 +274,9 @@ export async function spawnExhibition(
             } catch {
               /* keep the remote URL */
             }
+            // Counted whether it uploaded or fell back to the remote URL, so the
+            // bar always reaches 100% (one tick per image we tried to upload).
+            bumpUpload();
           }
           artworks.push({ ...art, imageUrl });
         }
@@ -255,7 +290,6 @@ export async function spawnExhibition(
             slots: placement.slots || [],
             artSize,
             rootScale,
-            modelUrl,
           }),
         );
         const scriptUrl = await uploadAsset({
@@ -384,6 +418,7 @@ export async function spawnExhibition(
           tileMeters,
           pinned,
           onStatus: status => setStatus(GUIDE_UID, status),
+          onUpload: bumpUpload,
         });
         if (pushed.status === "created") result.created++;
         else if (pushed.status === "updated") result.updated++;
@@ -439,9 +474,10 @@ async function pushGuide(
     tileMeters: number;
     pinned: boolean;
     onStatus?: (status: RoomSpawnStatus) => void;
+    onUpload?: () => void;
   },
 ): Promise<{ bpId: string; enId: string; status: RoomSpawnStatus }> {
-  const { url, tileMeters, pinned, onStatus } = opts;
+  const { url, tileMeters, pinned, onStatus, onUpload } = opts;
   const apiUrl = (guide.apiUrl || DEFAULT_GUIDE_API).replace(/\/+$/, "");
   const guideName = guide.name || "Oblak";
   const decc0Id = guide.decc0Id || 2875;
@@ -466,6 +502,7 @@ async function pushGuide(
     ext: "vrm",
     mime: "model/gltf-binary",
   });
+  onUpload?.();
 
   // 3. The guide's mind — the generated app script.
   onStatus?.("script");

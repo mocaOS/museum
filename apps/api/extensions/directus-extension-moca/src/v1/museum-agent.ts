@@ -20,7 +20,9 @@
  */
 
 const DEFAULT_TIMEOUT_MS = 25_000;
-const MSG_MAX_CHARS = 24_000;
+// Per-message hard cap — must stay ABOVE guide.ts MAX_CONTEXT_CHARS (48k) so a
+// within-budget system prompt is never silently truncated by the transport.
+const MSG_MAX_CHARS = 64_000;
 
 export interface ChatMessage {
   role: "system" | "user" | "assistant";
@@ -54,12 +56,12 @@ export function createMuseumAgentClient(env: Record<string, any>) {
       temperature = 0.7,
       maxTokens = 700,
       timeoutMs = DEFAULT_TIMEOUT_MS,
-    }: MuseumAgentChat): Promise<{ status: number; text: string }> {
-      if (!configured) return { status: 0, text: "" };
+    }: MuseumAgentChat): Promise<{ status: number; text: string; error?: string }> {
+      if (!configured) return { status: 0, text: "", error: "not configured" };
       const safeMessages = messages
         .filter((m) => m && typeof m.content === "string" && m.content.trim())
         .map((m) => ({ role: m.role, content: m.content.slice(0, MSG_MAX_CHARS) }));
-      if (!safeMessages.length) return { status: 0, text: "" };
+      if (!safeMessages.length) return { status: 0, text: "", error: "no messages" };
       try {
         const res = await fetch(`${base}/chat/completions`, {
           method: "POST",
@@ -77,12 +79,20 @@ export function createMuseumAgentClient(env: Record<string, any>) {
           }),
           signal: AbortSignal.timeout(timeoutMs),
         });
-        if (!res.ok) return { status: res.status, text: "" };
+        if (!res.ok) {
+          // Surface WHY (bad model slug, auth, etc.) — invaluable when the guide
+          // silently falls back to Cortex. Body is small; clamp it.
+          const errBody = await res.text().catch(() => "");
+          return { status: res.status, text: "", error: errBody.slice(0, 300) };
+        }
         const body = await res.json().catch(() => null);
         const text = body?.choices?.[0]?.message?.content;
-        return { status: 200, text: typeof text === "string" ? text.trim() : "" };
-      } catch {
-        return { status: 0, text: "" };
+        if (typeof text !== "string" || !text.trim()) {
+          return { status: 200, text: "", error: "200 but no choices[0].message.content" };
+        }
+        return { status: 200, text: text.trim() };
+      } catch (e: any) {
+        return { status: 0, text: "", error: e?.name === "TimeoutError" ? `timeout after ${timeoutMs}ms` : String(e?.message || e) };
       }
     },
   };

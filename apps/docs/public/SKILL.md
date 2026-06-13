@@ -64,7 +64,7 @@ grid view.
 richly-written characters queryable through `/v1/decc0s`. Lightweight list
 records (names, DNA, affiliations, thumbnails), full ~70-field character
 records, and the heavyweight `include=profiles,codex` blobs: versioned agent
-profiles and ready-made `moltbot` personas you can drop into a system prompt
+profiles and ready-made **SOUL.md** personas you can drop into a system prompt
 to run a DeCC0 as an agent.
 
 **Library Cortex** (`/skills/library/SKILL.md`) — cited Q&A and hybrid search

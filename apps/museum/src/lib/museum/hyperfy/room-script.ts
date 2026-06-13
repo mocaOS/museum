@@ -22,11 +22,12 @@ import type {
  *
  * The room is SOLID: the blueprint renders the GLB with collision 'auto' (which
  * only collides meshes the GLB tags `_collider` etc. — the museum room models
- * carry no such tags, so the rendered model alone is walk-through). We load the
- * same GLB a second time as an INVISIBLE trimesh collider (shared geometry, one
- * fetch) so floors/walls/ceilings are walkable. Authored `Slot_NNN` placeholder
- * quads become thin coplanar wall colliders — negligible; auto-slot un_MUSEUM
- * rooms generate slots at runtime and carry no such quads.
+ * carry no such tags, so the rendered model alone is walk-through). We make it
+ * solid by walking the loaded model (`app.traverse`) and giving each mesh a
+ * STATIC trimesh collider built from its own geometry, parented to the mesh so
+ * it inherits the world transform. Authored `Slot_NNN` placeholder quads become
+ * thin coplanar wall colliders — negligible; auto-slot un_MUSEUM rooms generate
+ * slots at runtime and carry no such quads.
  *
  * Refinement happens at two levels, both inside the engine:
  * - Room level: `app.configure` fields in the native inspector (artwork
@@ -53,7 +54,6 @@ export function generateRoomScript({
   slots = [],
   artSize = 2,
   rootScale = 1,
-  modelUrl = "",
 }: {
   /**
    * Curated works; imageUrl may already be a world `asset://` url (the
@@ -70,11 +70,6 @@ export function generateRoomScript({
    * units, so meter values are divided by rootScale before use.
    */
   rootScale?: number;
-  /**
-   * The uploaded room GLB url (`asset://…`). Loaded a second time as an
-   * invisible trimesh collider so the room is solid.
-   */
-  modelUrl?: string;
 }): string {
   const config = artworks.map(a => ({
     slotId: a.slotId,
@@ -110,17 +105,28 @@ app.configure([
 
 // ---- room collider -----------------------------------------------------
 // The blueprint renders the room GLB with collision 'auto' (no colliders on
-// untagged meshes), so the room would be walk-through. Load the SAME GLB again
-// as an invisible trimesh collider — the engine shares the cached geometry, the
-// node sits at the app root overlapping the rendered model exactly, and it
-// scales with the room entity. Grab the room and Shift+scroll to resize it all.
-const ROOM_MODEL = ${inline(modelUrl)}
-if (ROOM_MODEL) {
-  try {
-    app.add(app.create('model', { src: ROOM_MODEL, collision: 'trimesh', hidden: true }))
-  } catch (e) {
-    console.error('[moca] room collider failed', e && e.message)
-  }
+// untagged meshes), so the room is walk-through. Make it solid by walking the
+// loaded model and giving each mesh a STATIC trimesh collider: a rigidbody +
+// geometry collider parented to the mesh, so it inherits that mesh's world
+// transform and reuses its geometry. Scales with the room entity.
+// (NB: app.create('model', { collision }) is NOT a runtime node in this engine —
+// 'model' is a blueprint-level component only; the traversal below is the
+// supported in-script path.)
+try {
+  let madeColliders = 0
+  app.traverse((node) => {
+    if (madeColliders >= 2000 || !node || !node.geometry) return
+    try {
+      const body = app.create('rigidbody', { type: 'static' })
+      body.add(app.create('collider', { type: 'geometry', geometry: node.geometry, convex: false }))
+      node.add(body)
+      madeColliders++
+    } catch (e) {}
+  })
+  if (madeColliders) console.log('[moca] room solid \\u2014 ' + madeColliders + ' mesh collider(s)')
+  else console.warn('[moca] room collider: no mesh geometry found to collide')
+} catch (e) {
+  console.error('[moca] room collider failed', e && e.message)
 }
 
 // Baked slot anchors (GLB-local) + the curated works that hang on them.
@@ -538,6 +544,11 @@ if (world.isClient) {
       live[d.slot] = d.reset ? { dx: 0, dy: 0, s: 1 } : { dx: num(d.dx, 0), dy: num(d.dy, 0), s: num(d.s, 1) }
     })
 
+    // The "Adjust artwork" action is a BUILD-MODE tool. We create the actions
+    // but only attach them while the admin is in build mode (Tab) — in normal
+    // play an admin behaves exactly like a regular visitor (no edit prompt). The
+    // engine emits 'build-mode' on every toggle; it starts off at load.
+    const editActions = []
     for (const slotId in HUNG) {
       try {
         const h = HUNG[slotId]
@@ -545,16 +556,28 @@ if (world.isClient) {
         act.label = 'Adjust artwork'
         act.distance = 4
         act.duration = 0.4
+        act.position.set(0, 0, (WALL_GAP + 0.1) * M)
         act.onTrigger = () => {
           if (editing && editing.slotId === slotId) endEdit(true)
           else startEdit(slotId)
         }
-        h.adj.add(act)
-        act.position.set(0, 0, (WALL_GAP + 0.1) * M)
+        editActions.push({ act, adj: h.adj })
       } catch (e) {
         // action nodes unavailable — inspector fields still work
       }
     }
+    let inBuild = false
+    function showEditActions(on) {
+      on = !!on
+      if (on === inBuild) return
+      inBuild = on
+      for (const e of editActions) {
+        try { if (on) e.adj.add(e.act); else e.adj.remove(e.act) } catch (err) {}
+      }
+      if (!on) endEdit(false) // leaving build mode ends any active edit
+    }
+    try { world.on('build-mode', showEditActions) } catch (e) {}
+    // (starts hidden — build mode is off on load)
   }
 }
 `;

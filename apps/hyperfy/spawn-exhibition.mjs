@@ -274,7 +274,6 @@ for (const placement of exhibition.placements) {
         slots: placement.slots || [],
         artSize: ART_SIZE,
         rootScale,
-        modelUrl,
       }),
       "utf8",
     );

@@ -32,6 +32,19 @@ read the one matching your task:
 > `apps/museum` + **Cortex**. The old `.cursor/rules` describe that v2 stack; they are
 > not the standard. Don't build new product surface on Nuxt/R2R.
 
+## QA before handover (REQUIRED for goals)
+
+When you finish a `/goal` or any multi-step build, **spin up real QA and run the
+thing before you hand it back** — do not hand over on typecheck + code-review
+alone. Stand up the actual stack and exercise the feature end-to-end on the
+happy path (spawn it, click it, walk into it, read the logs). Code review alone
+misses runtime/engine-API mismatches — e.g. a node type that does not exist at
+runtime (`app.create('model')` silently no-op'd room colliders for a whole
+release). For in-world / Hyperfy or any runtime-API feature, **verify against a
+running instance and tail its logs** (`apps/hyperfy/world-template` is a local
+world; the spawner CLI / builder spawn into it). Only call it done after you've
+*observed* it working, and say what you actually ran.
+
 ## Common Commands
 
 ```bash
@@ -121,9 +134,12 @@ from the export (works for un_MUSEUM `Auto_NNN` slots that never exist as
 GLB nodes), curated images upload into the world as assets, `app.configure`
 exposes room-level refinement props, and an embedded in-world slot editor.
 **Rooms are solid**: the room GLBs carry no collider-tagged meshes (Hyperfy's
-default `collision:'auto'` → walk-through), so each room script loads its GLB a
-second time as an invisible `trimesh` collider (shared geometry) overlapping the
-rendered model. **Native room scale**: each room carries a per-room scaling
+default `collision:'auto'` → walk-through), so each room script walks the loaded
+model (`app.traverse`) and gives every mesh a static trimesh collider from its
+own geometry (`rigidbody`+`collider{type:'geometry'}` parented to the mesh).
+NB: `app.create('model')` is not a runtime node — blueprint-only component — so
+the traversal is the supported path; logs `[moca] room solid — N collider(s)`.
+**Native room scale**: each room carries a per-room scaling
 factor (the `scale` field in the export; the base entity scale = tile-fit ×
 this), pre-configured in the builder — new rooms default to **2×** — and
 resizable further in-world (grab + Shift+scroll), which idempotent re-spawns

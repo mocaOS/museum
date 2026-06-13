@@ -423,7 +423,7 @@ you can play back. Plus **who answers** — first match wins:
   `soulName`;
 - `soulRef` — `{ "chainId": 1, "address": "0x…", "tokenId": "42" }`, a
   Soulweaver soul (EIP-191-signed SOUL files; resolved server-side);
-- `decc0` — an Art DeCC0 token id 1–10000 (its `moltbot` SOUL from the MOCA
+- `decc0` — an Art DeCC0 token id 1–10000 (its **SOUL.md** from the MOCA
   Codex);
 - nothing — the default guide, DeCC0 **#2875 Oblak**, the cryptoart guide.
 
@@ -463,8 +463,8 @@ When a visitor wants more than the exhibition context holds:
 - `GET /v1/artworks/:id` — full artwork media + metadata
 - `GET /v1/rooms` — every museum room: `architect`, `series`, GLB models
 - `GET /v1/decc0s/:id?include=profiles` — the full Art DeCC0 character:
-  `agent_profiles` (ready ElizaOS character file) and `moltbot` (SOUL.md /
-  IDENTITY.md) — this is what `decc0` personas are built from
+  `agent_profiles` (ready ElizaOS character file) and its **SOUL.md /
+  IDENTITY.md** — this is what `decc0` personas are built from
 - `POST /v1/library/ask` — `{ "question": "…" }` direct museum RAG with
   citations, no exhibition framing
 
@@ -554,8 +554,8 @@ MOCA API aggregates it:
 
 - responses are cached server-side for ~5 minutes
 - Directus file UUIDs are resolved to absolute `*_url` asset links
-- the multi-hundred-KB persona blobs (`agent_profiles`, `moltbot`) only ship
-  when you ask for them (`include=profiles`)
+- the multi-hundred-KB persona blobs (`agent_profiles` and the **SOUL.md**) only
+  ship when you ask for them (`include=profiles`)
 - each token's **codex lore document** can be embedded with `include=codex`
 
 You can always go straight to the DeCC0s API with its own conventions; the

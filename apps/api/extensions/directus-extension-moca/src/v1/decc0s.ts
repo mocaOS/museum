@@ -6,7 +6,7 @@
  * API aggregates it so integrators hit one surface with one key:
  *
  * - thumbnails are resolved to absolute /assets URLs
- * - the heavyweight blobs (agent_profiles, moltbot) are excluded unless
+ * - the heavyweight blobs (agent_profiles + the SOUL.md) are excluded unless
  *   explicitly requested via ?include=profiles
  * - responses are cached in memory (5 min TTL) to be a good upstream citizen
  */
@@ -39,7 +39,8 @@ export const DECC0_LIST_FIELDS = [
   "timestamp_created",
 ] as const;
 
-/** Everything except the multi-hundred-KB blobs. */
+/** Everything except the multi-hundred-KB blobs. (`moltbot` is the upstream
+ *  field name that carries the character's SOUL.md.) */
 const HEAVY_FIELDS = ["agent_profiles", "moltbot"];
 
 const cache = new Map<string, { at: number; status: number; body: any }>();

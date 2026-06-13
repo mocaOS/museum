@@ -50,9 +50,14 @@ museum layout + native scale back onto already-placed rooms).
 
 **Solid rooms (colliders).** The room GLBs ship no `_collider`-tagged meshes, so
 Hyperfy's default `collision: 'auto'` would leave them walk-through. Each room
-app therefore loads its GLB a second time as an **invisible `trimesh` collider**
-(shared cached geometry, one fetch) overlapping the rendered model — floors,
-walls and ceilings collide, and the collider scales with the room entity.
+app therefore walks the loaded model (`app.traverse`) and gives **every mesh a
+static trimesh collider** built from its own geometry (a `rigidbody` +
+`collider{type:'geometry'}` parented to the mesh, inheriting its world
+transform) — floors, walls and ceilings collide, and the colliders scale with
+the room entity. (`app.create('model')` is **not** a runtime node in the engine —
+that's a blueprint-only component — so the per-mesh traversal is the supported
+in-script path.) The script logs `[moca] room solid — N mesh collider(s)` on
+load; mesh-heavy rooms are capped at 2000 colliders.
 
 **Modular.** Every placed room becomes its own Hyperfy app. Its generated
 script hangs the curated works on **baked slot anchors** — the export carries

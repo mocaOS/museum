@@ -301,6 +301,7 @@ export default function GuideDialog({
     if (!id) return;
     setSoulLoading(true);
     try {
+      // The SOUL.md lives in the Codex's upstream `moltbot` field (versioned).
       const res = await fetch(`${DECC0S_API}/items/codex/${id}?fields=moltbot`);
       const { data } = await res.json();
       const ver = data?.moltbot ? latestVersion(data.moltbot) : null;

@@ -118,11 +118,13 @@ no accounts. Code lives in `src/components/museum/three/`:
   verification). The protocol/orchestration lives in
   `src/lib/museum/hyperfy/` — `protocol.ts` (minimal msgpackr wire client,
   pinned to Hyperfy v0.16.0), `room-script.ts` (generated per-room app script:
-  `app.configure` refinement props + the embedded in-world slot editor + an
-  **invisible `trimesh` collider** — the room GLB loaded a second time with
-  `collision:'trimesh', hidden:true` so the room is solid, since the rendered
-  blueprint model defaults to `collision:'auto'` with no collider-tagged meshes;
-  pass the uploaded `modelUrl` into `generateRoomScript`),
+  `app.configure` refinement props + the embedded in-world slot editor + **per-mesh
+  trimesh colliders** — the script walks the loaded model (`app.traverse`) and
+  gives every mesh a static `rigidbody`+`collider{type:'geometry'}` from its own
+  geometry (parented to the mesh) so the room is solid, since the rendered
+  blueprint model defaults to `collision:'auto'` with no collider-tagged meshes.
+  NB: `app.create('model')` is NOT a runtime node — blueprint-only — so the
+  traversal is the supported path),
   `spawn.ts` (idempotent spawn: deterministic ids from the layout's
   `exhibitionId`, blueprint version bumps on re-spawn, in-world arrangement
   preserved; uploads curated images into the world as content-addressed

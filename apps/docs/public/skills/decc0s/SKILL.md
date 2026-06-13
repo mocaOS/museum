@@ -27,8 +27,8 @@ curl -H "X-API-Key: $KEY" \
 - Default: ~70 fields — biography, characterization, confession, writing
   style (`writing_*`, `ideolectal_words`), favorites, geography, mood.
 - `include=profiles` adds the heavyweight blobs: `agent_profiles`
-  (versioned: adjectives, bio[], knowledge[], style rules) and `moltbot`
-  (ready-made SOUL.md-style persona). Hundreds of KB — only ask when needed.
+  (versioned: adjectives, bio[], knowledge[], style rules) and the character's
+  **SOUL.md** (a ready-made persona). Hundreds of KB — only ask when needed.
 - `include=codex` embeds `codex_document` (the character's lore file).
 
 ## Build an agent from a DeCC0
