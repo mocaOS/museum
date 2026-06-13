@@ -7,17 +7,31 @@ import { Callout } from "zudoku/ui/Callout";
 
 AI models hallucinate APIs they half-remember. **MOCA Skills** fixes that:
 curated, always-current `SKILL.md` files your agents fetch over plain HTTP
-before writing an integration — the same pattern as
+*before* writing an integration. Each skill is a short, self-contained
+markdown document — working `curl` examples, exact response shapes, and the
+rendering/verification rules that actually matter — maintained alongside the
+code it describes. The pattern follows
 [ethskills.com](https://ethskills.com/) and
 [cortexskills.org](https://cortexskills.org/), bringing everything MOCA
 under one umbrella.
 
-## How to use
+## How it works
+
+One index file orients the agent; seven focused skills carry the depth.
+The loop your agent should run:
+
+1. **Read the index** — [`/SKILL.md`](/SKILL.md) explains the whole map and
+   summarizes every skill.
+2. **Fetch the skills relevant to the task** — artworks for rendering,
+   exhibitions for 3D, souls for agent identity, and so on.
+3. **Verify before shipping** — cross-check endpoints against
+   [`/llms-full.txt`](/llms-full.txt) or the [OpenAPI reference](/api).
 
 Tell your agent (Claude, Cursor, ChatGPT, your own):
 
 > Read `https://docs.museumofcryptoart.com/SKILL.md`, then fetch the skills
-> relevant to the task before writing any code.
+> relevant to the task before writing any code. Verify endpoints against
+> `/llms-full.txt`.
 
 ## The skills
 
@@ -29,7 +43,22 @@ Tell your agent (Claude, Cursor, ChatGPT, your own):
 | Art DeCC0s | [`/skills/decc0s/SKILL.md`](/skills/decc0s/SKILL.md) | Personas, profiles, agent recipes |
 | Library Cortex | [`/skills/library/SKILL.md`](/skills/library/SKILL.md) | RAG ask/stream/search + presence |
 | Souls & web3 | [`/skills/souls/SKILL.md`](/skills/souls/SKILL.md) | SOUL verification, ERC-8004/8183/8257 |
-| Exhibitions & Hyperfy | [`/skills/exhibitions/SKILL.md`](/skills/exhibitions/SKILL.md) | Slot convention, spawning worlds |
+| Exhibitions & Hyperfy | [`/skills/exhibitions/SKILL.md`](/skills/exhibitions/SKILL.md) | Slot convention, baked slot data, spawning worlds |
+| Museum guide | [`/skills/museum-guide/SKILL.md`](/skills/museum-guide/SKILL.md) | Be the exhibition guide: context, suggestions, visitor Q&A |
+
+Two kinds of skill live here. The first six are **integration skills** —
+knowledge an agent reads before calling the MOCA API. The **museum guide** is
+a *behavioral* skill: it ships cortexskills.org-style frontmatter and
+installs into Cortex as an agent skill, teaching an agent to act as a MOCA
+exhibition guide (read a spawned exhibition's context, suggest questions,
+answer visitors, adopt Art DeCC0 personas).
+
+<Callout type="info" title="Ask the Library about the skills" icon>
+  The skills handbook is part of the museum's own knowledge base — the
+  [Library](https://museumofcryptoart.com/library) can explain MOCA Skills,
+  point you at the right skill file, and answer integration questions with
+  citations.
+</Callout>
 
 ## Machine-readable docs
 
