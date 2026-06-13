@@ -108,6 +108,11 @@ source of truth.
   answers is diagnosable from the Directus logs. **Requires `CORTEX_API_URL` +
   `CORTEX_API_KEY` on this Directus deployment** (see Env below) — they are what
   hook the knowledge graph in; without them every answer is a `fallback`.
+  **Voice (optional):** when `VENICE_API_KEY` is set, `/v1/guide/ask`
+  synthesizes the answer with Venice TTS (`tts-qwen3-1-7b`), caches the mp3, and
+  returns an `audioUrl` the in-world guide plays; served at the public
+  **`GET /v1/guide/tts/:id.mp3`** (short-TTL in-memory cache). `speak`/`voice`
+  ride in the ask body; no key → text-only, no error.
 - **Auth** (`src/v1/auth.ts`): keys in the **`moca_api_keys`** collection
   (admin-managed; generate with `echo "moca_$(openssl rand -hex 24)"`), sent
   as `X-API-Key` or `Authorization: Bearer`. In-memory key cache (60 s) +
@@ -119,7 +124,9 @@ source of truth.
   `https://api.decc0s.com`), `CORTEX_API_URL` + `CORTEX_API_KEY` (read-only;
   unset → `/v1/library/*` answers 503 **and** the museum guide answers from
   exhibition context only, `fallback: true`, with a `[moca-guide]` boot
-  warning), `SOULWEAVER_API_URL` +
+  warning), `VENICE_API_KEY` (+ optional `VENICE_API_URL`, `VENICE_TTS_MODEL`
+  default `tts-qwen3-1-7b`, `VENICE_TTS_VOICE` default `Serena`) — the guide's
+  voice; unset → guide stays text-only, `SOULWEAVER_API_URL` +
   `SOULWEAVER_API_HEADERS` (defaults to the public deployment at
   `https://soulweaver.museumofcryptoart.com`; override for self-hosted);
   reuses `PUBLIC_URL` for asset links and `CODEX_DIR` for codex documents.

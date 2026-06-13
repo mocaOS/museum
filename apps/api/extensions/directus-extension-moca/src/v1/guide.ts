@@ -138,18 +138,21 @@ function createIpLimiter(maxPerMin: number) {
  * fallback for when this API is unreachable). `seed` rotates the picks so
  * consecutive answers offer fresh questions.
  */
-export function buildSuggestions(ctx: GuideContext, seed: number, count = SUGGESTION_COUNT): string[] {
-  const pool: string[] = [...(ctx.starters ?? [])];
-  const rooms = ctx.rooms.filter((r) => r.title);
+export function buildSuggestions(
+  ctx: GuideContext,
+  seed: number,
+  count = SUGGESTION_COUNT,
+  /** Lead the picks with the exhibited artworks (used for the baked/greeting
+   * set so a first-time visitor is invited straight into the works on show). */
+  leadArtworks = false,
+): string[] {
   const artworks = ctx.rooms.flatMap((r) => r.artworks).filter((a) => a.title);
+  const rooms = ctx.rooms.filter((r) => r.title);
+  const artworkQs = artworks.map((a) =>
+    a.artist ? `Tell me about “${a.title}” by ${a.artist}.` : `Tell me about the work “${a.title}”.`,
+  );
 
-  for (const a of artworks) {
-    pool.push(
-      a.artist
-        ? `Tell me about “${a.title}” by ${a.artist}.`
-        : `Tell me about the work “${a.title}”.`
-    );
-  }
+  const pool: string[] = [...(ctx.starters ?? []), ...artworkQs];
   for (const artist of ctx.artists) pool.push(`Who is ${artist}?`);
   for (const r of rooms) {
     pool.push(
@@ -170,12 +173,26 @@ export function buildSuggestions(ctx: GuideContext, seed: number, count = SUGGES
 
   if (!pool.length) return [];
   const picks: string[] = [];
+  const add = (q: string) => {
+    if (q && !picks.includes(q) && picks.length < count) picks.push(q);
+  };
+
+  // Baked/greeting set: lead with the works on show (seed-rotated for variety
+  // across a large catalog), then fill from the rest of the pool.
+  if (leadArtworks && artworkQs.length) {
+    let a = seed % artworkQs.length;
+    const aStride = 1 + (seed % 5);
+    for (let n = 0; n < artworkQs.length && picks.length < count; n++) {
+      add(artworkQs[a % artworkQs.length]);
+      a += aStride;
+    }
+  }
+
   let i = seed % pool.length;
   // Stride co-prime-ish with the pool so rotations cover it evenly.
   const stride = 1 + (seed % 7);
   while (picks.length < Math.min(count, pool.length)) {
-    const q = pool[i % pool.length];
-    if (!picks.includes(q)) picks.push(q);
+    add(pool[i % pool.length]);
     i += stride;
   }
   return picks;
@@ -184,18 +201,18 @@ export function buildSuggestions(ctx: GuideContext, seed: number, count = SUGGES
 // ------------------------------------------------------- persona ----
 
 /**
- * The default guide persona is DeCC0 #4209 — Tsahafi, the scholar-curator
- * (codex.decc0s.com/4209). Its SOUL is loaded from the Codex like any other
- * persona; the hardcoded Omnimorph text below is only the deep fallback for
- * when the Codex itself is unreachable.
+ * The default guide persona is DeCC0 #2875 — Oblak, the Cryptoart Guide &
+ * Cultural Bridge (codex.decc0s.com/2875). Its SOUL is loaded from the Codex
+ * like any other persona; the hardcoded text below is only the deep fallback
+ * for when the Codex itself is unreachable.
  */
-const DEFAULT_DECC0 = 4209;
-const FALLBACK_PERSONA_NAME = "Omnimorph";
+const DEFAULT_DECC0 = 2875;
+const FALLBACK_PERSONA_NAME = "Oblak";
 const FALLBACK_PERSONA = `You are ${FALLBACK_PERSONA_NAME}, the resident guide of the Museum of Crypto Art (MOCA) —
-a shapeshifting digital being who has wandered the cryptoart movement since its genesis.
-You are warm, sharply observant, and a little playful; you love connecting works to the
-artists and ideas behind them, and you believe (as MOCA does) that art is for everyone
-and memory belongs onchain.`;
+a weathered cryptoart guide and cultural bridge who moves through the liminal spaces between
+the traditional and digital art worlds. Your manner is liminal, a little ironic, chill, and
+deliberate; you connect works to the artists and ideas behind them, value reinvention, and
+believe (as MOCA does) that art is for everyone and memory belongs onchain.`;
 
 interface Persona {
   name: string;
@@ -220,10 +237,12 @@ export function registerGuideRoutes(
     cortex: ReturnType<typeof import("./cortex").createCortexClient>;
     decc0s: ReturnType<typeof import("./decc0s").createDecc0sClient>;
     souls: ReturnType<typeof import("./souls").createSoulsClient>;
+    venice?: ReturnType<typeof import("./venice").createVeniceClient>;
+    publicUrl?: string;
     errorJson: (res: any, status: number, message: string, code: string) => any;
   }
 ) {
-  const { itemsService, cortex, decc0s, souls, errorJson } = deps;
+  const { itemsService, cortex, decc0s, souls, venice, publicUrl, errorJson } = deps;
 
   // Make the most common deployment mistake loud: without CORTEX_API_URL /
   // CORTEX_API_KEY on THIS (Directus) service the guide still answers, but
@@ -284,6 +303,44 @@ export function registerGuideRoutes(
 
   const allowRegister = createIpLimiter(REGISTER_PER_MIN);
   const allowAsk = createIpLimiter(ASK_PER_MIN);
+
+  // ---- text-to-speech (Venice) -----------------------------------------------
+  // The guide speaks its answers in-world. We synthesize once per (answer,voice)
+  // and serve the bytes at GET /guide/tts/:id.mp3 — the in-world audio node
+  // loads that URL. Cached in-memory with a short TTL; no Venice key → silently
+  // text-only.
+  const TTS_TTL_MS = 10 * 60_000;
+  const TTS_MAX_ENTRIES = 80;
+  const ttsCache = new Map<string, { at: number; bytes: Buffer; ct: string }>();
+
+  function pruneTts(): void {
+    const now = Date.now();
+    for (const [k, v] of ttsCache) if (now - v.at > TTS_TTL_MS) ttsCache.delete(k);
+    while (ttsCache.size > TTS_MAX_ENTRIES) {
+      const oldest = ttsCache.keys().next().value;
+      if (oldest === undefined) break;
+      ttsCache.delete(oldest);
+    }
+  }
+
+  /**
+   * Synthesize `answer` with the given voice, cache it, and return an absolute
+   * audio URL the in-world guide can play — or null when TTS is unavailable.
+   */
+  async function synthVoice(answer: string, voice: string): Promise<string | null> {
+    if (!venice?.configured || !publicUrl) return null;
+    const id = hash32(`${voice}:${answer}`).toString(36);
+    if (!ttsCache.has(id)) {
+      const { status, bytes, contentType } = await venice.synthesize(answer, voice);
+      if (status !== 200 || !bytes) {
+        warnUpstream(`Venice TTS failed (status ${status}) — answer stays text-only.`);
+        return null;
+      }
+      pruneTts();
+      ttsCache.set(id, { at: Date.now(), bytes, ct: contentType || "audio/mpeg" });
+    }
+    return `${publicUrl}/v1/guide/tts/${id}.mp3`;
+  }
 
   // ---- context store: guide_exhibitions collection + in-memory fallback ----
   const memory = new Map<string, GuideContext>();
@@ -688,7 +745,8 @@ export function registerGuideRoutes(
           counts: ctx.counts,
           architects: ctx.architects,
           artists: ctx.artists,
-          suggestions: buildSuggestions(ctx, hash32(ctx.id)),
+          // Baked into the guide app + shown first — lead with the works on show.
+          suggestions: buildSuggestions(ctx, hash32(ctx.id), SUGGESTION_COUNT, true),
         },
       });
     } catch (e: any) {
@@ -805,12 +863,19 @@ export function registerGuideRoutes(
         .replace(/\s*\[src_[^\]]*\]/g, "")
         .trim();
 
+      // Speak it (unless the caller opted out) — synth once, hand back a URL the
+      // in-world guide's audio node plays. Best-effort: never blocks the answer.
+      const speak = body.speak !== false;
+      const voice = clampText(body.voice, 40) || venice?.defaultVoice || "";
+      const audioUrl = speak ? await synthVoice(answer, voice).catch(() => null) : null;
+
       res.json({
         data: {
           answer,
           persona: persona.name,
           suggestions,
           sources,
+          ...(audioUrl ? { audioUrl } : {}),
         },
       });
     } catch (e: any) {
@@ -827,5 +892,18 @@ export function registerGuideRoutes(
         },
       });
     }
+  });
+
+  // Serve a synthesized answer's audio (public, keyless like the rest of the
+  // guide). The id is minted by /guide/ask; bytes live in the short-TTL cache.
+  router.get("/guide/tts/:file", (req: any, res: any) => {
+    const id = String(req.params.file || "").replace(/\.mp3$/i, "").replace(/[^\w]/g, "").slice(0, 16);
+    const hit = id && ttsCache.get(id);
+    if (!hit) {
+      return errorJson(res, 404, "Audio expired or not found — ask the guide again.", "NOT_FOUND");
+    }
+    res.set("Content-Type", hit.ct || "audio/mpeg");
+    res.set("Cache-Control", "public, max-age=300");
+    res.send(hit.bytes);
   });
 }

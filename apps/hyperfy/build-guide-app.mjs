@@ -8,8 +8,9 @@
  * `spawn-exhibition.mjs --guide`, packaged for per-click upload.
  *
  *   node build-guide-app.mjs my-show.moca-exhibition.json \
- *     [--guide-name Tsahafi] [--guide-avatar path|url] [--decc0 4209] \
+ *     [--guide-name Oblak] [--guide-avatar path|url] [--decc0 2875] \
  *     [--soul SOUL.md] [--soul-name Name] [--soulweaver chainId:0x…:tokenId] \
+ *     [--voice <id>] [--no-speak] \
  *     [--api https://api.moca.qwellco.de] [--no-register] [-o guide.hyp]
  *
  * Building the file registers the exhibition's context (rooms, architects,
@@ -35,11 +36,13 @@ const opt = (name, fallback) => {
 const flag = (name) => args.includes(`--${name}`);
 
 if (!file) {
-  console.error("Usage: node build-guide-app.mjs <exhibition.json> [--decc0 4209] [-o guide.hyp]");
+  console.error("Usage: node build-guide-app.mjs <exhibition.json> [--decc0 2875] [--voice <id>] [--no-speak] [-o guide.hyp]");
   process.exit(1);
 }
 
-const GUIDE_NAME = opt("guide-name", "Tsahafi");
+const GUIDE_NAME = opt("guide-name", "Oblak");
+const GUIDE_SPEAK = !flag("no-speak");
+const GUIDE_VOICE = opt("voice", "");
 const LOCAL_OMNIMORPH = new URL("../museum/public/avatars/omnimorph-3321.vrm", import.meta.url).pathname;
 const GUIDE_AVATAR = opt(
   "guide-avatar",
@@ -48,7 +51,7 @@ const GUIDE_AVATAR = opt(
     ? LOCAL_OMNIMORPH
     : "https://museumofcryptoart.com/avatars/omnimorph-3321.vrm"),
 );
-const DECC0_ID = Number(opt("decc0", "4209")) || 0;
+const DECC0_ID = Number(opt("decc0", "2875")) || 0;
 const MOCA_API = (opt("api", process.env.MOCA_API_URL || "https://api.moca.qwellco.de")).replace(/\/+$/, "");
 
 // Persona beyond DeCC0s: --soul <SOUL.md file> bakes a custom soul into the
@@ -147,6 +150,9 @@ const scriptBytes = Buffer.from(
     suggestions,
     roomCount: counts.rooms,
     artworkCount: counts.artworks,
+    avatarUrl: avatarAssetUrl,
+    speak: GUIDE_SPEAK,
+    voice: GUIDE_VOICE,
   }),
   "utf8",
 );
@@ -162,7 +168,8 @@ const hyp = buildHyp({
     url: "https://museumofcryptoart.com/rooms/world",
     desc: `${GUIDE_NAME} — the AI guide of "${exhibition.name}". Hold E to talk.`,
     image: null,
-    model: avatarAssetUrl,
+    // The script renders the bundled .vrm as an animatable avatar node (props.avatarUrl).
+    model: null,
     script: scriptAssetUrl,
     props: {
       guideName: GUIDE_NAME,
@@ -171,6 +178,9 @@ const hyp = buildHyp({
       apiUrl: MOCA_API,
       exhibitionId,
       exhibitionName: exhibition.name,
+      avatarUrl: avatarAssetUrl,
+      speak: GUIDE_SPEAK,
+      voice: GUIDE_VOICE || "",
     },
     preload: false,
     public: false,

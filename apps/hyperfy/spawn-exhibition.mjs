@@ -54,15 +54,17 @@
  *                             artists, works) with the MOCA API — that's what
  *                             the guide answers from — and drops a talking
  *                             VRM avatar into the world (hold E to chat).
- *   --guide-name <name>       the guide's display name (default "Tsahafi")
+ *   --guide-name <name>       the guide's display name (default "Oblak")
  *   --guide-avatar <path|url> .vrm to embody (default: the museum's Omnimorph)
  *   --decc0 <token id>        Art DeCC0 persona the guide adopts (default
- *                             4209 = Tsahafi; souls come from the MOCA Codex
+ *                             2875 = Oblak; souls come from the MOCA Codex
  *                             via /v1/decc0s)
  *   --soul <file.md>          a custom SOUL.md the guide embodies (beats --decc0)
  *   --soul-name <name>        display name for the custom soul
  *   --soulweaver <ref>        a Soulweaver soul, chainId:0xcontract:tokenId —
  *                             resolved by the MOCA API at answer time
+ *   --voice <id>              Venice TTS voice (default the API's); --no-speak
+ *                             disables the guide's spoken answers
  *   --api <url>               MOCA API base (default https://api.moca.qwellco.de)
  *
  * Privacy by design: the exhibition file lives on the curator's device. This
@@ -112,7 +114,9 @@ const RELAYOUT = flag("relayout");
 const FRESH = flag("fresh");
 const VERIFY = !flag("no-verify");
 const GUIDE = flag("guide");
-const GUIDE_NAME = opt("guide-name", "Tsahafi");
+const GUIDE_NAME = opt("guide-name", "Oblak");
+const GUIDE_SPEAK = !flag("no-speak");
+const GUIDE_VOICE = opt("voice", "");
 // Default body: the in-repo Omnimorph VRM when running from the monorepo,
 // otherwise the museum-hosted copy.
 const LOCAL_OMNIMORPH = new URL("../museum/public/avatars/omnimorph-3321.vrm", import.meta.url).pathname;
@@ -123,7 +127,7 @@ const GUIDE_AVATAR = opt(
     ? LOCAL_OMNIMORPH
     : "https://museumofcryptoart.com/avatars/omnimorph-3321.vrm"),
 );
-const DECC0_ID = Number(opt("decc0", "4209")) || 0;
+const DECC0_ID = Number(opt("decc0", "2875")) || 0;
 const MOCA_API = (opt("api", process.env.MOCA_API_URL || "https://api.moca.qwellco.de")).replace(/\/+$/, "");
 
 // Persona beyond DeCC0s: --soul <SOUL.md file> bakes a custom soul into the
@@ -462,6 +466,9 @@ if (GUIDE) {
         suggestions,
         roomCount: counts.rooms,
         artworkCount: counts.artworks,
+        avatarUrl,
+        speak: GUIDE_SPEAK,
+        voice: GUIDE_VOICE,
       }),
       "utf8",
     );
@@ -506,6 +513,9 @@ if (GUIDE) {
       apiUrl: MOCA_API,
       exhibitionId: guideExhibitionId,
       exhibitionName: exhibition.name,
+      avatarUrl,
+      speak: GUIDE_SPEAK,
+      voice: GUIDE_VOICE || "",
     };
 
     const existing = session.blueprints.get(bpId);
@@ -515,7 +525,8 @@ if (GUIDE) {
         version: 0,
         ...meta,
         image: null,
-        model: avatarUrl,
+        // The script renders the VRM as an animatable avatar node (props.avatarUrl).
+        model: null,
         script: guideScriptUrl,
         props,
         preload: false,
@@ -528,12 +539,12 @@ if (GUIDE) {
       });
       stats.created++;
       console.log("  guide blueprint created");
-    } else if (existing.model !== avatarUrl || existing.script !== guideScriptUrl) {
+    } else if (existing.script !== guideScriptUrl || existing.props?.avatarUrl !== avatarUrl) {
       session.send("blueprintModified", {
         id: bpId,
         version: (existing.version ?? 0) + 1,
         ...meta,
-        model: avatarUrl,
+        model: null,
         script: guideScriptUrl,
         props: { ...existing.props, ...props },
       });

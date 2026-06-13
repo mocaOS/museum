@@ -61,13 +61,13 @@ interface GuideConfig {
 
 const DEFAULT_CONFIG: GuideConfig = {
   source: "decc0",
-  decc0: "4209",
-  decc0Name: "Tsahafi",
+  decc0: "2875",
+  decc0Name: "Oblak",
   swChain: "1",
   swContract: "",
   swToken: "",
   soulName: "",
-  guideName: "Tsahafi",
+  guideName: "Oblak",
   avatarId: DEFAULT_AVATAR.id,
   apiUrl: "",
 };
@@ -357,7 +357,7 @@ export default function GuideDialog({
   const guideOptions = (): GuideOptions => {
     const avatar = avatars.find(a => a.id === config.avatarId) || avatars[0] || DEFAULT_AVATAR;
     const base: GuideOptions = {
-      name: config.guideName.trim() || "Tsahafi",
+      name: config.guideName.trim() || "Oblak",
       avatarUrl: avatar.url,
       apiUrl: config.apiUrl.trim() || undefined,
     };
@@ -378,7 +378,7 @@ export default function GuideDialog({
         },
       };
     }
-    return { ...base, decc0Id: Number.parseInt(config.decc0, 10) || 4209 };
+    return { ...base, decc0Id: Number.parseInt(config.decc0, 10) || 2875 };
   };
 
   const send = async () => {
@@ -627,7 +627,7 @@ export default function GuideDialog({
                   )
                 : (
                     <span className="text-[10.5px]" style={{ color: "var(--fg3)" }}>
-                      DeCC0 #{config.decc0 || "—"} — default 4209 is Tsahafi, the scholar-curator.
+                      DeCC0 #{config.decc0 || "—"} — default 2875 is Oblak, the cryptoart guide.
                     </span>
                   )}
               {soulOpen && (

@@ -70,15 +70,15 @@ function loadTarget(): StoredTarget {
         url: p.url || "",
         key: p.key || "",
         guide: p.guide !== false,
-        guideName: p.guideName || "Tsahafi",
+        guideName: p.guideName || "Oblak",
         guideAvatar: p.guideAvatar || DEFAULT_AVATAR.id,
-        guideDecc0: p.guideDecc0 || "4209",
+        guideDecc0: p.guideDecc0 || "2875",
       };
     }
   } catch {
     /* noop */
   }
-  return { url: "", key: "", guide: true, guideName: "Tsahafi", guideAvatar: DEFAULT_AVATAR.id, guideDecc0: "4209" };
+  return { url: "", key: "", guide: true, guideName: "Oblak", guideAvatar: DEFAULT_AVATAR.id, guideDecc0: "2875" };
 }
 
 function saveTarget(target: StoredTarget) {
@@ -183,9 +183,9 @@ export default function SpawnHyperfyDialog({
   const [ relayout, setRelayout ] = useState(false);
   const [ lockLayout, setLockLayout ] = useState(false);
   const [ guideOn, setGuideOn ] = useState(true);
-  const [ guideName, setGuideName ] = useState("Tsahafi");
+  const [ guideName, setGuideName ] = useState("Oblak");
   const [ guideAvatarId, setGuideAvatarId ] = useState(DEFAULT_AVATAR.id);
-  const [ guideDecc0, setGuideDecc0 ] = useState("4209");
+  const [ guideDecc0, setGuideDecc0 ] = useState("2875");
   const [ avatars, setAvatars ] = useState<GuideAvatar[]>([ DEFAULT_AVATAR ]);
   const [ persona, setPersona ] = useState<{ id: number; name: string; thumb: string | null } | null>(null);
   const [ hypBusy, setHypBusy ] = useState(false);
@@ -202,9 +202,9 @@ export default function SpawnHyperfyDialog({
     setUrl(t.url);
     setKey(t.key);
     setGuideOn(t.guide !== false);
-    setGuideName(t.guideName || "Tsahafi");
+    setGuideName(t.guideName || "Oblak");
     setGuideAvatarId(t.guideAvatar || DEFAULT_AVATAR.id);
-    setGuideDecc0(t.guideDecc0 || "4209");
+    setGuideDecc0(t.guideDecc0 || "2875");
     setPhase("form");
     setProgress(null);
     setResult(null);
@@ -299,7 +299,7 @@ export default function SpawnHyperfyDialog({
         pinned: lockLayout,
         guide: guideOn
           ? {
-              name: guideName.trim() || "Tsahafi",
+              name: guideName.trim() || "Oblak",
               avatarUrl: avatar.url,
               decc0Id: Number.isNaN(decc0Id) ? undefined : decc0Id,
               apiUrl: guideApiOverride(),
@@ -325,7 +325,7 @@ export default function SpawnHyperfyDialog({
       const avatar = avatars.find(a => a.id === guideAvatarId) || avatars[0] || DEFAULT_AVATAR;
       const decc0Id = Number.parseInt(guideDecc0, 10);
       const { blob, filename, registration } = await buildGuideHyp(exhibition, {
-        name: guideName.trim() || "Tsahafi",
+        name: guideName.trim() || "Oblak",
         avatarUrl: avatar.url,
         decc0Id: Number.isNaN(decc0Id) ? undefined : decc0Id,
         apiUrl: guideApiOverride(),
@@ -580,13 +580,13 @@ export default function SpawnHyperfyDialog({
                       <label
                         className="flex items-center gap-2 text-[11px]"
                         style={{ color: "var(--fg2)" }}
-                        title="Art DeCC0 token id (1–10000) whose soul the guide adopts — its personality comes from the MOCA Codex. Default 4209 = Tsahafi, the scholar-curator."
+                        title="Art DeCC0 token id (1–10000) whose soul the guide adopts — its personality comes from the MOCA Codex. Default 2875 = Oblak, the scholar-curator."
                       >
                         DeCC0 persona
                         <input
                           value={guideDecc0}
                           onChange={e => setGuideDecc0(e.target.value.replace(/[^\d]/g, ""))}
-                          placeholder="4209"
+                          placeholder="2875"
                           inputMode="numeric"
                           className={`
                             h-7 w-16 rounded-[var(--radius)] border

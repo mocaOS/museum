@@ -86,11 +86,11 @@ export async function registerGuideExhibition(
 }
 
 export interface GuideHypOptions {
-  /** The guide's display name (default "Tsahafi"). */
+  /** The guide's display name (default "Oblak"). */
   name?: string;
   /** Absolute or site-relative URL of the .vrm the guide embodies. */
   avatarUrl: string;
-  /** Art DeCC0 token id whose persona the guide adopts (default 4209, Tsahafi). */
+  /** Art DeCC0 token id whose persona the guide adopts (default 2875, Oblak). */
   decc0Id?: number;
   /** A SOUL.md the guide embodies — uploaded by the curator; beats decc0/soulRef. */
   customSoul?: string;
@@ -100,6 +100,10 @@ export interface GuideHypOptions {
   soulRef?: { chainId: number; address: string; tokenId: string } | null;
   /** MOCA API base the guide asks for answers. */
   apiUrl?: string;
+  /** Speak answers aloud in-world via Venice TTS (default true). */
+  speak?: boolean;
+  /** TTS voice id (Venice). Empty → the API's default voice. */
+  voice?: string;
 }
 
 export async function buildGuideHyp(
@@ -107,8 +111,8 @@ export async function buildGuideHyp(
   guide: GuideHypOptions,
 ): Promise<{ blob: Blob; filename: string; registration: GuideRegistration }> {
   const apiUrl = (guide.apiUrl || DEFAULT_GUIDE_API).replace(/\/+$/, "");
-  const guideName = guide.name || "Tsahafi";
-  const decc0Id = guide.decc0Id || 4209;
+  const guideName = guide.name || "Oblak";
+  const decc0Id = guide.decc0Id || 2875;
 
   const registration = await registerGuideExhibition(exhibition, apiUrl);
 
@@ -130,6 +134,9 @@ export async function buildGuideHyp(
       suggestions: registration.suggestions,
       roomCount: registration.counts.rooms,
       artworkCount: registration.counts.artworks,
+      avatarUrl: avatarAssetUrl,
+      speak: guide.speak !== false,
+      voice: guide.voice,
     }),
   );
   const scriptAssetUrl = await hypAssetUrl(scriptBytes, "js");
@@ -142,7 +149,8 @@ export async function buildGuideHyp(
     url: "https://museumofcryptoart.com/rooms/world",
     desc: `${guideName} — the AI guide of "${exhibition.name}". Hold E to talk.`,
     image: null,
-    model: avatarAssetUrl,
+    // The script renders the bundled .vrm as an animatable avatar node (props.avatarUrl).
+    model: null,
     script: scriptAssetUrl,
     props: {
       guideName,
@@ -151,6 +159,9 @@ export async function buildGuideHyp(
       apiUrl,
       exhibitionId: registration.id,
       exhibitionName: exhibition.name,
+      avatarUrl: avatarAssetUrl,
+      speak: guide.speak !== false,
+      voice: guide.voice || "",
     },
     preload: false,
     public: false,

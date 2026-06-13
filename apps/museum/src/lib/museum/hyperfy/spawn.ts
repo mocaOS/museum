@@ -53,11 +53,11 @@ export interface SpawnResult {
 }
 
 export interface GuideOptions {
-  /** The guide's display name (default "Tsahafi"). */
+  /** The guide's display name (default "Oblak"). */
   name?: string;
   /** Absolute or site-relative URL of the .vrm the guide embodies. */
   avatarUrl: string;
-  /** Art DeCC0 token id whose persona the guide adopts (default 4209, Tsahafi). */
+  /** Art DeCC0 token id whose persona the guide adopts (default 2875, Oblak). */
   decc0Id?: number;
   /** A SOUL.md the guide embodies — uploaded by the curator; beats decc0/soulRef. */
   customSoul?: string;
@@ -67,6 +67,10 @@ export interface GuideOptions {
   soulRef?: { chainId: number; address: string; tokenId: string } | null;
   /** MOCA API base the guide asks for answers (default api.moca.qwellco.de). */
   apiUrl?: string;
+  /** Speak answers aloud in-world via Venice TTS (default true). */
+  speak?: boolean;
+  /** TTS voice id (Venice). Empty → the API's default voice. */
+  voice?: string;
 }
 
 export interface SpawnOptions {
@@ -438,8 +442,8 @@ async function pushGuide(
 ): Promise<{ bpId: string; enId: string; status: RoomSpawnStatus }> {
   const { url, tileMeters, pinned, onStatus } = opts;
   const apiUrl = (guide.apiUrl || DEFAULT_GUIDE_API).replace(/\/+$/, "");
-  const guideName = guide.name || "Tsahafi";
-  const decc0Id = guide.decc0Id || 4209;
+  const guideName = guide.name || "Oblak";
+  const decc0Id = guide.decc0Id || 2875;
   const exhibitionKey = exhibition.id || exhibition.name || "default";
 
   // 1. Register the context — enrichment (architects, artists, work
@@ -449,7 +453,9 @@ async function pushGuide(
   const registration = await registerGuideExhibition(exhibition, apiUrl);
   const { suggestions, counts } = registration;
 
-  // 2. The guide's body — a .vrm blueprint model renders as an avatar.
+  // 2. The guide's body — uploaded as a world asset; the script renders it as
+  //    a script-owned `avatar` node (so it can be animated), not the blueprint
+  //    model (which would render statically with no script handle).
   onStatus?.("model");
   const vrmRes = await fetch(guide.avatarUrl);
   if (!vrmRes.ok) throw new Error(`Guide avatar unreachable (${vrmRes.status})`);
@@ -475,6 +481,9 @@ async function pushGuide(
       suggestions,
       roomCount: counts.rooms,
       artworkCount: counts.artworks,
+      avatarUrl,
+      speak: guide.speak !== false,
+      voice: guide.voice,
     }),
   );
   const guideScriptUrl = await uploadAsset({
@@ -524,6 +533,9 @@ async function pushGuide(
     apiUrl,
     exhibitionId: registration.id,
     exhibitionName: exhibition.name,
+    avatarUrl,
+    speak: guide.speak !== false,
+    voice: guide.voice || "",
   };
 
   const existing = session.blueprints.get(bpId);
@@ -534,7 +546,8 @@ async function pushGuide(
       version: 0,
       ...meta,
       image: null,
-      model: avatarUrl,
+      // The script renders the VRM as an animatable avatar node — see props.avatarUrl.
+      model: null,
       script: guideScriptUrl,
       props,
       preload: false,
@@ -546,12 +559,15 @@ async function pushGuide(
       disabled: false,
     });
     status = "created";
-  } else if (existing.model !== avatarUrl || existing.script !== guideScriptUrl) {
+  } else if (
+    existing.script !== guideScriptUrl ||
+    (existing.props as { avatarUrl?: string })?.avatarUrl !== avatarUrl
+  ) {
     session.send("blueprintModified", {
       id: bpId,
       version: (existing.version ?? 0) + 1,
       ...meta,
-      model: avatarUrl,
+      model: null,
       script: guideScriptUrl,
       props: { ...(existing.props as object), ...props },
     });

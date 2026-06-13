@@ -10,6 +10,7 @@ import { registerGuideRoutes } from "./guide";
 import { normalizeArtwork, type NftRow } from "./media";
 import { registerPresenceRoutes } from "./presence";
 import { createSoulsClient } from "./souls";
+import { createVeniceClient } from "./venice";
 
 /**
  * MOCA API v1 — the unified public API for integrators.
@@ -47,6 +48,7 @@ export default defineEndpoint({
     const decc0s = createDecc0sClient(env);
     const cortex = createCortexClient(env);
     const souls = createSoulsClient(env);
+    const venice = createVeniceClient(env);
     const requireKey = createKeyAuth({ services, getSchema, env });
 
     router.use(expressJson({ limit: "1mb" }));
@@ -102,7 +104,7 @@ export default defineEndpoint({
 
     // The museum guide (public — the in-world visitor flow must be keyless;
     // see guide.ts for the rate limits and the enrichment pipeline).
-    registerGuideRoutes(router, { itemsService, cortex, decc0s, souls, errorJson });
+    registerGuideRoutes(router, { itemsService, cortex, decc0s, souls, venice, publicUrl, errorJson });
 
     // ---- Room slot data (public) -------------------------------------------
     // Baked slot anchors + resolved facing for a room's builder GLB

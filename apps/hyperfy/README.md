@@ -124,15 +124,20 @@ and never cite the collection, Cortex isn't being reached:
   A guide answer carrying `fallback: true` always means Cortex was unreachable
   for that turn.
 
-- `--guide-name <name>` — display name (default **Tsahafi**)
+- `--guide-name <name>` — display name (default **Oblak**)
 - `--guide-avatar <path|url>` — any `.vrm`; defaults to the in-repo
   `omnimorph-3321.vrm` (the museum's default body until the first Art DeCC0
   VRMs land — the site's catalog lives at
-  `museumofcryptoart.com/avatars/avatars.json`)
+  `museumofcryptoart.com/avatars/avatars.json`). The guide renders it as a
+  script-owned avatar node and animates it (walks while following, gestures
+  while answering) using the engine's built-in emote clips.
 - `--decc0 <token id>` — the guide adopts that Art DeCC0's SOUL (from the
   MOCA Codex via `/v1/decc0s/:id?include=profiles`); also refinable in-world
-  via the guide's App pane (right-click in build mode). Default 4209 —
-  **Tsahafi**, the scholar-curator.
+  via the guide's App pane (right-click in build mode). Default 2875 —
+  **Oblak**, the cryptoart guide.
+- `--voice <id>` / `--no-speak` — the guide speaks answers aloud via Venice
+  TTS (default voice, on) when the MOCA API has `VENICE_API_KEY` set;
+  `--no-speak` keeps it silent.
 - `--soul <file.md>` / `--soul-name <name>` — bring ANY agent's SOUL.md and
   the guide embodies it (baked into the app; editable later in its
   inspector). Beats `--decc0`.
@@ -158,7 +163,7 @@ No world URL, no admin key, no spawner run — bundle the guide as a portable
 Hyperfy app file and hand it to anyone:
 
 ```bash
-node build-guide-app.mjs my-show.moca-exhibition.json --decc0 4209 -o guide.hyp
+node build-guide-app.mjs my-show.moca-exhibition.json --decc0 2875 -o guide.hyp
 ```
 
 (or click **Download guide app (.hyp)** in the builder's Spawn dialog). Drop

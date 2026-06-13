@@ -67,12 +67,15 @@ curl -X POST "https://api.moca.qwellco.de/v1/guide/ask" \
   }'
 ```
 
-→ `{ "data": { answer, persona, suggestions, sources, fallback? } }`
+→ `{ "data": { answer, persona, suggestions, sources, audioUrl?, fallback? } }`
 
 The answer combines the exhibition context with the museum's Cortex Library
 (RAG over MOCA's writings, lore, and artist interviews) and stays in persona.
 Optional fields: `history` (the running conversation, last ~8 turns) and
-`visitor` (display name), plus **who answers** — first match wins:
+`visitor` (display name); `speak` (default true) + `voice` (a Venice voice id,
+e.g. `Serena`) request spoken audio — when the deployment has TTS configured the
+response carries an **`audioUrl`** (an mp3 served from `GET /v1/guide/tts/:id.mp3`)
+you can play back. Plus **who answers** — first match wins:
 
 - `soul` (string) — a complete SOUL.md the guide embodies, with optional
   `soulName`;
@@ -80,7 +83,7 @@ Optional fields: `history` (the running conversation, last ~8 turns) and
   Soulweaver soul (EIP-191-signed SOUL files; resolved server-side);
 - `decc0` — an Art DeCC0 token id 1–10000 (its `moltbot` SOUL from the MOCA
   Codex);
-- nothing — the default guide, DeCC0 **#4209 Tsahafi**, the scholar-curator.
+- nothing — the default guide, DeCC0 **#2875 Oblak**, the cryptoart guide.
 
 `fallback: true` flags an answer built from context alone (Library
 unreachable). Rate limit ~20/min per IP — pace a conversation, don't batch.

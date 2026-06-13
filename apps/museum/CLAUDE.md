@@ -140,17 +140,29 @@ no accounts. Code lives in `src/components/museum/three/`:
   context with the MOCA API (`POST /v1/guide/exhibitions`, the explicit
   opt-in moment where curation data reaches MOCA servers), uploads the
   chosen `.vrm` (catalog `public/avatars/avatars.json`, default
-  `omnimorph-3321.vrm`), and spawns the generated `guide-script.ts` app:
-  hold-E conversation panel, clickable suggested questions, free text via
-  world chat, per-player private answers fetched server-side from
-  `POST /v1/guide/ask` (exhibition context + Cortex + optional Art DeCC0
-  persona via the dialog's "DeCC0 persona" token id, default 4209 =
-  Tsahafi). That endpoint lives in `apps/api` (`src/v1/guide.ts`) and is
-  Cortex-resilient: it retries a fast transient 5xx and degrades to a
-  context-only `fallback: true` answer rather than erroring, so the in-world
-  guide stays alive even when Cortex is slow/down — but it **requires
-  `CORTEX_API_URL`/`CORTEX_API_KEY` on the Directus deployment** to hook the
-  knowledge graph in (without them every answer is a context-only fallback).
+  `omnimorph-3321.vrm`), and spawns the generated `guide-script.ts` app. The
+  guide **spawns beside the entry-nearest room and follows a visitor once they
+  interact**; the script renders the VRM as a **script-owned `avatar` node**
+  (blueprint `model:null`, `props.avatarUrl`) so it can drive the engine's
+  built-in locomotion/gesture emotes (`asset://mp-idle|mp-walk|emote-talk|
+  emote-float.glb`) — it **walks** while following and **gestures** while
+  answering. A single billboarded **speech bubble above the head** (replaces
+  the old panel) greets with the exhibition title, shows the 3 artwork-led
+  suggested questions, animates a "consulting the library…" thinking state,
+  then **types out** the answer; free text via world chat still works.
+  Per-player private answers are fetched server-side from `POST /v1/guide/ask`
+  (exhibition context + Cortex + optional Art DeCC0 persona via the dialog's
+  "DeCC0 persona" token id, **default 2875 = Oblak**). When the Directus has a
+  `VENICE_API_KEY`, the guide also **speaks** each answer (Venice
+  `tts-qwen3-1-7b`; `audioUrl` → in-world `audio` node, autoplay on; `speak`/
+  `voice` are app inspector props). That endpoint lives in `apps/api`
+  (`src/v1/guide.ts`) and is Cortex-resilient: it retries a fast transient 5xx
+  and degrades to a context-only `fallback: true` answer rather than erroring,
+  so the in-world guide stays alive even when Cortex is slow/down — but it
+  **requires `CORTEX_API_URL`/`CORTEX_API_KEY` on the Directus deployment** to
+  hook the knowledge graph in (without them every answer is a context-only
+  fallback). NB: Hyperfy's app `fetch` can't stream, so the answer is fetched
+  whole and typed out client-side (no in-world SSE).
   The dialog's **Download guide app (.hyp)** button
   (`guide-hyp.ts` + `hyp.ts`) bundles the same guide as a drag-droppable
   Hyperfy app file — registers the context, then builds
