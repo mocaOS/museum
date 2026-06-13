@@ -118,7 +118,11 @@ no accounts. Code lives in `src/components/museum/three/`:
   verification). The protocol/orchestration lives in
   `src/lib/museum/hyperfy/` — `protocol.ts` (minimal msgpackr wire client,
   pinned to Hyperfy v0.16.0), `room-script.ts` (generated per-room app script:
-  `app.configure` refinement props + the embedded in-world slot editor),
+  `app.configure` refinement props + the embedded in-world slot editor + an
+  **invisible `trimesh` collider** — the room GLB loaded a second time with
+  `collision:'trimesh', hidden:true` so the room is solid, since the rendered
+  blueprint model defaults to `collision:'auto'` with no collider-tagged meshes;
+  pass the uploaded `modelUrl` into `generateRoomScript`),
   `spawn.ts` (idempotent spawn: deterministic ids from the layout's
   `exhibitionId`, blueprint version bumps on re-spawn, in-world arrangement
   preserved; uploads curated images into the world as content-addressed
@@ -130,7 +134,12 @@ no accounts. Code lives in `src/components/museum/three/`:
   anchors (required for un_MUSEUM `Auto_NNN` slots, which never exist as GLB
   nodes) and letterbox into their slot frames like the builder; generated
   scripts divide meter sizes by `rootScale`; legacy scale-1 entities are
-  healed on re-spawn. **In-world slot editor:** with the room's "Slot
+  healed on re-spawn. **Native room scale:** each placement carries a per-room
+  `scale` (the export's `scale` field — `rootScale = tileMeters/footprint ×
+  scale`); new rooms placed in the builder default to **2×** (`DEFAULT_ROOM_SCALE`
+  in `WorldBuilder.tsx`, range 0.4–6), and admins resize a room further in-world
+  by grabbing it and **Shift+scrolling** — the idempotent re-spawn preserves that
+  (`relayout` pushes the layout + native scale back). **In-world slot editor:** with the room's "Slot
   editing" prop on, **scene admins** (not every build-rights player) hold E at a
   work and nudge/resize it; the server enforces `player.admin` on every
   adjustment, persists to world `storage.json` keyed by the
@@ -156,9 +165,14 @@ no accounts. Code lives in `src/components/museum/three/`:
   options), private per visitor via local `world.chat(..., false)`; the
   above-head bubble is a **minimal always-visible label** (welcome ↔ a
   "consulting the library…" loader while a question is in flight).
-  Per-player private answers are fetched server-side from `POST /v1/guide/ask`
-  (exhibition context + Cortex + optional Art DeCC0 persona via the dialog's
-  "DeCC0 persona" token id, **default 2875 = Oblak**). When the Directus has a
+  Per-player private answers are fetched server-side from `POST /v1/guide/ask`.
+  That endpoint runs a **hybrid** model (when the API has `MUSEUMAGENT_*`): a
+  FAST direct LLM reply over exhibition metadata + an aggregated MOCA brief + the
+  visitor's session memory (the in-world app sends a per-player `session` id),
+  while Cortex mines deeper insights **asynchronously** into a separate bucket
+  that enriches the next reply — so the conversation stays reactive and gets
+  smarter each turn (falls back to the Cortex-primary path + optional Art DeCC0
+  persona, **default 2875 = Oblak**, when `MUSEUMAGENT_*` is unset). When the Directus has a
   `VENICE_API_KEY`, the guide also **speaks** each answer (Venice
   `tts-qwen3-1-7b`; `audioUrl` → in-world `audio` node, autoplay on; `speak`/
   `voice` are app inspector props). That endpoint lives in `apps/api`

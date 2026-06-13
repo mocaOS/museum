@@ -274,6 +274,7 @@ for (const placement of exhibition.placements) {
         slots: placement.slots || [],
         artSize: ART_SIZE,
         rootScale,
+        modelUrl,
       }),
       "utf8",
     );
@@ -422,6 +423,13 @@ if (GUIDE) {
           placements: exhibition.placements.map((p) => ({
             uid: p.uid,
             room: { id: p.room.id, title: p.room.title },
+            // World floor-plane center + footprint radius (meters) for the
+            // guide's spatial awareness — same tile→world mapping as the spawn.
+            location: {
+              x: (TILE_METERS / BUILDER_TILE) * p.position[0],
+              z: (TILE_METERS / BUILDER_TILE) * p.position[2],
+              r: (TILE_METERS * (Number(p.scale) || 1)) / 2,
+            },
             artworks: p.artworks.map((a) => ({ id: a.id, name: a.name, artist: a.artist })),
           })),
         }),
@@ -607,10 +615,11 @@ if (VERIFY && expected.length) {
 }
 
 console.log(`\n✔ ${stats.created} created, ${stats.updated} updated, ${stats.unchanged} unchanged, ${stats.failed} failed — ${stats.artworks} artwork(s) total.`);
-console.log(`\nWalk in: ${BASE_URL}`);
+console.log(`\nWalk in (rooms are solid — floors and walls collide): ${BASE_URL}`);
 console.log("Refine in-world (any admin): Tab = build mode · grab a room to rearrange");
-console.log("or X to delete it · hold E at a work to nudge/resize it · right-click a");
-console.log("room → artwork size, placards,");
+console.log("or X to delete it · Shift+scroll a grabbed room to resize it · hold E at a");
+console.log("work to nudge/resize it · right-click a room → artwork size, placards,");
 console.log("lighting and video volume in the App pane. Re-run this command anytime to");
-console.log("push curation updates — in-world arrangements are preserved.");
+console.log("push curation updates — in-world arrangements (incl. resizes) are preserved");
+console.log("(use --relayout to push the museum layout and native scale back).");
 process.exit(stats.failed ? 1 : 0);

@@ -96,15 +96,27 @@ source of truth.
   from `rooms`/`nfts` into a context document persisted in the
   `guide_exhibitions` collection (in-memory fallback pre-`directus-sync push`);
   `GET /v1/guide/exhibitions/:id[/suggestions]` serve it; `POST /v1/guide/ask`
-  answers in-world visitor questions by combining that context with Cortex and
-  an optional Art DeCC0 `moltbot` persona; Cortex-generated question starters
-  fill in asynchronously after registration). **Fast + resilient by design:**
-  `/v1/guide/ask` uses the lean chat path (`use_agentic: false`, `use_graph:
-  false`, `top_k: 4`) — visitors want a quick reply, not deep research (the
-  latency floor is Cortex's answer-generation LLM). It retries one *fast*
-  transient Cortex 5xx (`askCortexResilient`), and on any failure (5xx, timeout,
-  or `CORTEX_*` unset) degrades to an exhibition-context-only answer marked
-  `fallback: true` instead of erroring — so the in-world guide never goes dark.
+  answers in-world visitor questions). **Hybrid conversation model
+  (`MUSEUMAGENT_*` set):** every `/v1/guide/ask` reply is a FAST direct chat
+  completion via the `museum-agent.ts` client (an OpenAI-compatible model, MOCA
+  points it at Venice) over a context window assembled fresh per turn —
+  persona + the aggregated MOCA brief (`guide-intro.generated.ts`, built by
+  `npm run build:intro` from apps/docs) + authoritative exhibition facts + the
+  visitor's rolling **session memory** + an accumulated **insights bucket**
+  (`mode: 'fast'`). After replying, two things run ASYNCHRONOUSLY (fire-and-
+  forget, never blocking): the turn is summarized into the session memory
+  (compacted before limits), and Cortex mines the deeper knowledge the visitor
+  referred to — in DEEP mode (`use_graph: true`) now that the reply path is
+  fast — into the separate insights bucket, enriching the NEXT reply. Session
+  memory + insights are **ephemeral/in-memory**, keyed by a per-visitor
+  `session` id the in-world app sends (privacy posture of `/v1/presence`; nothing
+  persisted). **Legacy / degraded paths:** with `MUSEUMAGENT_*` unset the guide
+  uses the prior Cortex-primary lean chat path (`use_agentic: false`, `use_graph:
+  false`, `top_k: 4`, `mode: 'cortex'`); it retries one *fast* transient Cortex
+  5xx (`askCortexResilient`), and on any failure (5xx, timeout, or `CORTEX_*`
+  unset) degrades to an exhibition-context-only answer marked `fallback: true`
+  instead of erroring — so the in-world guide never goes dark. Fully additive:
+  deployments without the new env behave exactly as before.
   Failures are logged (`[moca-guide]` warnings: once at boot if `CORTEX_*` is
   missing, throttled on upstream errors), so a guide that only gives generic
   answers is diagnosable from the Directus logs. **Requires `CORTEX_API_URL` +
@@ -128,7 +140,10 @@ source of truth.
   exhibition context only, `fallback: true`, with a `[moca-guide]` boot
   warning), `VENICE_API_KEY` (+ optional `VENICE_API_URL`, `VENICE_TTS_MODEL`
   default `tts-qwen3-1-7b`, `VENICE_TTS_VOICE` default `Serena`) — the guide's
-  voice; unset → guide stays text-only, `SOULWEAVER_API_URL` +
+  voice; unset → guide stays text-only, `MUSEUMAGENT_BASEURL` +
+  `MUSEUMAGENT_API_KEY` + `MUSEUMAGENT_MODEL` (OpenAI-compatible chat completions
+  — the guide's fast hybrid reply brain; all three required to enable it, else
+  the guide stays Cortex-primary), `SOULWEAVER_API_URL` +
   `SOULWEAVER_API_HEADERS` (defaults to the public deployment at
   `https://soulweaver.museumofcryptoart.com`; override for self-hosted);
   reuses `PUBLIC_URL` for asset links and `CODEX_DIR` for codex documents.

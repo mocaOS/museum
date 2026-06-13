@@ -20,9 +20,18 @@ import type {
  * that predate baked slots fall back to GLB-node anchors with a metric base
  * size.
  *
+ * The room is SOLID: the blueprint renders the GLB with collision 'auto' (which
+ * only collides meshes the GLB tags `_collider` etc. — the museum room models
+ * carry no such tags, so the rendered model alone is walk-through). We load the
+ * same GLB a second time as an INVISIBLE trimesh collider (shared geometry, one
+ * fetch) so floors/walls/ceilings are walkable. Authored `Slot_NNN` placeholder
+ * quads become thin coplanar wall colliders — negligible; auto-slot un_MUSEUM
+ * rooms generate slots at runtime and carry no such quads.
+ *
  * Refinement happens at two levels, both inside the engine:
  * - Room level: `app.configure` fields in the native inspector (artwork
- *   scale, wall gap, placards, lighting, video volume, slot editing).
+ *   scale, wall gap, placards, lighting, video volume, slot editing); plus the
+ *   whole room is resized by grabbing it in build mode and Shift+scrolling.
  * - Slot level: the embedded IN-WORLD SLOT EDITOR. With "Slot editing" on,
  *   builders/admins hold E at a work, then nudge it with the arrow keys and
  *   resize with the scroll wheel — synced live to everyone, validated
@@ -44,6 +53,7 @@ export function generateRoomScript({
   slots = [],
   artSize = 2,
   rootScale = 1,
+  modelUrl = "",
 }: {
   /**
    * Curated works; imageUrl may already be a world `asset://` url (the
@@ -60,6 +70,11 @@ export function generateRoomScript({
    * units, so meter values are divided by rootScale before use.
    */
   rootScale?: number;
+  /**
+   * The uploaded room GLB url (`asset://…`). Loaded a second time as an
+   * invisible trimesh collider so the room is solid.
+   */
+  modelUrl?: string;
 }): string {
   const config = artworks.map(a => ({
     slotId: a.slotId,
@@ -92,6 +107,21 @@ app.configure([
   { key: 'videoVolume', type: 'range', label: 'Video volume', hint: 'Spatial volume of motion works', min: 0, max: 1, step: 0.05, initial: 0.5 },
   { key: 'editSlots', type: 'toggle', label: 'Slot editing', hint: 'Scene admins hold E at a work to move/resize it in place', trueLabel: 'On', falseLabel: 'Off', initial: true },
 ])
+
+// ---- room collider -----------------------------------------------------
+// The blueprint renders the room GLB with collision 'auto' (no colliders on
+// untagged meshes), so the room would be walk-through. Load the SAME GLB again
+// as an invisible trimesh collider — the engine shares the cached geometry, the
+// node sits at the app root overlapping the rendered model exactly, and it
+// scales with the room entity. Grab the room and Shift+scroll to resize it all.
+const ROOM_MODEL = ${inline(modelUrl)}
+if (ROOM_MODEL) {
+  try {
+    app.add(app.create('model', { src: ROOM_MODEL, collision: 'trimesh', hidden: true }))
+  } catch (e) {
+    console.error('[moca] room collider failed', e && e.message)
+  }
+}
 
 // Baked slot anchors (GLB-local) + the curated works that hang on them.
 const SLOTS = ${inline(slotMap)}

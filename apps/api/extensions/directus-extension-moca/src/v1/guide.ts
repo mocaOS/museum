@@ -5,15 +5,30 @@
  * spawner registers the exhibition here (rooms + curated works, by id). This
  * module enriches that skeleton from the museum's own data — room architect /
  * description / series from `rooms`, artwork artist / description from `nfts`
- * — into a compact CONTEXT DOCUMENT the guide reasons over, then answers
- * visitor questions by combining that context with the Library (Cortex RAG)
- * and an optional Art DeCC0 persona (`moltbot` SOUL from the Codex).
+ * — into a compact CONTEXT DOCUMENT the guide reasons over.
+ *
+ * HYBRID conversation model (when MUSEUMAGENT_* is configured):
+ * - Every reply is a FAST, direct chat completion (the `museumAgent` client →
+ *   an OpenAI-compatible model, e.g. Venice) over a context window assembled
+ *   fresh per turn: persona + the aggregated MOCA brief (guide-intro) +
+ *   authoritative exhibition facts + the rolling SESSION MEMORY + an accumulated
+ *   INSIGHTS bucket. This keeps the in-world conversation reactive.
+ * - After replying, two things happen ASYNCHRONOUSLY (fire-and-forget, never
+ *   blocking the reply): the conversation is summarized into the session memory
+ *   (compacted before limits), and Cortex mines the deeper knowledge the visitor
+ *   is referring to into the separate insights bucket — which enriches the NEXT
+ *   reply. Session memory + insights are ephemeral/in-memory (privacy posture of
+ *   /v1/presence), keyed by a per-visitor `session` id.
+ * - When MUSEUMAGENT_* is unset the guide keeps its prior Cortex-primary path;
+ *   when Cortex is also unset it answers from exhibition context only. Fully
+ *   additive — existing deployments behave exactly as before.
  *
  * Routes (public, no API key — the visitor flow must be keyless, the same
  * privacy posture as /v1/presence; writes are rate-limited and size-clamped):
  * - POST /v1/guide/exhibitions                  register/refresh a context
  * - GET  /v1/guide/exhibitions/:id              the enriched context document
  * - GET  /v1/guide/exhibitions/:id/suggestions  visitor question starters
+ * - GET  /v1/guide/exhibitions/:id/locate       which room is at a world point
  * - POST /v1/guide/ask                          answer a visitor question
  *
  * Contexts persist in the `guide_exhibitions` collection (ships as
@@ -23,6 +38,8 @@
  */
 
 import type { CortexAskBody } from "./cortex";
+import { MOCA_GUIDE_INTRO } from "./guide-intro.generated";
+import type { ChatMessage, MuseumAgentClient } from "./museum-agent";
 
 const CONTEXT_CACHE_TTL_MS = 60_000;
 const PERSONA_TTL_MS = 60 * 60_000;
@@ -37,6 +54,20 @@ const SUGGESTION_COUNT = 3;
 const REGISTER_PER_MIN = 6;
 const ASK_PER_MIN = 20;
 
+// ---- hybrid conversation tuning -------------------------------------------
+// Context windows are large; we budget generously and compact before limits.
+const SESSION_TTL_MS = 30 * 60_000;
+const MAX_SESSIONS = 2000;
+const MAX_VERBATIM_TURNS = 8; // recent turns kept verbatim; older fold into the summary
+const SESSION_SUMMARY_MAX = 1800; // chars of rolling session memory
+const INTRO_BUDGET = 12_000; // chars of the aggregated MOCA brief included in context
+const MAX_CONTEXT_CHARS = 48_000; // overall system-context ceiling (~12k tokens)
+const MAX_INSIGHTS = 12;
+const INSIGHTS_BUDGET = 6_000; // chars of mined insights included in context
+const INSIGHT_TEXT_MAX = 1200; // clamp a single Cortex-mined insight
+const FAST_REPLY_TIMEOUT_MS = 22_000;
+const SUMMARIZE_TIMEOUT_MS = 15_000;
+
 // ---------------------------------------------------------------- types ----
 
 interface RegisterArtwork {
@@ -49,6 +80,9 @@ interface RegisterArtwork {
 interface RegisterPlacement {
   uid?: string;
   room?: { id?: number; title?: string };
+  /** Room's world placement (meters): floor-plane center + footprint radius —
+   * lets the guide resolve which room a visitor is standing in. */
+  location?: { x?: number; z?: number; r?: number };
   artworks?: RegisterArtwork[];
 }
 
@@ -67,6 +101,10 @@ export interface GuideContextRoom {
   architect: string | null;
   description: string | null;
   series: string | null;
+  /** World placement (meters): floor-plane center + footprint radius. Lets the
+   * guide know which room a visitor stands in (spatial awareness). Null on old
+   * registrations that predate location reporting. */
+  location: { x: number; z: number; r: number } | null;
   artworks: GuideContextArtwork[];
 }
 
@@ -82,6 +120,31 @@ export interface GuideContext {
   /** Cortex-suggested visitor questions (filled in asynchronously after
    * registration; template suggestions cover the gap until then). */
   starters?: string[];
+}
+
+/** One Cortex-mined nugget about something the visitor referred to. */
+interface GuideInsight {
+  at: number;
+  topic: string;
+  text: string;
+  sources: string[];
+}
+
+/**
+ * Per-visitor conversation state for the hybrid path — ephemeral, in-memory,
+ * TTL'd (nothing persisted; same privacy posture as /v1/presence). The two
+ * memory buckets the user reasons over: `turns`+`summary` (the conversation
+ * itself, compacted) and `insights` (Cortex-mined deeper knowledge).
+ */
+interface GuideSession {
+  key: string;
+  at: number;
+  turns: { role: "user" | "assistant"; content: string }[];
+  summary: string;
+  insights: GuideInsight[];
+  insightTopics: string[];
+  pendingInsight: boolean;
+  summarizing: boolean;
 }
 
 // ------------------------------------------------------------- helpers ----
@@ -228,6 +291,51 @@ function latestVersion(map: Record<string, unknown>): string | null {
   )[keys.length - 1];
 }
 
+// ------------------------------------------------------- spatial ----
+
+/**
+ * Which registered room is the visitor standing in? Returns the room whose
+ * footprint contains the world point (x,z) — nearest center wins when rooms
+ * overlap. Null when the point is inside no room (or no rooms carry location),
+ * so we never guess a location we don't have.
+ */
+function locateRoom(ctx: GuideContext, x: number, z: number): GuideContextRoom | null {
+  let inside: GuideContextRoom | null = null;
+  let bestD = Infinity;
+  for (const r of ctx.rooms) {
+    if (!r.location) continue;
+    const dx = r.location.x - x;
+    const dz = r.location.z - z;
+    const d = Math.sqrt(dx * dx + dz * dz);
+    if (d <= r.location.r && d < bestD) {
+      bestD = d;
+      inside = r;
+    }
+  }
+  return inside;
+}
+
+/** A high-priority context line telling the guide where the visitor is now. */
+function locationLine(room: GuideContextRoom | null): string | null {
+  if (!room) return null;
+  const head = [
+    `The visitor is standing with you in the room “${room.title ?? "Untitled"}”`,
+    room.architect ? `designed by ${room.architect}` : null,
+    room.series ? `(series: ${room.series})` : null,
+  ]
+    .filter(Boolean)
+    .join(" — ");
+  const works = room.artworks
+    .map((a) => (a.title ? `“${a.title}”${a.artist ? ` by ${a.artist}` : ""}` : null))
+    .filter(Boolean)
+    .slice(0, 8);
+  return (
+    `[WHERE YOU ARE RIGHT NOW] ${head}. ` +
+    (works.length ? `On these walls: ${works.join(", ")}. ` : "") +
+    "Ground your answer in THIS room and what's around you unless the visitor asks about elsewhere."
+  );
+}
+
 // ------------------------------------------------------------ module ----
 
 export function registerGuideRoutes(
@@ -238,11 +346,12 @@ export function registerGuideRoutes(
     decc0s: ReturnType<typeof import("./decc0s").createDecc0sClient>;
     souls: ReturnType<typeof import("./souls").createSoulsClient>;
     venice?: ReturnType<typeof import("./venice").createVeniceClient>;
+    museumAgent?: MuseumAgentClient;
     publicUrl?: string;
     errorJson: (res: any, status: number, message: string, code: string) => any;
   }
 ) {
-  const { itemsService, cortex, decc0s, souls, venice, publicUrl, errorJson } = deps;
+  const { itemsService, cortex, decc0s, souls, venice, museumAgent, publicUrl, errorJson } = deps;
 
   // Make the most common deployment mistake loud: without CORTEX_API_URL /
   // CORTEX_API_KEY on THIS (Directus) service the guide still answers, but
@@ -257,6 +366,18 @@ export function registerGuideRoutes(
         "apps/api/.env.example) and restart to hook the knowledge graph in.",
     );
   }
+  // The hybrid fast path is opt-in via MUSEUMAGENT_*. Announce which mode the
+  // guide runs in at boot so an operator knows whether replies are fast
+  // (direct LLM) or Cortex-primary.
+  if (museumAgent?.configured) {
+    console.log(
+      `[moca-guide] hybrid mode ON — fast replies via MUSEUMAGENT (${museumAgent.model})` +
+        (cortex.configured
+          ? "; Cortex mines deeper insights asynchronously."
+          : "; CORTEX_* unset, so no async insight mining (fast replies only)."),
+    );
+  }
+
   // One warn per upstream failure burst, so a flaky/misconfigured Cortex is
   // visible without flooding the logs on every visitor question.
   let lastUpstreamWarn = 0;
@@ -383,6 +504,57 @@ export function registerGuideRoutes(
     return ttsInflight.get(id)!;
   }
 
+  // ---- per-visitor conversation store (ephemeral, in-memory, TTL) ----------
+  // The hybrid path's two memory buckets live here, keyed by
+  // `${exhibitionId}:${session}`. Nothing is persisted — restart clears it (the
+  // in-world app re-seeds from the `history` it ships). Same posture as the TTS
+  // cache / presence.
+  const guideSessions = new Map<string, GuideSession>();
+
+  function pruneSessions(): void {
+    const now = Date.now();
+    for (const [k, v] of guideSessions) if (now - v.at > SESSION_TTL_MS) guideSessions.delete(k);
+    while (guideSessions.size > MAX_SESSIONS) {
+      const oldest = guideSessions.keys().next().value;
+      if (oldest === undefined) break;
+      guideSessions.delete(oldest);
+    }
+  }
+
+  /** Validate the visitor-supplied session id (opaque, in-world generated). */
+  const sanitizeSession = (raw: unknown): string | null => {
+    const s = String(raw ?? "").trim();
+    return s && /^[\w-]{1,64}$/.test(s) ? s : null;
+  };
+
+  /**
+   * Get or create a conversation session. When created and the caller shipped a
+   * recent `history` (the in-world app always does), seed the turns from it so a
+   * post-restart / first-call conversation still has its recent context.
+   */
+  function getSession(
+    exhibitionId: string,
+    sessionId: string,
+    seedHistory?: { role: string; content: string }[],
+  ): GuideSession {
+    const key = `${exhibitionId}:${sessionId}`;
+    let s = guideSessions.get(key);
+    if (!s) {
+      pruneSessions();
+      const turns = Array.isArray(seedHistory)
+        ? seedHistory
+            .filter((m) => m && (m.role === "user" || m.role === "assistant") && typeof m.content === "string")
+            .slice(-MAX_VERBATIM_TURNS)
+            .map((m) => ({ role: m.role as "user" | "assistant", content: m.content.slice(0, 2000) }))
+        : [];
+      s = { key, at: Date.now(), turns, summary: "", insights: [], insightTopics: [], pendingInsight: false, summarizing: false };
+      guideSessions.set(key, s);
+    } else {
+      s.at = Date.now();
+    }
+    return s;
+  }
+
   // ---- context store: guide_exhibitions collection + in-memory fallback ----
   const memory = new Map<string, GuideContext>();
   const readCache = new Map<string, { at: number; ctx: GuideContext }>();
@@ -498,6 +670,11 @@ export function registerGuideRoutes(
           };
         })
         .filter((a) => a.title || a.artist);
+      const loc = p.location;
+      const location
+        = loc && typeof loc.x === "number" && loc.x === loc.x && typeof loc.z === "number" && loc.z === loc.z
+          ? { x: loc.x, z: loc.z, r: typeof loc.r === "number" && loc.r > 0 ? loc.r : 8 }
+          : null;
       return {
         uid: clampText(p.uid, 40) ?? `p${i}`,
         id: dbRoom ? Number(dbRoom.id) : Number(p.room?.id) || null,
@@ -505,6 +682,7 @@ export function registerGuideRoutes(
         architect: clampText(dbRoom?.architect, 120),
         description: clampText(dbRoom?.description, ROOM_DESC_MAX),
         series: clampText(dbRoom?.series, 80),
+        location,
         artworks,
       };
     });
@@ -681,6 +859,167 @@ export function registerGuideRoutes(
     return lines.join("\n");
   }
 
+  // ---- hybrid fast path: dynamic context + async memory/insight mining -----
+
+  /**
+   * Assemble the system context the fast model reasons over, FRESH per reply:
+   * persona + exhibition facts (via contextBlock) + the aggregated MOCA brief +
+   * the session's accumulated Cortex insights + the rolling session memory.
+   * Built newest-relevant-first and clamped so we compact before the model's
+   * limit (insights trimmed first, then the brief).
+   */
+  function buildSystemContext(
+    ctx: GuideContext,
+    persona: Persona,
+    session: GuideSession,
+    here: GuideContextRoom | null,
+  ): string {
+    const blocks: string[] = [contextBlock(ctx, persona)];
+    let budget = MAX_CONTEXT_CHARS - blocks[0]!.length;
+
+    // Spatial awareness leads — it's the most situationally important signal.
+    const loc = locationLine(here);
+    if (loc) {
+      blocks.push(`\n\n${loc}`);
+      budget -= loc.length + 4;
+    }
+
+    if (MOCA_GUIDE_INTRO && budget > 2000) {
+      const intro = MOCA_GUIDE_INTRO.slice(0, Math.min(INTRO_BUDGET, budget - 200));
+      blocks.push(`\n\n[HOW MOCA & ITS EXHIBITIONS WORK — background, the exhibition facts above win on conflict]\n${intro}`);
+      budget -= intro.length + 120;
+    }
+
+    if (session.insights.length && budget > 500) {
+      const lines: string[] = [];
+      let used = 0;
+      // Newest insight first — the freshest thing the visitor asked about.
+      for (const ins of [...session.insights].reverse()) {
+        const line = `• ${ins.topic}: ${ins.text}${ins.sources.length ? ` [sources: ${ins.sources.join("; ")}]` : ""}`;
+        if (used + line.length > Math.min(INSIGHTS_BUDGET, budget)) break;
+        lines.push(line);
+        used += line.length + 1;
+      }
+      if (lines.length) {
+        blocks.push(
+          `\n\n[DEEPER KNOWLEDGE gathered from the museum Library this session — weave it in naturally when relevant]\n${lines.join("\n")}`,
+        );
+        budget -= used;
+      }
+    }
+
+    if (session.summary && budget > 200) {
+      blocks.push(`\n\n[SESSION MEMORY — what this visitor has been exploring with you so far]\n${session.summary.slice(0, budget - 60)}`);
+    }
+
+    return blocks.join("");
+  }
+
+  /** Recent verbatim turns as chat messages (older turns live in the summary). */
+  function turnMessages(session: GuideSession): ChatMessage[] {
+    return session.turns.slice(-MAX_VERBATIM_TURNS).map((t) => ({ role: t.role, content: t.content }));
+  }
+
+  /**
+   * Fold the latest exchange into the rolling session memory with the fast model
+   * — cheap, async, never blocks the reply. Keeps a good grasp of the whole
+   * session while staying compact (compaction before limits).
+   */
+  async function summarizeSession(session: GuideSession, question: string, answer: string): Promise<void> {
+    if (!museumAgent?.configured || session.summarizing) return;
+    session.summarizing = true;
+    try {
+      const { status, text } = await museumAgent.chat({
+        timeoutMs: SUMMARIZE_TIMEOUT_MS,
+        temperature: 0.2,
+        maxTokens: 400,
+        messages: [
+          {
+            role: "system",
+            content:
+              "You maintain a compact running memory of a museum guide's conversation with one visitor. " +
+              `Always answer with the updated memory only — prose, no preamble, under ${SESSION_SUMMARY_MAX} characters.`,
+          },
+          {
+            role: "user",
+            content:
+              `Current memory:\n${session.summary || "(none yet)"}\n\n` +
+              `New exchange:\nVisitor: ${question}\nGuide: ${answer}\n\n` +
+              "Return the updated memory: the visitor's interests and intent, the key facts you've shared, " +
+              "named works/artists/rooms they care about, and any open threads to follow up on.",
+          },
+        ],
+      });
+      if (status === 200 && text) session.summary = text.slice(0, SESSION_SUMMARY_MAX);
+    } catch {
+      /* memory update is best-effort */
+    } finally {
+      session.summarizing = false;
+    }
+  }
+
+  /**
+   * Asynchronously mine the deeper knowledge the visitor is referring to via
+   * Cortex (DEEP mode — we can afford graph traversal now the reply path is
+   * fast) and append it to the session's separate insights bucket, enriching
+   * the NEXT reply. One in-flight query per session; skips topics already mined.
+   */
+  async function mineInsight(
+    ctx: GuideContext,
+    session: GuideSession,
+    persona: Persona,
+    question: string,
+    here: GuideContextRoom | null,
+  ): Promise<void> {
+    if (!cortex.configured || session.pendingInsight) return;
+    const topic = question.replace(/\s+/g, " ").trim().slice(0, 120);
+    if (!topic) return;
+    const norm = topic.toLowerCase();
+    if (session.insightTopics.includes(norm)) return; // already mined this turn's topic
+    session.pendingInsight = true;
+    try {
+      const loc = locationLine(here);
+      const { status, body } = await askCortexResilient({
+        question,
+        top_k: 8,
+        use_graph: true,
+        use_agentic: false,
+        conversation_history: [
+          { role: "user", content: contextBlock(ctx, persona) },
+          { role: "assistant", content: `Understood — I am ${persona.name}, guiding visitors through “${ctx.name}”.` },
+          // Narrow retrieval to where the visitor actually is (spatial awareness).
+          ...(loc ? [{ role: "user", content: loc }] : []),
+          ...(session.summary ? [{ role: "user", content: `Conversation so far: ${session.summary}` }] : []),
+        ],
+      });
+      if (status !== 200 || typeof body?.answer !== "string" || !body.answer.trim()) return;
+      const text = String(body.answer).replace(/\s*\[src_[^\]]*\]/g, "").replace(/\s+/g, " ").trim().slice(0, INSIGHT_TEXT_MAX);
+      if (!text) return;
+      const sources: string[] = [];
+      if (Array.isArray(body.sources)) {
+        for (const s of body.sources as any[]) {
+          const t = s?.metadata?.document_title || s?.document_title;
+          if (typeof t === "string" && t && !sources.includes(t)) sources.push(t);
+          if (sources.length >= 3) break;
+        }
+      }
+      session.insights.push({ at: Date.now(), topic, text, sources });
+      session.insightTopics.push(norm);
+      if (session.insightTopics.length > MAX_INSIGHTS * 2) session.insightTopics.splice(0, session.insightTopics.length - MAX_INSIGHTS * 2);
+      // Cap the bucket: evict oldest, then trim to the char budget newest-first.
+      while (session.insights.length > MAX_INSIGHTS) session.insights.shift();
+      let total = session.insights.reduce((n, i) => n + i.text.length, 0);
+      while (session.insights.length > 1 && total > INSIGHTS_BUDGET) {
+        const dropped = session.insights.shift()!;
+        total -= dropped.text.length;
+      }
+    } catch {
+      /* insight mining is best-effort */
+    } finally {
+      session.pendingInsight = false;
+    }
+  }
+
   /** Offline answer straight from the context — keeps the guide alive without Cortex. */
   function fallbackAnswer(ctx: GuideContext, question: string): string {
     const q = question.toLowerCase();
@@ -821,6 +1160,35 @@ export function registerGuideRoutes(
     });
   });
 
+  // Spatial awareness: which room is at a given world point? Public, keyless.
+  // Returns the room the point is inside (if any) plus every room's registered
+  // world location — so room apps / clients can reason about the layout too.
+  router.get("/guide/exhibitions/:id/locate", async (req: any, res: any) => {
+    const id = sanitizeId(req.params.id);
+    if (!id) return errorJson(res, 400, "Invalid exhibition id", "BAD_REQUEST");
+    const ctx = await loadContext(id);
+    if (!ctx) {
+      return errorJson(res, 404, "Exhibition not registered — spawn it with a guide first.", "NOT_FOUND");
+    }
+    const x = Number(req.query.x);
+    const z = Number(req.query.z);
+    if (!Number.isFinite(x) || !Number.isFinite(z)) {
+      return errorJson(res, 400, "Provide numeric 'x' and 'z' world coordinates", "BAD_REQUEST");
+    }
+    const room = locateRoom(ctx, x, z);
+    res.json({
+      data: {
+        exhibition: ctx.id,
+        here: room
+          ? { uid: room.uid, id: room.id, title: room.title, architect: room.architect, series: room.series }
+          : null,
+        rooms: ctx.rooms
+          .filter((r) => r.location)
+          .map((r) => ({ uid: r.uid, id: r.id, title: r.title, location: r.location })),
+      },
+    });
+  });
+
   router.post("/guide/ask", async (req: any, res: any) => {
     if (!allowAsk(req)) {
       res.set("Retry-After", "60");
@@ -841,6 +1209,87 @@ export function registerGuideRoutes(
       const persona = await resolvePersona(body);
       const seed = hash32(`${id}:${question}`);
       const suggestions = buildSuggestions(ctx, seed);
+      const speak = body.speak !== false;
+      const voice = clampText(body.voice, 40) || venice?.defaultVoice || "";
+
+      // Spatial awareness: resolve the room the visitor is standing in from the
+      // world position the in-world guide reports, so answers (and retrieval) are
+      // grounded in the here-and-now.
+      const vp = body.visitorPos;
+      const here =
+        vp && typeof vp.x === "number" && vp.x === vp.x && typeof vp.z === "number" && vp.z === vp.z
+          ? locateRoom(ctx, vp.x, vp.z)
+          : null;
+
+      const history = Array.isArray(body.history)
+        ? body.history
+            .filter((m: any) => m && typeof m.content === "string" && typeof m.role === "string")
+            .slice(-MAX_HISTORY)
+        : [];
+
+      // ---- FAST PATH (hybrid) — a direct, non-Cortex reply for reactivity ----
+      // Cortex then mines deeper insights asynchronously for the next turn.
+      if (museumAgent?.configured) {
+        const sessionId = sanitizeSession(body.session);
+        const session = sessionId
+          ? getSession(id, sessionId, history)
+          : // No session id (e.g. a stateless/.hyp caller): still reply fast, just
+            // without server-side memory — seed turns from the shipped history.
+            ({
+              key: "",
+              at: 0,
+              turns: history.map((m: any) => ({
+                role: m.role === "assistant" ? "assistant" : "user",
+                content: String(m.content).slice(0, 2000),
+              })),
+              summary: "",
+              insights: [],
+              insightTopics: [],
+              pendingInsight: false,
+              summarizing: false,
+            } as GuideSession);
+
+        const { status: fastStatus, text } = await museumAgent.chat({
+          timeoutMs: FAST_REPLY_TIMEOUT_MS,
+          maxTokens: 700,
+          messages: [
+            { role: "system", content: buildSystemContext(ctx, persona, session, here) },
+            ...turnMessages(session),
+            { role: "user", content: question },
+          ],
+        });
+        if (fastStatus === 200 && text) {
+          const answer = text.replace(/\s*\[src_[^\]]*\]/g, "").trim();
+          const audioUrl = speak ? prepareVoice(answer, voice) : null;
+          res.json({
+            data: {
+              answer,
+              persona: persona.name,
+              suggestions,
+              mode: "fast",
+              ...(audioUrl ? { audioUrl } : {}),
+            },
+          });
+          // Async, after the reply is sent (fire-and-forget, like enrichStarters):
+          // fold the turn into session memory and mine deeper insights via Cortex
+          // for the NEXT reply. Only when we have a real (stored) session.
+          if (sessionId) {
+            session.turns.push({ role: "user", content: question.slice(0, 2000) });
+            session.turns.push({ role: "assistant", content: answer.slice(0, 2000) });
+            if (session.turns.length > MAX_VERBATIM_TURNS * 2) {
+              session.turns.splice(0, session.turns.length - MAX_VERBATIM_TURNS * 2);
+            }
+            void summarizeSession(session, question, answer);
+            void mineInsight(ctx, session, persona, question, here);
+          }
+          return;
+        }
+        warnUpstream(
+          `MUSEUMAGENT fast reply failed (status ${fastStatus || "threw"}) — ` +
+            `falling back to ${cortex.configured ? "Cortex" : "exhibition context"}.`,
+        );
+        // fall through to the Cortex-primary / context-only paths below
+      }
 
       if (!cortex.configured) {
         return res.json({
@@ -852,12 +1301,6 @@ export function registerGuideRoutes(
           },
         });
       }
-
-      const history = Array.isArray(body.history)
-        ? body.history
-            .filter((m: any) => m && typeof m.content === "string" && typeof m.role === "string")
-            .slice(-MAX_HISTORY)
-        : [];
 
       const ask: CortexAskBody = {
         question,
@@ -871,6 +1314,7 @@ export function registerGuideRoutes(
         conversation_history: [
           { role: "user", content: contextBlock(ctx, persona) },
           { role: "assistant", content: `Understood — I am ${persona.name}, guiding visitors through “${ctx.name}”.` },
+          ...(locationLine(here) ? [{ role: "user", content: locationLine(here) as string }] : []),
           ...history,
         ],
       };
@@ -908,9 +1352,7 @@ export function registerGuideRoutes(
 
       // Speak it (unless the caller opted out) — hand back a URL the in-world
       // audio node plays; synthesis is lazy (on first GET) so the text reply is
-      // never blocked on Venice.
-      const speak = body.speak !== false;
-      const voice = clampText(body.voice, 40) || venice?.defaultVoice || "";
+      // never blocked on Venice. (speak/voice resolved above.)
       const audioUrl = speak ? prepareVoice(answer, voice) : null;
 
       res.json({
@@ -919,6 +1361,7 @@ export function registerGuideRoutes(
           persona: persona.name,
           suggestions,
           sources,
+          mode: "cortex",
           ...(audioUrl ? { audioUrl } : {}),
         },
       });

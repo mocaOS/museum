@@ -60,6 +60,7 @@ curl -X POST "https://api.moca.qwellco.de/v1/guide/ask" \
   -H "Content-Type: application/json" \
   -d '{
     "exhibition": "echoes-of-the-mind",
+    "session": "visitor-42",
     "question": "Who designed this room, and what should I look at first?",
     "history": [{"role":"user","content":"…"},{"role":"assistant","content":"…"}],
     "decc0": 1,
@@ -67,11 +68,18 @@ curl -X POST "https://api.moca.qwellco.de/v1/guide/ask" \
   }'
 ```
 
-→ `{ "data": { answer, persona, suggestions, sources, audioUrl?, fallback? } }`
+→ `{ "data": { answer, persona, suggestions, mode, sources?, audioUrl?, fallback? } }`
 
-The answer combines the exhibition context with the museum's Cortex Library
-(RAG over MOCA's writings, lore, and artist interviews) and stays in persona.
-Optional fields: `history` (the running conversation, last ~8 turns) and
+The guide runs a **hybrid** conversation model. When the deployment has a fast
+agent configured, each reply is a direct, reactive LLM answer (`mode: "fast"`)
+grounded in the exhibition context + an aggregated "how MOCA exhibitions work"
+brief + your **session memory**; the Cortex Library (RAG over MOCA's writings,
+lore, and artist interviews) then mines deeper insights **asynchronously** into a
+separate bucket that enriches your *next* reply — so the conversation gets more
+specific as it goes. Pass a stable **`session`** id (per visitor) to get that
+memory; without it you still get a fast stateless reply. Otherwise the guide
+answers Cortex-first (`mode: "cortex"`). Optional fields: `history` (the running
+conversation, last ~8 turns, a fallback when no `session` memory exists) and
 `visitor` (display name); `speak` (default true) + `voice` (a Venice voice id,
 e.g. `Serena`) request spoken audio — when the deployment has TTS configured the
 response carries an **`audioUrl`** (an mp3 served from `GET /v1/guide/tts/:id.mp3`)

@@ -83,7 +83,13 @@ export interface HyperfyPlacement {
   };
   position: [number, number, number];
   rotationY: number;
-  /** Curator size multiplier on the tile-normalized room (default 1). */
+  /**
+   * The room's native scaling factor — the base size it spawns at in Hyperfy
+   * (entity scale = tile-fit × this), pre-configured per room in the builder.
+   * New rooms default to 2; admins can still resize each room in-world (grab +
+   * Shift+scroll), which the idempotent re-spawn preserves. Absent in old
+   * exports → treated as 1.
+   */
   scale?: number;
   /** Baked slot transforms (GLB-local) — the anchors artworks hang on. */
   slots?: HyperfySlot[];

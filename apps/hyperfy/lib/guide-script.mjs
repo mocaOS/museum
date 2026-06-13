@@ -209,11 +209,14 @@ if (world.isServer) {
     try { app.state.follow = null } catch (e) {}
     app.send('moca:guide:follow', { id: null })
   }
-  // playerId -> { open, history: [{role,content}], suggestions, busy, lastAsk }
+  // playerId -> { open, history, suggestions, busy, lastAsk, sid }
+  // sid is a stable per-visitor id sent to the guide API so it can hold this
+  // visitor's session memory + Cortex-mined insights server-side (hybrid path).
   const sessions = {}
   const session = (playerId) => {
     if (!sessions[playerId]) {
-      sessions[playerId] = { open: false, history: [], suggestions: BAKED_SUGGESTIONS, busy: false, lastAsk: 0 }
+      const sid = ('p' + String(playerId)).replace(/[^\\w-]/g, '').slice(0, 48) || ('p' + Date.now())
+      sessions[playerId] = { open: false, history: [], suggestions: BAKED_SUGGESTIONS, busy: false, lastAsk: 0, sid }
     }
     return sessions[playerId]
   }
@@ -254,6 +257,7 @@ if (world.isServer) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           exhibition: EXHIBITION.id,
+          session: s.sid,
           question: question.slice(0, 2000),
           history: s.history.slice(-8),
           decc0: DECC0 || undefined,
@@ -263,6 +267,11 @@ if (world.isServer) {
           speak: SPEAK,
           voice: VOICE || undefined,
           visitor: player && player.name ? String(player.name).slice(0, 48) : undefined,
+          // Spatial awareness: where the visitor (whom the guide follows) and the
+          // guide are standing, in world meters — the API maps these to the room
+          // they're in to situate (and narrow) the answer.
+          visitorPos: player && player.position ? { x: player.position.x, z: player.position.z } : undefined,
+          guidePos: { x: app.position.x, z: app.position.z },
         }),
       })
       if (res && res.ok) {
@@ -301,6 +310,10 @@ if (world.isServer) {
     app.sendTo(playerId, 'moca:guide:hello', { suggestions: s.suggestions })
   })
   app.on('moca:guide:close', (d, playerId) => {
+    session(playerId).open = false
+  })
+  app.on('moca:guide:unfollow', (d, playerId) => {
+    clearFollow(playerId)
     session(playerId).open = false
   })
   app.on('moca:guide:ask', (d, playerId) => {
@@ -353,7 +366,12 @@ if (world.isClient) {
   // The guide's resting post + who it's currently following (server tells us).
   const HOME = { x: app.position.x, y: app.position.y, z: app.position.z }
   let followId = (app.state && app.state.follow) || null
-  app.on('moca:guide:follow', (d) => { followId = d && d.id != null ? d.id : null })
+  let myId = null
+  let actionNode = null
+  function followingMe() { return followId != null && myId != null && followId === myId }
+  function actionLabel() { return followingMe() ? 'Tell the Curator to stop following' : 'Make the Curator follow you' }
+  function refreshActionLabel() { if (actionNode) { try { actionNode.label = actionLabel() } catch (e) {} } }
+  app.on('moca:guide:follow', (d) => { followId = d && d.id != null ? d.id : null; refreshActionLabel() })
 
   // ---- the body: the blueprint .vrm renders as an 'avatar' node ------------
   // Hyperfy loads a .vrm model as a group whose child is an avatar node with
@@ -413,7 +431,7 @@ if (world.isClient) {
 
   function thinkingLine() {
     const dots = '.'.repeat(1 + (Math.floor(thinkT * 2) % 3))
-    return NAME + ' is consulting the library' + dots
+    return NAME + ' is thinking' + dots
   }
   // All talk goes to THIS client's chat only (false = local), so each visitor's
   // conversation stays private — same per-player model as before.
@@ -476,11 +494,20 @@ if (world.isClient) {
   // ---- hold E to engage (nudges the server to start following) --------------
   try {
     const act = app.create('action')
-    act.label = 'Talk to ' + NAME
+    actionNode = act
+    act.label = actionLabel()
     act.distance = TALK_DIST
     act.duration = 0.3
-    act.onTrigger = () => { welcome(); app.send('moca:guide:open', {}) }
-    act.position.set(0, 1.2, 0)
+    act.onTrigger = () => {
+      if (followingMe()) {
+        app.send('moca:guide:unfollow', {})
+      } else {
+        welcome(); app.send('moca:guide:open', {})
+      }
+    }
+    // At the curator's feet (not eye level) so the prompt never blocks his face
+    // — or avatars standing behind the player.
+    act.position.set(0, 0.1, 0)
     app.add(act)
   } catch (e) {
     /* action nodes unavailable — chat still works */
@@ -552,6 +579,7 @@ if (world.isClient) {
     sinceCheck = 0
     let me = null
     try { me = world.getPlayer() } catch (e) {}
+    if (me && myId == null && me.id != null) { myId = me.id; refreshActionLabel() }
     if (!me || !me.position) return
     const dx = me.position.x - app.position.x
     const dz = me.position.z - app.position.z

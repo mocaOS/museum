@@ -45,8 +45,13 @@ export function guideExhibitionId(exhibition: HyperfyExhibition): string {
 export async function registerGuideExhibition(
   exhibition: HyperfyExhibition,
   apiUrl: string = DEFAULT_GUIDE_API,
+  /** Meters one builder tile maps to in-world — same value the spawn used; lets
+   * the guide resolve which room a visitor stands in (spatial awareness). */
+  tileMeters = 16,
 ): Promise<GuideRegistration> {
   const id = guideExhibitionId(exhibition);
+  // Builder tile = 8 units; k converts tile-space positions to world meters.
+  const k = tileMeters / 8;
   const fallback: GuideRegistration = {
     id,
     registered: false,
@@ -65,6 +70,13 @@ export async function registerGuideExhibition(
         placements: exhibition.placements.map(p => ({
           uid: p.uid,
           room: { id: p.room.id, title: p.room.title },
+          // World floor-plane center + footprint radius (meters): rooms sit on
+          // tiles, scaled so one tile spans tileMeters × the room's scale.
+          location: {
+            x: k * p.position[0],
+            z: k * p.position[2],
+            r: (tileMeters * (p.scale || 1)) / 2,
+          },
           artworks: p.artworks.map(a => ({ id: a.id, name: a.name, artist: a.artist })),
         })),
       }),

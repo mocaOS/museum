@@ -40,6 +40,20 @@ measurements existed spawn at native scale with a warning; rooms spawned by
 older spawner versions are healed to the normalized layout on the next
 spawn.
 
+**Native room scale (default 2×).** On top of the tile fit each room carries a
+**native scaling factor** — its base size in-world, `entity scale = tile-fit ×
+nativeScale` — pre-configured per room in the builder (new rooms default to
+**2×**, so they're roomy to walk). It's the *base*: admins resize any room
+further in-world by grabbing it in build mode and **Shift+scrolling**, and the
+idempotent re-spawn **preserves that resize** (only `--relayout` pushes the
+museum layout + native scale back onto already-placed rooms).
+
+**Solid rooms (colliders).** The room GLBs ship no `_collider`-tagged meshes, so
+Hyperfy's default `collision: 'auto'` would leave them walk-through. Each room
+app therefore loads its GLB a second time as an **invisible `trimesh` collider**
+(shared cached geometry, one fetch) overlapping the rendered model — floors,
+walls and ceilings collide, and the collider scales with the room entity.
+
 **Modular.** Every placed room becomes its own Hyperfy app. Its generated
 script hangs the curated works on **baked slot anchors** — the export carries
 every slot's GLB-local transform + frame size as measured by the builder, so
@@ -60,9 +74,10 @@ huge and stream fine.)
 (`app.configure`): artwork scale, wall gap, placards on/off, art lighting,
 video volume, slot editing. Any admin (`/admin <code>` in the world chat)
 presses Tab, right-clicks a room, and tunes it — live, for everyone. Rooms
-arrive **unpinned**: grab one to move it, X deletes it, the curation travels
-with it (spawn with `--pinned` / "Lock layout" to protect the arrangement;
-P toggles a room's pin in-world).
+arrive **unpinned**: grab one to move it, **Shift+scroll to resize it** (on
+top of its native scale), X deletes it, the curation travels with it (spawn
+with `--pinned` / "Lock layout" to protect the arrangement; P toggles a room's
+pin in-world).
 
 **Per-slot refinement in-world.** Slot editing is **on by default**:
 builders/admins hold **E** at any hung work to edit it in place: arrow

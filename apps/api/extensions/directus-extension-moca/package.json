@@ -68,6 +68,7 @@
     "host": "^10.10.0"
   },
   "scripts": {
+    "build:intro": "node scripts/build-guide-intro.mjs",
     "build": "directus-extension build",
     "dev": "directus-extension build -w --no-minify",
     "link": "directus-extension link",

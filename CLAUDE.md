@@ -119,7 +119,15 @@ v0.16.0) consumes the exported `*.moca-exhibition.json`; the builder's
 sync). Each room = one Hyperfy app — artworks hang on baked slot anchors
 from the export (works for un_MUSEUM `Auto_NNN` slots that never exist as
 GLB nodes), curated images upload into the world as assets, `app.configure`
-exposes room-level refinement props, and an embedded in-world slot editor
+exposes room-level refinement props, and an embedded in-world slot editor.
+**Rooms are solid**: the room GLBs carry no collider-tagged meshes (Hyperfy's
+default `collision:'auto'` → walk-through), so each room script loads its GLB a
+second time as an invisible `trimesh` collider (shared geometry) overlapping the
+rendered model. **Native room scale**: each room carries a per-room scaling
+factor (the `scale` field in the export; the base entity scale = tile-fit ×
+this), pre-configured in the builder — new rooms default to **2×** — and
+resizable further in-world (grab + Shift+scroll), which idempotent re-spawns
+preserve (`--relayout` pushes the layout + native scale back). The slot editor
 (hold E at a work) lets **scene admins** fine-place pieces with admin-gated,
 world-storage-persisted adjustments. Spawns are idempotent (deterministic
 ids from the exhibition id → re-spawning updates rooms in place, preserving
@@ -128,8 +136,13 @@ guide** (`--guide` / the dialog's Museum guide toggle): an agentic VRM avatar
 (default `decc0.vrm` — Oblak, Art DeCC0 #2875; catalog at `apps/museum/public/avatars/`) that
 visitors hold E to talk to — per-player private Q&A about the exhibition,
 served by the MOCA API's public `/v1/guide/*` endpoints (context registered at
-spawn, enriched from Directus, answered via Cortex + optional Art DeCC0
-persona); script generator twins in `lib/guide-script.mjs` /
+spawn, enriched from Directus). Answers run a **hybrid** model: a fast direct
+LLM reply (`MUSEUMAGENT_*`, OpenAI-compatible — MOCA uses Venice) over exhibition
+metadata + an aggregated MOCA brief + per-visitor session memory, while Cortex
+mines deeper insights asynchronously into a separate bucket that enriches the
+next reply — reactive, and smarter each turn (Cortex-primary fallback +
+optional Art DeCC0 persona when `MUSEUMAGENT_*` is unset); script generator
+twins in `lib/guide-script.mjs` /
 `apps/museum/src/lib/museum/hyperfy/guide-script.ts`. The guide also ships
 as a drag-droppable `.hyp` app (`build-guide-app.mjs` CLI or the dialog's
 "Download guide app" button; `.hyp` builder twins `lib/hyp.mjs` /

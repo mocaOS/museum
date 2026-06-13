@@ -8,6 +8,7 @@ import { createCortexClient } from "./cortex";
 import { createDecc0sClient } from "./decc0s";
 import { registerGuideRoutes } from "./guide";
 import { normalizeArtwork, type NftRow } from "./media";
+import { createMuseumAgentClient } from "./museum-agent";
 import { registerPresenceRoutes } from "./presence";
 import { createSoulsClient } from "./souls";
 import { createVeniceClient } from "./venice";
@@ -49,6 +50,7 @@ export default defineEndpoint({
     const cortex = createCortexClient(env);
     const souls = createSoulsClient(env);
     const venice = createVeniceClient(env);
+    const museumAgent = createMuseumAgentClient(env);
     const requireKey = createKeyAuth({ services, getSchema, env });
 
     router.use(expressJson({ limit: "1mb" }));
@@ -93,6 +95,7 @@ export default defineEndpoint({
             "POST /v1/guide/exhibitions (public — register exhibition context for the in-world guide)",
             "GET /v1/guide/exhibitions/:id (public)",
             "GET /v1/guide/exhibitions/:id/suggestions (public)",
+            "GET /v1/guide/exhibitions/:id/locate?x&z (public — which room is at a world point)",
             "POST /v1/guide/ask (public — ask the museum guide a question)",
           ],
         },
@@ -104,7 +107,7 @@ export default defineEndpoint({
 
     // The museum guide (public — the in-world visitor flow must be keyless;
     // see guide.ts for the rate limits and the enrichment pipeline).
-    registerGuideRoutes(router, { itemsService, cortex, decc0s, souls, venice, publicUrl, errorJson });
+    registerGuideRoutes(router, { itemsService, cortex, decc0s, souls, venice, museumAgent, publicUrl, errorJson });
 
     // ---- Room slot data (public) -------------------------------------------
     // Baked slot anchors + resolved facing for a room's builder GLB

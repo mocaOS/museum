@@ -543,7 +543,7 @@ export default function BuilderSidebar({
               <span
                 className="text-[10px]"
                 style={{ color: "var(--fg3)", fontFamily: "var(--font-mono)" }}
-                title="Room size — carried into Hyperfy spawns"
+                title="Native room scale — the base size it spawns at in Hyperfy (resize further in-world: grab + Shift+scroll)"
               >
                 {Math.round((selected.scale || 1) * 100)}%
               </span>

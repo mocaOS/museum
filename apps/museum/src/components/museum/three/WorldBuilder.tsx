@@ -72,9 +72,15 @@ interface Placed {
   scale?: number;
 }
 
+// A room's native scaling factor: the base size it spawns at in Hyperfy
+// (entity scale = tile-fit × this). New rooms default to 2× so they're roomy to
+// walk; curators pre-configure it here and can still resize each room in-world
+// (grab + Shift+scroll). Range is wide enough to make big rooms without hitting
+// the ceiling at the default.
 const ROOM_SCALE_MIN = 0.4;
-const ROOM_SCALE_MAX = 2.5;
+const ROOM_SCALE_MAX = 6;
 const ROOM_SCALE_STEP = 0.1;
+const DEFAULT_ROOM_SCALE = 2;
 
 const TILE = 8;
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
@@ -894,18 +900,21 @@ function Ghost({
   initialPos: [number, number, number];
   initialRotY: number;
 }) {
+  // The marker previews the footprint a dropped room actually occupies, so it
+  // tracks the default native scale (rooms drop at DEFAULT_ROOM_SCALE tiles).
+  const fp = TILE * DEFAULT_ROOM_SCALE;
   return (
     <group ref={ref} position={initialPos} rotation={[ 0, initialRotY, 0 ]}>
       <mesh rotation={[ -Math.PI / 2, 0, 0 ]} position={[ 0, 0.03, 0 ]}>
-        <planeGeometry args={[ TILE, TILE ]} />
+        <planeGeometry args={[ fp, fp ]} />
         <meshBasicMaterial color="#e0b24d" transparent opacity={0.18} side={THREE.DoubleSide} />
       </mesh>
       <mesh rotation={[ -Math.PI / 2, 0, 0 ]} position={[ 0, 0.04, 0 ]}>
-        <ringGeometry args={[ TILE * 0.7, TILE * 0.72, 4 ]} />
+        <ringGeometry args={[ fp * 0.7, fp * 0.72, 4 ]} />
         <meshBasicMaterial color="#e0b24d" transparent opacity={0.9} side={THREE.DoubleSide} />
       </mesh>
       {/* facing arrow */}
-      <mesh position={[ 0, 0.05, -TILE * 0.4 ]} rotation={[ -Math.PI / 2, 0, 0 ]}>
+      <mesh position={[ 0, 0.05, -fp * 0.4 ]} rotation={[ -Math.PI / 2, 0, 0 ]}>
         <circleGeometry args={[ 0.5, 3 ]} />
         <meshBasicMaterial color="#e0b24d" />
       </mesh>
@@ -1489,7 +1498,7 @@ export default function WorldBuilder({ rooms }: { rooms: WorldRoom[] }) {
     const uid = `p${counter.current++}`;
     setPlaced(p => [
       ...p,
-      { uid, room: placing, position: [ snap(x), 0, snap(z) ], rotationY: ghostState.current.rotY },
+      { uid, room: placing, position: [ snap(x), 0, snap(z) ], rotationY: ghostState.current.rotY, scale: DEFAULT_ROOM_SCALE },
     ]);
     setSelected(uid);
     // stay in placement mode for rapid building (Esc / right-click to stop)

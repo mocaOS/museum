@@ -768,13 +768,14 @@ export default function SpawnHyperfyDialog({
                             — {result.artworks} artworks, verified in-world.
                           </span>
                           <span className="mt-2 block" style={{ color: "var(--fg3)" }}>
-                            Refine inside the world: Tab toggles build mode,
-                            right-click a room for its curation controls
-                            (artwork scale, placards, lighting), grab a room to
-                            rearrange it — the artworks move with it — and hold
-                            E at any work to nudge and resize it in place.
-                            Spawn again anytime to push curation updates — all
-                            in-world refinements are kept.
+                            Rooms are solid — walk right in. Refine inside the
+                            world: Tab toggles build mode, right-click a room for
+                            its curation controls (artwork scale, placards,
+                            lighting), grab a room to rearrange it — the artworks
+                            move with it — Shift+scroll a grabbed room to resize
+                            it, and hold E at any work to nudge and resize it in
+                            place. Spawn again anytime to push curation updates —
+                            all in-world refinements are kept.
                           </span>
                         </>
                       )

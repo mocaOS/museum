@@ -255,6 +255,7 @@ export async function spawnExhibition(
             slots: placement.slots || [],
             artSize,
             rootScale,
+            modelUrl,
           }),
         );
         const scriptUrl = await uploadAsset({
@@ -450,7 +451,7 @@ async function pushGuide(
   //    descriptions) happens server-side from the museum's own data.
   //    Failure is not fatal: the guide spawns on baked knowledge.
   onStatus?.("script");
-  const registration = await registerGuideExhibition(exhibition, apiUrl);
+  const registration = await registerGuideExhibition(exhibition, apiUrl, tileMeters);
   const { suggestions, counts } = registration;
 
   // 2. The guide's body — uploaded as a world asset; the script renders it as
