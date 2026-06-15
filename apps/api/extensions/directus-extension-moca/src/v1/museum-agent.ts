@@ -20,9 +20,9 @@
  */
 
 const DEFAULT_TIMEOUT_MS = 25_000;
-// Per-message hard cap — must stay ABOVE guide.ts MAX_CONTEXT_CHARS (48k) so a
+// Per-message hard cap — must stay ABOVE guide.ts MAX_CONTEXT_CHARS (256k) so a
 // within-budget system prompt is never silently truncated by the transport.
-const MSG_MAX_CHARS = 64_000;
+const MSG_MAX_CHARS = 300_000;
 
 export interface ChatMessage {
   role: "system" | "user" | "assistant";
@@ -42,6 +42,13 @@ export function createMuseumAgentClient(env: Record<string, any>) {
   const model = String(env.MUSEUMAGENT_MODEL || "");
 
   const configured = !!(base && key && model);
+  // Venice reasoning models (e.g. the gemma "*-it" variants) spend the token
+  // budget on hidden chain-of-thought BEFORE any content — which the guide never
+  // uses (we only read message.content) and which can consume the entire
+  // max_tokens, returning empty content and silently dropping us to the fallback
+  // path. On Venice we strip thinking: snappy, non-empty replies at a small token
+  // budget, no matter the model. Ignored by non-Venice OpenAI-compatible bases.
+  const isVenice = /venice\.ai/i.test(base);
 
   return {
     configured,
@@ -76,6 +83,7 @@ export function createMuseumAgentClient(env: Record<string, any>) {
             temperature,
             max_tokens: maxTokens,
             stream: false,
+            ...(isVenice ? { venice_parameters: { disable_thinking: true, strip_thinking_response: true } } : {}),
           }),
           signal: AbortSignal.timeout(timeoutMs),
         });

@@ -108,9 +108,31 @@ source of truth.
   (compacted before limits), and Cortex mines the deeper knowledge the visitor
   referred to — in DEEP mode (`use_graph: true`) now that the reply path is
   fast — into the separate insights bucket, enriching the NEXT reply. Session
-  memory + insights are **ephemeral/in-memory**, keyed by a per-visitor
+  memory + insights are **ephemeral**, keyed by a per-visitor
   `session` id the in-world app sends (privacy posture of `/v1/presence`; nothing
-  persisted). **Legacy / degraded paths:** with `MUSEUMAGENT_*` unset the guide
+  durable). **Shared insight cache + pre-warm:** mined insights are also cached
+  at the EXHIBITION level (keyed by normalized topic), so the *first* answer on a
+  topic is already deep and Cortex isn't re-queried per visitor — `/v1/guide/ask`
+  folds any cached hits into the context synchronously before replying (no added
+  latency), and `POST /v1/guide/exhibitions` fire-and-forget **pre-warms** a few
+  of the exhibition's rooms/works into that cache on registration. **Snappy +
+  immediate voice:** the fast reply uses a tight token budget and `prepareVoice`
+  **pre-warms TTS synthesis at ask time** (fire-and-forget `synthPending`) so
+  synthesis runs in parallel with the visitor reading the text and the in-world
+  audio GET hits a warm/in-flight cache instead of a cold synth. (Venice TTS is
+  several seconds even for a short lead — `VENICE_TTS_MODEL` choice dominates
+  this; pick a fast one. The spoken lead is capped short to minimize synth time.)
+  **Proactive follow-up (closes the loop):** when an async
+  mine lands a NEW insight, the guide composes a short in-character aside (its TTS
+  pre-warmed) and stashes it on the session; the in-world guide polls **`GET
+  /v1/guide/followup?exhibition&session`** for ~50s after a fast reply and, on a
+  hit, speaks it — so a late insight actually reaches the visitor, not just maybe
+  the next question. **Durable/shared state (optional):** with `REDIS_ENABLED` +
+  `REDIS` set, sessions + the shared insight cache write through to Redis
+  (`guide-store.ts`, `ioredis`) so they survive a redeploy and span replicas;
+  unset → pure in-process maps, identical to before. The `pendingInsight` /
+  `summarizing` guards stay process-local (a rare duplicate mine is harmless).
+  **Legacy / degraded paths:** with `MUSEUMAGENT_*` unset the guide
   uses the prior Cortex-primary lean chat path (`use_agentic: false`, `use_graph:
   false`, `top_k: 4`, `mode: 'cortex'`); it retries one *fast* transient Cortex
   5xx (`askCortexResilient`), and on any failure (5xx, timeout, or `CORTEX_*`
@@ -145,7 +167,10 @@ source of truth.
   — the guide's fast hybrid reply brain; all three required to enable it, else
   the guide stays Cortex-primary), `SOULWEAVER_API_URL` +
   `SOULWEAVER_API_HEADERS` (defaults to the public deployment at
-  `https://soulweaver.museumofcryptoart.com`; override for self-hosted);
+  `https://soulweaver.museumofcryptoart.com`; override for self-hosted); and the
+  shared Directus `REDIS_ENABLED` + `REDIS` (when set, the guide persists
+  sessions + the shared insight cache to Redis so they survive a redeploy and
+  span replicas — `guide-store.ts`; unset → in-process only, unchanged).
   reuses `PUBLIC_URL` for asset links and `CODEX_DIR` for codex documents.
 - **Deploying a schema change**: the `moca_api_keys` collection ships as
   directus-sync snapshot files — run `npx directus-sync push` after deploying,

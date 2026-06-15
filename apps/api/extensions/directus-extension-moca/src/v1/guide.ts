@@ -30,6 +30,7 @@
  * - GET  /v1/guide/exhibitions/:id/suggestions  visitor question starters
  * - GET  /v1/guide/exhibitions/:id/locate       which room is at a world point
  * - POST /v1/guide/ask                          answer a visitor question
+ * - GET  /v1/guide/followup                      a proactive aside once a deeper insight lands
  *
  * Contexts persist in the `guide_exhibitions` collection (ships as
  * directus-sync snapshot files). Instances that predate the collection fall
@@ -39,12 +40,13 @@
 
 import type { CortexAskBody } from "./cortex";
 import { MOCA_GUIDE_INTRO } from "./guide-intro.generated";
+import { createRedisKv, type KvStore } from "./guide-store";
 import type { ChatMessage, MuseumAgentClient } from "./museum-agent";
 
 const CONTEXT_CACHE_TTL_MS = 60_000;
 const PERSONA_TTL_MS = 60 * 60_000;
 const MAX_PLACEMENTS = 60;
-const MAX_ARTWORKS_PER_ROOM = 80;
+const MAX_ARTWORKS_PER_ROOM = 256;
 const MAX_HISTORY = 8;
 const ROOM_DESC_MAX = 600;
 const ART_DESC_MAX = 400;
@@ -55,7 +57,7 @@ const PERSONA_SOUL_MAX = 12_000;
 const PERSONA_CODEX_MAX = 4_000;
 // Cap the exhibition-facts listing so persona + facts can't blow the overall
 // context window and starve the intro / insights / session-memory blocks.
-const EXHIBITION_FACTS_MAX = 16_000;
+const EXHIBITION_FACTS_MAX = 50_000;
 const SUGGESTION_COUNT = 3;
 
 const REGISTER_PER_MIN = 6;
@@ -68,12 +70,29 @@ const MAX_SESSIONS = 2000;
 const MAX_VERBATIM_TURNS = 8; // recent turns kept verbatim; older fold into the summary
 const SESSION_SUMMARY_MAX = 1800; // chars of rolling session memory
 const INTRO_BUDGET = 12_000; // chars of the aggregated MOCA brief included in context
-const MAX_CONTEXT_CHARS = 48_000; // overall system-context ceiling (~12k tokens)
+const MAX_CONTEXT_CHARS = 256_000; // overall system-context ceiling (~64k tokens)
 const MAX_INSIGHTS = 12;
 const INSIGHTS_BUDGET = 6_000; // chars of mined insights included in context
 const INSIGHT_TEXT_MAX = 1200; // clamp a single Cortex-mined insight
 const FAST_REPLY_TIMEOUT_MS = 22_000;
+// Keep replies snappy: a tighter token budget returns faster and reads better
+// spoken (the persona already asks for 2-4 sentences). The full text still goes
+// to the panel; the voice speaks a concise lead.
+const FAST_REPLY_MAX_TOKENS = 360;
 const SUMMARIZE_TIMEOUT_MS = 15_000;
+
+// ---- shared insight cache + proactive follow-up ---------------------------
+// Insights mined for one visitor are cached at the EXHIBITION level so the next
+// visitor (and the first answer on a pre-warmed topic) gets depth without re-
+// paying for Cortex. Longer-lived than a session; backed by Redis when set.
+const SHARED_INSIGHT_TTL_MS = 12 * 60 * 60_000; // 12h
+const SHARED_RELOAD_MS = 60_000; // re-pull an exhibition's bucket from Redis at most this often
+const SHARED_BUCKET_MAX = 200; // cap topics per exhibition
+const PREWARM_MAX_TOPICS = 8; // bounded Cortex load when an exhibition registers
+const FOLLOWUP_TTL_MS = 90_000; // a freshly-mined follow-up is offered for this long
+const FOLLOWUP_TIMEOUT_MS = 10_000; // compose-the-aside LLM call
+// How long a per-visitor session survives in Redis (mirrors the in-memory TTL).
+const SESSION_STORE_TTL_MS = SESSION_TTL_MS;
 
 // ---------------------------------------------------------------- types ----
 
@@ -152,7 +171,18 @@ interface GuideSession {
   insightTopics: string[];
   pendingInsight: boolean;
   summarizing: boolean;
+  /** A proactive aside the guide composed when a deeper insight landed AFTER
+   * the reply — delivered when the in-world guide next polls /guide/followup. */
+  pendingFollowup?: { text: string; audioUrl: string | null; at: number } | null;
 }
+
+/** Normalize a topic/question so trivial rewordings collapse to one key. */
+const normTopic = (s: string): string =>
+  String(s || "")
+    .toLowerCase()
+    .replace(/[^\w\s]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
 
 // ------------------------------------------------------------- helpers ----
 
@@ -355,10 +385,21 @@ export function registerGuideRoutes(
     venice?: ReturnType<typeof import("./venice").createVeniceClient>;
     museumAgent?: MuseumAgentClient;
     publicUrl?: string;
+    env?: Record<string, any>;
     errorJson: (res: any, status: number, message: string, code: string) => any;
   }
 ) {
-  const { itemsService, cortex, decc0s, souls, venice, museumAgent, publicUrl, errorJson } = deps;
+  const { itemsService, cortex, decc0s, souls, venice, museumAgent, publicUrl, env, errorJson } = deps;
+
+  // Optional durable/shared backend for the ephemeral hybrid state (sessions +
+  // shared insights). Null → the guide runs purely in-process, exactly as
+  // before. With Redis, state survives a redeploy and is shared across replicas.
+  const kv: KvStore | null = createRedisKv(env || {});
+  if (kv) {
+    console.log(
+      "[moca-guide] durable store ON — sessions + mined insights persist via Redis (survive redeploy, shared across replicas).",
+    );
+  }
 
   // Make the most common deployment mistake loud: without CORTEX_API_URL /
   // CORTEX_API_KEY on THIS (Directus) service the guide still answers, but
@@ -403,6 +444,15 @@ export function registerGuideRoutes(
     }
   };
 
+  // Optional visibility into the Cortex calls the guide makes (mining, starters,
+  // pre-warm). Off by default; set GUIDE_DEBUG_CORTEX=true to trace them.
+  const debugCortex = String(env?.GUIDE_DEBUG_CORTEX ?? "").toLowerCase() === "true";
+  const logCortex = (kind: string, topic: string, status: number, ms: number, sources: string[] = []) => {
+    if (!debugCortex) return;
+    const src = sources.length ? ` sources=[${sources.slice(0, 3).join(", ")}]` : "";
+    console.log(`[moca-guide] cortex ${kind} (${status}, ${ms}ms) "${topic.slice(0, 80)}"${src}`);
+  };
+
   /**
    * Cortex Q&A is slow (~20s) and occasionally returns a transient 5xx. A
    * single failed call would otherwise drop the guide to an offline,
@@ -438,6 +488,9 @@ export function registerGuideRoutes(
 
   const allowRegister = createIpLimiter(REGISTER_PER_MIN);
   const allowAsk = createIpLimiter(ASK_PER_MIN);
+  // Follow-up is a cheap poll the in-world guide runs for ~30s after an ask
+  // (~every 4s), so allow a higher per-IP rate than asks.
+  const allowFollowup = createIpLimiter(40);
 
   // ---- text-to-speech (Venice) -----------------------------------------------
   // The guide speaks its answers in-world. Synthesis is LAZY and decoupled from
@@ -467,20 +520,26 @@ export function registerGuideRoutes(
    * plays — WITHOUT synthesizing yet (that happens lazily on the first GET, so
    * the text reply is never blocked on TTS). Null when TTS is unavailable.
    */
-  // Cap spoken text so Venice synth stays fast/bounded (a 1500-char answer can
-  // take 40-60s — long enough that the in-world audio loader may give up). The
-  // full answer is in the chat; the voice speaks a concise lead, cut at a
-  // sentence boundary.
-  const TTS_MAX_CHARS = 800;
+  // Cap spoken text so Venice synth stays FAST — a concise lead (1-2 sentences)
+  // synthesizes in ~1-2s, which is what makes the voice feel immediate. The full
+  // answer is on the panel; the voice speaks the lead. Short answers spoken whole.
+  const SPOKEN_LEAD_MAX = 360;
   function spokenLead(answer: string): string {
     const text = String(answer || "").replace(/\s+/g, " ").trim();
-    if (text.length <= TTS_MAX_CHARS) return text;
-    const cut = text.slice(0, TTS_MAX_CHARS);
+    if (text.length <= SPOKEN_LEAD_MAX) return text;
+    const cut = text.slice(0, SPOKEN_LEAD_MAX);
     const end = Math.max(cut.lastIndexOf(". "), cut.lastIndexOf("! "), cut.lastIndexOf("? "));
-    return (end > 400 ? cut.slice(0, end + 1) : cut).trim();
+    return (end > 160 ? cut.slice(0, end + 1) : cut).trim();
   }
 
-  function prepareVoice(answer: string, voice: string): string | null {
+  /**
+   * Register an answer for speech and return the audio URL the in-world guide
+   * plays. With `prewarm` we kick synthesis IMMEDIATELY (fire-and-forget) so the
+   * client's later GET hits a warm cache / coalesces onto the in-flight synth
+   * instead of paying a cold 10-40s Venice round-trip — the voice lands ~1-2s
+   * after the text. Null when TTS is unavailable.
+   */
+  function prepareVoice(answer: string, voice: string, prewarm = false): string | null {
     if (!venice?.configured) return null;
     const text = spokenLead(answer);
     if (!text) return null;
@@ -489,6 +548,7 @@ export function registerGuideRoutes(
       prune(ttsPending);
       ttsPending.set(id, { at: Date.now(), text, voice });
     }
+    if (prewarm) void synthPending(id);
     // Absolute when PUBLIC_URL is set; otherwise a relative path the in-world
     // guide resolves against its own API base — so TTS works even if PUBLIC_URL
     // isn't configured on the Directus deployment.
@@ -541,33 +601,207 @@ export function registerGuideRoutes(
     return s && /^[\w-]{1,64}$/.test(s) ? s : null;
   };
 
+  /** The durable shape we persist to Redis (transient concurrency flags omitted). */
+  type StoredSession = Pick<
+    GuideSession,
+    "turns" | "summary" | "insights" | "insightTopics" | "pendingFollowup"
+  >;
+
+  /** Write a session through to Redis (no-op without Redis or a real key). */
+  async function saveSession(s: GuideSession): Promise<void> {
+    if (!kv || !s.key) return;
+    const stored: StoredSession = {
+      turns: s.turns,
+      summary: s.summary,
+      insights: s.insights,
+      insightTopics: s.insightTopics,
+      pendingFollowup: s.pendingFollowup ?? null,
+    };
+    await kv.set(`sess:${s.key}`, stored, SESSION_STORE_TTL_MS);
+  }
+
   /**
-   * Get or create a conversation session. When created and the caller shipped a
-   * recent `history` (the in-world app always does), seed the turns from it so a
-   * post-restart / first-call conversation still has its recent context.
+   * Get or create a conversation session. The in-process Map is the live
+   * working set (unchanged when Redis is off). With Redis, a cold session is
+   * rehydrated from the store so memory/insights survive a redeploy and span
+   * replicas. When created fresh and the caller shipped recent `history` (the
+   * in-world app always does), seed the turns so a first call still has context.
    */
-  function getSession(
+  async function getSession(
     exhibitionId: string,
     sessionId: string,
     seedHistory?: { role: string; content: string }[],
-  ): GuideSession {
+  ): Promise<GuideSession> {
     const key = `${exhibitionId}:${sessionId}`;
     let s = guideSessions.get(key);
-    if (!s) {
-      pruneSessions();
-      const turns = Array.isArray(seedHistory)
-        ? seedHistory
-            .filter((m) => m && (m.role === "user" || m.role === "assistant") && typeof m.content === "string")
-            .slice(-MAX_VERBATIM_TURNS)
-            .map((m) => ({ role: m.role as "user" | "assistant", content: m.content.slice(0, 2000) }))
-        : [];
-      s = { key, at: Date.now(), turns, summary: "", insights: [], insightTopics: [], pendingInsight: false, summarizing: false };
-      guideSessions.set(key, s);
-    } else {
+    if (s) {
       s.at = Date.now();
+      return s;
     }
+    pruneSessions();
+    if (kv) {
+      const stored = await kv.get<StoredSession>(`sess:${key}`);
+      if (stored) {
+        s = {
+          key,
+          at: Date.now(),
+          turns: Array.isArray(stored.turns) ? stored.turns.slice(-MAX_VERBATIM_TURNS * 2) : [],
+          summary: typeof stored.summary === "string" ? stored.summary : "",
+          insights: Array.isArray(stored.insights) ? stored.insights : [],
+          insightTopics: Array.isArray(stored.insightTopics) ? stored.insightTopics : [],
+          pendingInsight: false,
+          summarizing: false,
+          pendingFollowup: stored.pendingFollowup ?? null,
+        };
+        guideSessions.set(key, s);
+        return s;
+      }
+    }
+    const turns = Array.isArray(seedHistory)
+      ? seedHistory
+          .filter((m) => m && (m.role === "user" || m.role === "assistant") && typeof m.content === "string")
+          .slice(-MAX_VERBATIM_TURNS)
+          .map((m) => ({ role: m.role as "user" | "assistant", content: m.content.slice(0, 2000) }))
+      : [];
+    s = { key, at: Date.now(), turns, summary: "", insights: [], insightTopics: [], pendingInsight: false, summarizing: false, pendingFollowup: null };
+    guideSessions.set(key, s);
     return s;
   }
+
+  /** Look up an existing session WITHOUT creating one (for the follow-up poll). */
+  async function peekSession(exhibitionId: string, sessionId: string): Promise<GuideSession | null> {
+    const key = `${exhibitionId}:${sessionId}`;
+    const live = guideSessions.get(key);
+    if (live) return live;
+    if (!kv) return null;
+    const stored = await kv.get<StoredSession>(`sess:${key}`);
+    if (!stored) return null;
+    const s: GuideSession = {
+      key,
+      at: Date.now(),
+      turns: Array.isArray(stored.turns) ? stored.turns.slice(-MAX_VERBATIM_TURNS * 2) : [],
+      summary: typeof stored.summary === "string" ? stored.summary : "",
+      insights: Array.isArray(stored.insights) ? stored.insights : [],
+      insightTopics: Array.isArray(stored.insightTopics) ? stored.insightTopics : [],
+      pendingInsight: false,
+      summarizing: false,
+      pendingFollowup: stored.pendingFollowup ?? null,
+    };
+    guideSessions.set(key, s);
+    return s;
+  }
+
+  /** Add a mined insight to a session's bucket (dedup by topic, respect caps). */
+  function addSessionInsight(session: GuideSession, ins: GuideInsight): boolean {
+    const norm = normTopic(ins.topic);
+    if (!norm || session.insightTopics.includes(norm)) return false;
+    session.insights.push(ins);
+    session.insightTopics.push(norm);
+    if (session.insightTopics.length > MAX_INSIGHTS * 2) {
+      session.insightTopics.splice(0, session.insightTopics.length - MAX_INSIGHTS * 2);
+    }
+    while (session.insights.length > MAX_INSIGHTS) session.insights.shift();
+    let total = session.insights.reduce((n, i) => n + i.text.length, 0);
+    while (session.insights.length > 1 && total > INSIGHTS_BUDGET) {
+      const dropped = session.insights.shift()!;
+      total -= dropped.text.length;
+    }
+    return true;
+  }
+
+  // ---- exhibition-level shared insight cache --------------------------------
+  // Insights mined for any visitor are cached here keyed by exhibition + topic,
+  // so the first answer on a known topic is already deep and Cortex isn't re-
+  // queried per visitor. Process Map (cross-visitor on one instance) + Redis
+  // write-through (cross-instance, survives redeploy) when configured.
+  const sharedInsights = new Map<string, Map<string, GuideInsight>>();
+  const sharedLoadedAt = new Map<string, number>();
+
+  async function loadSharedBucket(exh: string): Promise<Map<string, GuideInsight>> {
+    let bucket = sharedInsights.get(exh);
+    const lastLoad = sharedLoadedAt.get(exh) ?? 0;
+    const stale = Date.now() - lastLoad > SHARED_RELOAD_MS;
+    if (!bucket || (kv && stale)) {
+      if (!bucket) {
+        bucket = new Map();
+        sharedInsights.set(exh, bucket);
+      }
+      if (kv) {
+        const stored = await kv.get<Record<string, GuideInsight>>(`ins:${exh}`);
+        if (stored) for (const [k, v] of Object.entries(stored)) bucket.set(k, v);
+      }
+      sharedLoadedAt.set(exh, Date.now());
+    }
+    // Drop stale entries.
+    const now = Date.now();
+    for (const [k, v] of bucket) if (now - v.at > SHARED_INSIGHT_TTL_MS) bucket.delete(k);
+    return bucket;
+  }
+
+  async function putSharedInsight(exh: string, norm: string, ins: GuideInsight): Promise<void> {
+    if (!norm) return;
+    const bucket = await loadSharedBucket(exh);
+    bucket.set(norm, ins);
+    if (bucket.size > SHARED_BUCKET_MAX) {
+      const sorted = [...bucket.entries()].sort((a, b) => a[1].at - b[1].at);
+      while (bucket.size > SHARED_BUCKET_MAX) {
+        const next = sorted.shift();
+        if (!next) break;
+        bucket.delete(next[0]);
+      }
+    }
+    if (kv) {
+      const obj: Record<string, GuideInsight> = {};
+      for (const [k, v] of bucket) obj[k] = v;
+      void kv.set(`ins:${exh}`, obj, SHARED_INSIGHT_TTL_MS);
+    }
+  }
+
+  /**
+   * Pull any cached insights relevant to this question from the shared bucket —
+   * cheap (one Redis GET on a cold exhibition, then in-process). Matches the
+   * question topic, named rooms/artworks in the question, and the current room.
+   */
+  async function gatherSharedInsights(
+    ctx: GuideContext,
+    question: string,
+    here: GuideContextRoom | null,
+  ): Promise<GuideInsight[]> {
+    const bucket = await loadSharedBucket(ctx.id);
+    if (!bucket.size) return [];
+    const qn = normTopic(question);
+    const out: GuideInsight[] = [];
+    const seen = new Set<string>();
+    const take = (norm: string) => {
+      const ins = bucket.get(norm);
+      if (ins && !seen.has(norm)) {
+        seen.add(norm);
+        out.push(ins);
+      }
+    };
+    take(qn);
+    for (const r of ctx.rooms) {
+      if (r.title && qn.includes(normTopic(r.title))) take(roomTopicKey(r));
+      for (const a of r.artworks) {
+        if (a.title && qn.includes(normTopic(a.title))) take(artworkTopicKey(a));
+      }
+    }
+    if (here?.title) take(roomTopicKey(here));
+    // Cheap fuzzy: any cached topic whose normalized key is contained in the question.
+    for (const [norm, ins] of bucket) {
+      if (!seen.has(norm) && norm.length >= 6 && qn.includes(norm)) {
+        seen.add(norm);
+        out.push(ins);
+      }
+    }
+    return out.slice(0, 4);
+  }
+
+  /** Stable shared-cache keys for pre-warmed room/artwork topics. */
+  const roomTopicKey = (r: GuideContextRoom): string =>
+    normTopic(r.architect ? `Who designed the room ${r.title}?` : `What can you tell me about the room ${r.title}?`);
+  const artworkTopicKey = (a: GuideContextArtwork): string =>
+    normTopic(a.artist ? `Tell me about ${a.title} by ${a.artist}.` : `Tell me about the work ${a.title}.`);
 
   // ---- context store: guide_exhibitions collection + in-memory fallback ----
   const memory = new Map<string, GuideContext>();
@@ -1037,7 +1271,10 @@ export function registerGuideRoutes(
           },
         ],
       });
-      if (status === 200 && text) session.summary = text.slice(0, SESSION_SUMMARY_MAX);
+      if (status === 200 && text) {
+        session.summary = text.slice(0, SESSION_SUMMARY_MAX);
+        void saveSession(session);
+      }
     } catch {
       /* memory update is best-effort */
     } finally {
@@ -1046,10 +1283,60 @@ export function registerGuideRoutes(
   }
 
   /**
-   * Asynchronously mine the deeper knowledge the visitor is referring to via
-   * Cortex (DEEP mode — we can afford graph traversal now the reply path is
-   * fast) and append it to the session's separate insights bucket, enriching
-   * the NEXT reply. One in-flight query per session; skips topics already mined.
+   * One Cortex DEEP retrieval (graph traversal — affordable now the reply path
+   * is fast) about `question`, returned as a normalized insight. Session-free,
+   * so both per-visitor mining and registration pre-warm reuse it.
+   */
+  async function cortexMine(
+    ctx: GuideContext,
+    persona: Persona,
+    question: string,
+    here: GuideContextRoom | null,
+    summary?: string,
+  ): Promise<GuideInsight | null> {
+    const topic = question.replace(/\s+/g, " ").trim().slice(0, 120);
+    if (!topic || !cortex.configured) return null;
+    const loc = locationLine(here);
+    const t0 = Date.now();
+    const { status, body } = await askCortexResilient({
+      question,
+      top_k: 8,
+      use_graph: true,
+      use_agentic: false,
+      conversation_history: [
+        { role: "user", content: contextBlock(ctx, persona) },
+        { role: "assistant", content: `Understood — I am ${persona.name}, guiding visitors through “${ctx.name}”.` },
+        // Bias retrieval toward where the visitor is (a soft hint to the RAG
+        // LLM, not a hard collection filter).
+        ...(loc ? [{ role: "user", content: loc }] : []),
+        ...(summary ? [{ role: "user", content: `Conversation so far: ${summary}` }] : []),
+      ],
+    });
+    const srcTitles = Array.isArray(body?.sources)
+      ? (body.sources as any[]).map((s) => s?.metadata?.document_title || s?.document_title).filter((t) => typeof t === "string")
+      : [];
+    logCortex("mine", topic, status, Date.now() - t0, srcTitles);
+    if (status !== 200 || typeof body?.answer !== "string" || !body.answer.trim()) return null;
+    const text = String(body.answer).replace(/\s*\[src_[^\]]*\]/g, "").replace(/\s+/g, " ").trim().slice(0, INSIGHT_TEXT_MAX);
+    if (!text) return null;
+    const sources: string[] = [];
+    if (Array.isArray(body.sources)) {
+      for (const s of body.sources as any[]) {
+        const t = s?.metadata?.document_title || s?.document_title;
+        if (typeof t === "string" && t && !sources.includes(t)) sources.push(t);
+        if (sources.length >= 3) break;
+      }
+    }
+    return { at: Date.now(), topic, text, sources };
+  }
+
+  /**
+   * After a fast reply, mine the deeper knowledge the visitor referred to and
+   * (a) add it to the session bucket, (b) cache it at the exhibition level for
+   * everyone, and (c) compose a short in-character ASIDE the guide delivers when
+   * the visitor next polls /guide/followup — so a late insight actually reaches
+   * them ("smarter each turn"), not just maybe-helps the next question. One in-
+   * flight query per session; skips topics already mined or already cached.
    */
   async function mineInsight(
     ctx: GuideContext,
@@ -1057,57 +1344,128 @@ export function registerGuideRoutes(
     persona: Persona,
     question: string,
     here: GuideContextRoom | null,
+    voice: string,
+    speak: boolean,
   ): Promise<void> {
     if (!cortex.configured || session.pendingInsight) return;
-    const topic = question.replace(/\s+/g, " ").trim().slice(0, 120);
-    if (!topic) return;
-    // Normalize so trivially-reworded repeats ("Who is Oblak?" vs "who is oblak")
-    // don't each burn a Cortex call.
-    const norm = topic.toLowerCase().replace(/[^\w\s]/g, "").replace(/\s+/g, " ").trim();
-    if (session.insightTopics.includes(norm)) return; // already mined this topic
+    const norm = normTopic(question.slice(0, 120));
+    if (!norm || session.insightTopics.includes(norm)) return; // already known to this session
     session.pendingInsight = true;
     try {
-      const loc = locationLine(here);
-      const { status, body } = await askCortexResilient({
-        question,
-        top_k: 8,
-        use_graph: true,
-        use_agentic: false,
-        conversation_history: [
-          { role: "user", content: contextBlock(ctx, persona) },
-          { role: "assistant", content: `Understood — I am ${persona.name}, guiding visitors through “${ctx.name}”.` },
-          // Bias retrieval toward where the visitor is (a soft hint to the RAG
-          // LLM, not a hard collection filter).
-          ...(loc ? [{ role: "user", content: loc }] : []),
-          ...(session.summary ? [{ role: "user", content: `Conversation so far: ${session.summary}` }] : []),
-        ],
-      });
-      if (status !== 200 || typeof body?.answer !== "string" || !body.answer.trim()) return;
-      const text = String(body.answer).replace(/\s*\[src_[^\]]*\]/g, "").replace(/\s+/g, " ").trim().slice(0, INSIGHT_TEXT_MAX);
-      if (!text) return;
-      const sources: string[] = [];
-      if (Array.isArray(body.sources)) {
-        for (const s of body.sources as any[]) {
-          const t = s?.metadata?.document_title || s?.document_title;
-          if (typeof t === "string" && t && !sources.includes(t)) sources.push(t);
-          if (sources.length >= 3) break;
-        }
+      // Another visitor (or pre-warm) may already have mined this — reuse it for
+      // free. The fast reply already folded shared hits in, so don't re-announce.
+      const bucket = await loadSharedBucket(ctx.id);
+      const cached = bucket.get(norm);
+      if (cached) {
+        addSessionInsight(session, cached);
+        return;
       }
-      session.insights.push({ at: Date.now(), topic, text, sources });
-      session.insightTopics.push(norm);
-      if (session.insightTopics.length > MAX_INSIGHTS * 2) session.insightTopics.splice(0, session.insightTopics.length - MAX_INSIGHTS * 2);
-      // Cap the bucket: evict oldest, then trim to the char budget newest-first.
-      while (session.insights.length > MAX_INSIGHTS) session.insights.shift();
-      let total = session.insights.reduce((n, i) => n + i.text.length, 0);
-      while (session.insights.length > 1 && total > INSIGHTS_BUDGET) {
-        const dropped = session.insights.shift()!;
-        total -= dropped.text.length;
+      const insight = await cortexMine(ctx, persona, question, here, session.summary);
+      if (!insight) return;
+      const added = addSessionInsight(session, insight);
+      await putSharedInsight(ctx.id, norm, insight);
+      // Compose + pre-warm a proactive aside only when this is genuinely NEW
+      // knowledge (the reply couldn't have used it) and we have a fast model.
+      if (added && museumAgent?.configured) {
+        await composeFollowup(session, persona, insight, voice, speak);
       }
     } catch {
       /* insight mining is best-effort */
     } finally {
       session.pendingInsight = false;
+      void saveSession(session);
     }
+  }
+
+  /**
+   * Turn a freshly-mined insight into a single, in-character "by the way" line
+   * and stash it (with pre-warmed audio) for the next /guide/followup poll.
+   */
+  async function composeFollowup(
+    session: GuideSession,
+    persona: Persona,
+    insight: GuideInsight,
+    voice: string,
+    speak: boolean,
+  ): Promise<void> {
+    if (!museumAgent?.configured) return;
+    try {
+      const { status, text } = await museumAgent.chat({
+        timeoutMs: FOLLOWUP_TIMEOUT_MS,
+        temperature: 0.6,
+        maxTokens: 140,
+        messages: [
+          {
+            role: "system",
+            content:
+              `${persona.prompt}\n\nYou are ${persona.name}, a museum guide mid-conversation. You just ` +
+              "recalled a deeper detail about what the visitor last asked. Offer it as ONE short, warm " +
+              "aside in your own voice — start naturally (e.g. \"Oh — one more thing…\"), 1-2 sentences, " +
+              "no preamble, no lists, never mention sources or a library.",
+          },
+          { role: "user", content: `The detail you just recalled:\n${insight.text}` },
+        ],
+      });
+      const line = status === 200 && text ? text.replace(/\s*\[src_[^\]]*\]/g, "").trim() : "";
+      if (!line) return;
+      const audioUrl = speak ? prepareVoice(line, voice, true) : null;
+      session.pendingFollowup = { text: line.slice(0, 600), audioUrl, at: Date.now() };
+    } catch {
+      /* the aside is a bonus — never block on it */
+    }
+  }
+
+  /**
+   * Fire-and-forget after a registration: mine a few of the exhibition's rooms
+   * and works into the SHARED insight cache, so the very first visitor question
+   * on those topics is already deep (no cold Cortex wait). Bounded + deduped.
+   */
+  const prewarming = new Set<string>();
+  function prewarmInsights(ctx: GuideContext): void {
+    if (!cortex.configured || prewarming.has(ctx.id)) return;
+    prewarming.add(ctx.id);
+    void (async () => {
+      try {
+        const persona: Persona = { name: FALLBACK_PERSONA_NAME, prompt: FALLBACK_PERSONA };
+        const bucket = await loadSharedBucket(ctx.id);
+        // Lead with the works on show, then the rooms — the questions visitors
+        // actually open with. Keyed exactly like gatherSharedInsights looks them up.
+        const jobs: { key: string; question: string; here: GuideContextRoom | null }[] = [];
+        for (const r of ctx.rooms) {
+          for (const a of r.artworks) {
+            if (!a.title) continue;
+            jobs.push({
+              key: artworkTopicKey(a),
+              question: a.artist ? `Tell me about “${a.title}” by ${a.artist}.` : `Tell me about the work “${a.title}”.`,
+              here: r,
+            });
+          }
+        }
+        for (const r of ctx.rooms) {
+          if (!r.title) continue;
+          jobs.push({
+            key: roomTopicKey(r),
+            question: r.architect ? `Who designed the room “${r.title}”?` : `What can you tell me about the room “${r.title}”?`,
+            here: r,
+          });
+        }
+        let mined = 0;
+        for (const job of jobs) {
+          if (mined >= PREWARM_MAX_TOPICS) break;
+          if (bucket.has(job.key)) continue;
+          const insight = await cortexMine(ctx, persona, job.question, job.here);
+          if (insight) {
+            await putSharedInsight(ctx.id, job.key, insight);
+            mined++;
+          }
+        }
+        if (mined) console.log(`[moca-guide] pre-warmed ${mined} insight(s) for “${ctx.name}” (${ctx.id}).`);
+      } catch {
+        /* pre-warm is best-effort */
+      } finally {
+        prewarming.delete(ctx.id);
+      }
+    })();
   }
 
   /** Offline answer straight from the context — keeps the guide alive without Cortex. */
@@ -1161,12 +1519,14 @@ export function registerGuideRoutes(
     void (async () => {
       try {
         const persona = { name: FALLBACK_PERSONA_NAME, prompt: FALLBACK_PERSONA };
+        const t0 = Date.now();
         const { status, body } = await cortex.ask({
           question:
             "Suggest 8 short, curious questions a first-time visitor might ask you about this exhibition — its works, artists, rooms, architects, or the ideas connecting them. One question per line, no numbering, no commentary.",
           top_k: 5,
           conversation_history: [{ role: "user", content: contextBlock(ctx, persona) }],
         });
+        logCortex("starters", ctx.name, status, Date.now() - t0);
         if (status !== 200 || typeof body?.answer !== "string") return;
         const starters = body.answer
           .split("\n")
@@ -1208,6 +1568,9 @@ export function registerGuideRoutes(
       if (previous?.starters?.length) ctx.starters = previous.starters;
       await saveContext(ctx);
       enrichStarters(ctx);
+      // Pre-warm the shared insight cache so the first visitor question on a
+      // room/work is already deep (no cold Cortex wait). Bounded, fire-and-forget.
+      prewarmInsights(ctx);
       res.json({
         data: {
           id: ctx.id,
@@ -1322,7 +1685,7 @@ export function registerGuideRoutes(
       if (museumAgent?.configured) {
         const sessionId = sanitizeSession(body.session);
         const session = sessionId
-          ? getSession(id, sessionId, history)
+          ? await getSession(id, sessionId, history)
           : // No session id (e.g. a stateless/.hyp caller): still reply fast, just
             // without server-side memory — seed turns from the shipped history.
             ({
@@ -1337,11 +1700,17 @@ export function registerGuideRoutes(
               insightTopics: [],
               pendingInsight: false,
               summarizing: false,
+              pendingFollowup: null,
             } as GuideSession);
+
+        // Deep FIRST answer: fold any insights already cached for this topic
+        // (pre-warmed at registration, or mined for an earlier visitor) into the
+        // session before building context — a cheap lookup, no added latency.
+        for (const ins of await gatherSharedInsights(ctx, question, here)) addSessionInsight(session, ins);
 
         const { status: fastStatus, text, error: fastError } = await museumAgent.chat({
           timeoutMs: FAST_REPLY_TIMEOUT_MS,
-          maxTokens: 700,
+          maxTokens: FAST_REPLY_MAX_TOKENS,
           messages: [
             { role: "system", content: buildSystemContext(ctx, persona, session, here) },
             ...turnMessages(session),
@@ -1351,9 +1720,12 @@ export function registerGuideRoutes(
         if (fastStatus === 200 && text) {
           const answer = text.replace(/\s*\[src_[^\]]*\]/g, "").trim();
           // TTS speaks the AGENT's voice — and only ever this. The gemma reply
-          // already relays any Cortex knowledge in-character, so low-latency
-          // speech and the on-screen text are the one same voice.
-          const audioUrl = speak ? prepareVoice(answer, voice) : null;
+          // already relays any Cortex knowledge in-character, so the on-screen
+          // text and the voice are one. Pre-warm synth NOW so it runs in parallel
+          // with the visitor reading the text and the client's audio GET hits a
+          // warm/in-flight cache instead of a cold synth (Venice TTS is several
+          // seconds; the lead is kept short to minimize it).
+          const audioUrl = speak ? prepareVoice(answer, voice, true) : null;
           res.json({
             data: {
               answer,
@@ -1372,8 +1744,9 @@ export function registerGuideRoutes(
             if (session.turns.length > MAX_VERBATIM_TURNS * 2) {
               session.turns.splice(0, session.turns.length - MAX_VERBATIM_TURNS * 2);
             }
+            void saveSession(session);
             void summarizeSession(session, question, answer);
-            void mineInsight(ctx, session, persona, question, here);
+            void mineInsight(ctx, session, persona, question, here, voice, speak);
           }
           return;
         }
@@ -1473,6 +1846,33 @@ export function registerGuideRoutes(
         },
       });
     }
+  });
+
+  // Proactive follow-up (public, keyless). The in-world guide polls this for a
+  // short window after a fast reply; when an async Cortex mine has landed a NEW
+  // insight, the guide composed a short in-character aside which we hand back
+  // ONCE (then clear it). Closes the loop so deeper knowledge actually reaches
+  // the visitor — not just maybe-helps a later question. Cheap: no LLM here.
+  router.get("/guide/followup", async (req: any, res: any) => {
+    if (!allowFollowup(req)) {
+      res.set("Retry-After", "10");
+      return errorJson(res, 429, "Polling too fast — ease off.", "RATE_LIMITED");
+    }
+    const id = sanitizeId(req.query.exhibition);
+    const sid = sanitizeSession(req.query.session);
+    if (!id || !sid) return res.json({ data: null });
+    const session = await peekSession(id, sid);
+    const fu = session?.pendingFollowup;
+    if (!session || !fu || Date.now() - fu.at > FOLLOWUP_TTL_MS) {
+      if (session && fu) {
+        session.pendingFollowup = null;
+        void saveSession(session);
+      }
+      return res.json({ data: null });
+    }
+    session.pendingFollowup = null;
+    void saveSession(session);
+    res.json({ data: { text: fu.text, ...(fu.audioUrl ? { audioUrl: fu.audioUrl } : {}) } });
   });
 
   // Serve a synthesized answer's audio (public, keyless like the rest of the

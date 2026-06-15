@@ -97,6 +97,7 @@ export default defineEndpoint({
             "GET /v1/guide/exhibitions/:id/suggestions (public)",
             "GET /v1/guide/exhibitions/:id/locate?x&z (public — which room is at a world point)",
             "POST /v1/guide/ask (public — ask the museum guide a question)",
+            "GET /v1/guide/followup?exhibition&session (public — a proactive aside once a deeper insight lands)",
           ],
         },
       });
@@ -107,7 +108,7 @@ export default defineEndpoint({
 
     // The museum guide (public — the in-world visitor flow must be keyless;
     // see guide.ts for the rate limits and the enrichment pipeline).
-    registerGuideRoutes(router, { itemsService, cortex, decc0s, souls, venice, museumAgent, publicUrl, errorJson });
+    registerGuideRoutes(router, { itemsService, cortex, decc0s, souls, venice, museumAgent, publicUrl, env, errorJson });
 
     // ---- Room slot data (public) -------------------------------------------
     // Baked slot anchors + resolved facing for a room's builder GLB
