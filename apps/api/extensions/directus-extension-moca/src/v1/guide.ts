@@ -352,6 +352,43 @@ function locateRoom(ctx: GuideContext, x: number, z: number): GuideContextRoom |
   return inside;
 }
 
+// A visitor standing in a doorway, between rooms, or in a room whose registered
+// footprint radius underestimates its true (scaled-up) size won't test as
+// "inside" any room — but they clearly mean a room when they ask "what's in
+// here?". Fall back to the NEAREST room's center, capped so someone far outside
+// the whole exhibition (e.g. at the world spawn) isn't mis-attributed to a room.
+const NEAREST_ROOM_MAX_FACTOR = 3;
+const NEAREST_ROOM_MAX_MARGIN = 20; // meters
+
+/** The nearest registered room to a world point, within a sane distance cap. */
+function nearestRoom(ctx: GuideContext, x: number, z: number): GuideContextRoom | null {
+  let best: GuideContextRoom | null = null;
+  let bestD = Infinity;
+  let bestR = 0;
+  for (const r of ctx.rooms) {
+    if (!r.location) continue;
+    const dx = r.location.x - x;
+    const dz = r.location.z - z;
+    const d = Math.sqrt(dx * dx + dz * dz);
+    if (d < bestD) {
+      bestD = d;
+      best = r;
+      bestR = r.location.r;
+    }
+  }
+  if (!best) return null;
+  const cap = Math.max(bestR * NEAREST_ROOM_MAX_FACTOR, bestR + NEAREST_ROOM_MAX_MARGIN);
+  return bestD <= cap ? best : null;
+}
+
+/**
+ * Resolve the room the visitor means by "here" — the one they're inside, else
+ * the nearest within the cap. This is what grounds "what's in this room?".
+ */
+function whereIs(ctx: GuideContext, x: number, z: number): GuideContextRoom | null {
+  return locateRoom(ctx, x, z) ?? nearestRoom(ctx, x, z);
+}
+
 /** A high-priority context line telling the guide where the visitor is now. */
 function locationLine(room: GuideContextRoom | null): string | null {
   if (!room) return null;
@@ -362,14 +399,20 @@ function locationLine(room: GuideContextRoom | null): string | null {
   ]
     .filter(Boolean)
     .join(" — ");
+  // List the room's full curated set (capped) so "what pieces are in this room?"
+  // is answerable directly from the metadata, with an exact count.
   const works = room.artworks
     .map((a) => (a.title ? `“${a.title}”${a.artist ? ` by ${a.artist}` : ""}` : null))
-    .filter(Boolean)
-    .slice(0, 8);
+    .filter(Boolean) as string[];
+  const shown = works.slice(0, 40);
+  const more = works.length > shown.length ? ` (+${works.length - shown.length} more)` : "";
   return (
     `[WHERE YOU ARE RIGHT NOW] ${head}. ` +
-    (works.length ? `On these walls: ${works.join(", ")}. ` : "") +
-    "Ground your answer in THIS room and what's around you unless the visitor asks about elsewhere."
+    (works.length
+      ? `This room holds ${works.length} work(s): ${shown.join(", ")}${more}. `
+      : "No works are hung in this room yet. ") +
+    "When the visitor asks about “this room”, “here”, or what's around them, THIS is the room — " +
+    "name it and list its works. Ground your answer here unless they ask about elsewhere."
   );
 }
 
@@ -1665,13 +1708,14 @@ export function registerGuideRoutes(
       const speak = body.speak !== false;
       const voice = clampText(body.voice, 40) || venice?.defaultVoice || "";
 
-      // Spatial awareness: resolve the room the visitor is standing in from the
-      // world position the in-world guide reports, so answers (and retrieval) are
-      // grounded in the here-and-now.
+      // Spatial awareness: resolve the room the visitor means by "here" from the
+      // world position the in-world guide reports — the room they're inside, or
+      // the nearest one — so answers (and retrieval) are grounded in the
+      // here-and-now and "what's in this room?" pulls the right piece list.
       const vp = body.visitorPos;
       const here =
         vp && typeof vp.x === "number" && vp.x === vp.x && typeof vp.z === "number" && vp.z === vp.z
-          ? locateRoom(ctx, vp.x, vp.z)
+          ? whereIs(ctx, vp.x, vp.z)
           : null;
 
       const history = Array.isArray(body.history)
