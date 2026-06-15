@@ -467,6 +467,41 @@ function locationLine(room: GuideContextRoom | null): string | null {
   );
 }
 
+// ------------------------------------------------------- routing ----
+
+// Warm, in-character holding lines while the librarian is consulted (fallback
+// when the fast model can't mint one). The real answer follows via /followup.
+const LIBRARY_ACKS = [
+  "Great question — let me pull that from the deeper records.",
+  "Ooh, good one. Give me a moment to dig that up properly.",
+  "That deserves a real answer — one second while I look it up.",
+  "Let me consult what we hold on that and come right back to you.",
+];
+
+/**
+ * Deterministic "this needs the Library, not the exhibition facts" detector.
+ * The fast model won't reliably defer, and for macro/historical questions or
+ * deep-dives on an artist it tends to pad a misleading mini-answer from the
+ * works on show. Catch those here and route straight to Cortex (ack now, real
+ * answer as a follow-up). Kept tight so genuine exhibition questions still get
+ * the instant fast answer.
+ */
+function needsLibrary(ctx: GuideContext, question: string): boolean {
+  const q = ` ${question.toLowerCase()} `;
+  // Cryptoart / NFT history, movement, market, scene, era, context.
+  if (/(crypto ?art|\bnfts?\b|web3|blockchain)/.test(q) &&
+      /(histor|movement|era|scene|happen|context|market|trend|important|matter|began|start|emerg|early|back then|at the time|landscape|culture|world)/.test(q)) return true;
+  if (/what (happened|was happening|was going on|was important|were)\b/.test(q)) return true;
+  if (/\b(in|around|during|by|before|after) (?:the )?(?:19|20)\d\d\b/.test(q) &&
+      /(crypto|nft|art|scene|world|happen|movement|going on|mint)/.test(q)) return true;
+  if (/\b(art history|movement|zeitgeist|influenced? by|influence of|compared to|compare it|legacy|significance|how does this relate)\b/.test(q)) return true;
+  // Deep-dive on an exhibition artist (their wider story, not the work on show).
+  if (/\b(who is|who was|tell me (?:more )?about|more about|background on|her career|his career|their career|other works?|what else|known for|famous for|biograph)\b/.test(q)) {
+    for (const a of ctx.artists) if (a && q.includes(` ${a.toLowerCase()}`)) return true;
+  }
+  return false;
+}
+
 // ------------------------------------------------------------ module ----
 
 export function registerGuideRoutes(
@@ -1437,6 +1472,37 @@ export function registerGuideRoutes(
    * them ("smarter each turn"), not just maybe-helps the next question. One in-
    * flight query per session; skips topics already mined or already cached.
    */
+  /** A short, in-character "let me look that up" line for library-routed
+   * questions — minted by the fast model, with a template fallback. Never tries
+   * to answer (the real answer arrives via the follow-up). */
+  async function makeAck(persona: Persona, question: string, voice: string, speak: boolean): Promise<{ text: string; audioUrl: string | null }> {
+    let text = "";
+    if (museumAgent?.configured) {
+      try {
+        const { status, text: t } = await museumAgent.chat({
+          timeoutMs: 8000,
+          temperature: 0.7,
+          maxTokens: 60,
+          messages: [
+            {
+              role: "system",
+              content:
+                `${persona.prompt}\n\nYou are ${persona.name}. The visitor just asked something that needs ` +
+                `deeper research from the museum's records. In ONE short, warm, in-character sentence, tell ` +
+                `them you're looking it up right now. Do NOT attempt to answer the question itself.`,
+            },
+            { role: "user", content: question },
+          ],
+        });
+        if (status === 200 && t) text = t.replace(/\s*\[src_[^\]]*\]/g, "").trim().slice(0, 200);
+      } catch {
+        /* fall back to a template */
+      }
+    }
+    if (!text) text = LIBRARY_ACKS[hash32(question) % LIBRARY_ACKS.length];
+    return { text, audioUrl: speak ? prepareVoice(text, voice, true) : null };
+  }
+
   async function mineInsight(
     ctx: GuideContext,
     session: GuideSession,
@@ -1445,20 +1511,24 @@ export function registerGuideRoutes(
     here: GuideContextRoom | null,
     voice: string,
     speak: boolean,
+    priorReply: string,
+    priorWasAck: boolean,
   ): Promise<void> {
     if (!cortex.configured || session.pendingInsight) return;
     const norm = normTopic(question.slice(0, 120));
     if (!norm) return;
-    // Already deepened this exact topic this session (and the immediate reply
-    // already folded the cached insight in) — no need to re-deliver.
-    if (session.insightTopics.includes(norm)) return;
+    // Library-routed (ack) turns MUST deliver the answer, even from cache. Normal
+    // turns dedup — the immediate reply already folded any cached insight in.
+    if (!priorWasAck && session.insightTopics.includes(norm)) return;
     session.pendingInsight = true;
     try {
-      // Reuse a pre-warmed / cross-visitor cached insight when there is one.
-      let insight: GuideInsight | null = null;
-      const bucket = await loadSharedBucket(ctx.id);
-      insight = bucket.get(norm) || null;
-      if (insight) addSessionInsight(session, insight);
+      // Reuse this session's or a pre-warmed / cross-visitor cached insight first.
+      let insight: GuideInsight | null = session.insights.find((i) => normTopic(i.topic) === norm) || null;
+      if (!insight) {
+        const bucket = await loadSharedBucket(ctx.id);
+        insight = bucket.get(norm) || null;
+        if (insight) addSessionInsight(session, insight);
+      }
       if (!insight) {
         insight = await cortexMine(ctx, persona, question, here, session.summary);
         if (insight) {
@@ -1466,11 +1536,13 @@ export function registerGuideRoutes(
           await putSharedInsight(ctx.id, norm, insight);
         }
       }
-      // Always deliver the library's deeper take as a follow-up — it answers the
-      // questions the fast reply can't (history, an artist's wider career, etc.)
-      // and adds depth to the ones it can.
-      if (insight && museumAgent?.configured) {
-        await composeFollowup(session, persona, insight, voice, speak, question);
+      if (!museumAgent?.configured) return;
+      if (insight) {
+        await composeFollowup(session, persona, insight, voice, speak, question, priorReply, priorWasAck);
+      } else if (priorWasAck) {
+        // We promised an answer but Cortex came up empty — don't leave them hanging.
+        const miss = "Hm — my deeper records came up short on that one. Ask me about any of the works or artists here and I'll dig right in.";
+        session.pendingFollowup = { text: miss, audioUrl: speak ? prepareVoice(miss, voice, true) : null, at: Date.now() };
       }
     } catch {
       /* insight mining is best-effort */
@@ -1482,9 +1554,9 @@ export function registerGuideRoutes(
 
   /**
    * Stash a follow-up (with pre-warmed audio) for the next /guide/followup poll:
-   * the deeper, Cortex-backed take on what the visitor just asked. Framed to
-   * ANSWER the question (when the fast reply couldn't) while not repeating what
-   * was already said — so it works whether the first reply nailed it or punted.
+   * the deeper, Cortex-backed take on what the visitor just asked. When the prior
+   * reply was a real answer, this EXTENDS it (no repetition); when it was just an
+   * acknowledgement (library-routed), this IS the answer.
    */
   async function composeFollowup(
     session: GuideSession,
@@ -1493,24 +1565,29 @@ export function registerGuideRoutes(
     voice: string,
     speak: boolean,
     question: string,
+    priorReply: string,
+    priorWasAck: boolean,
   ): Promise<void> {
     if (!museumAgent?.configured) return;
     try {
+      const system = priorWasAck
+        ? `${persona.prompt}\n\nYou are ${persona.name}, a museum guide. You told the visitor you'd look ` +
+          `up their question — here's what you found. Give the real, specific answer in your own voice, ` +
+          `2-4 sentences, no preamble. Never mention "the library", "sources", or notes — it's simply what you know.`
+        : `${persona.prompt}\n\nYou are ${persona.name}, a museum guide. A moment ago you replied to the ` +
+          `visitor (quoted below); your runners have now pulled deeper material. Come back naturally ` +
+          `(e.g. "So — building on that…") and CONTINUE your answer with the new substance, 2-4 sentences. ` +
+          `Do NOT repeat what you already said. Never mention "the library", "sources", or notes.`;
+      const user = priorWasAck
+        ? `The visitor asked: "${question}"\n\nWhat you found:\n${insight.text}`
+        : `The visitor asked: "${question}"\nYou already told them: "${priorReply.slice(0, 600)}"\n\nThe deeper material you just pulled:\n${insight.text}`;
       const { status, text } = await museumAgent.chat({
         timeoutMs: FOLLOWUP_TIMEOUT_MS,
         temperature: 0.6,
         maxTokens: 420,
         messages: [
-          {
-            role: "system",
-            content:
-              `${persona.prompt}\n\nYou are ${persona.name}, a museum guide. A moment ago you gave the ` +
-              `visitor a quick reply; your runners have now pulled deeper material on their question. ` +
-              `Come back to them naturally (e.g. "So — about that…") and give the real, specific answer ` +
-              `in your own voice — 2-4 sentences. DON'T repeat what you already said; add the substance. ` +
-              `Never mention "the library", "sources", or notes — it's simply what you know.`,
-          },
-          { role: "user", content: `The visitor asked: "${question}"\n\nWhat you've now dug up:\n${insight.text}` },
+          { role: "system", content: system },
+          { role: "user", content: user },
         ],
       });
       const line = status === 200 && text ? text.replace(/\s*\[src_[^\]]*\]/g, "").trim() : "";
@@ -1811,41 +1888,70 @@ export function registerGuideRoutes(
               pendingFollowup: null,
             } as GuideSession);
 
-        // Deep FIRST answer: fold any insights already cached for this topic
-        // (pre-warmed at registration, or mined for an earlier visitor) into the
-        // session before building context — a cheap lookup, no added latency.
-        for (const ins of await gatherSharedInsights(ctx, question, here)) addSessionInsight(session, ins);
+        // Macro / historical / artist-deep questions route straight to the
+        // Library: a quick in-character acknowledgement now, the real answer via
+        // the follow-up. (The fast model would otherwise pad a misleading
+        // mini-answer from the works on show.) Everything else answers fast.
+        const library = cortex.configured && needsLibrary(ctx, question);
+        let answer = "";
+        let delivered = false;
+        const priorWasAck = library;
 
-        const { status: fastStatus, text, error: fastError } = await museumAgent.chat({
-          timeoutMs: FAST_REPLY_TIMEOUT_MS,
-          maxTokens: FAST_REPLY_MAX_TOKENS,
-          messages: [
-            { role: "system", content: buildSystemContext(ctx, persona, session, here) },
-            ...turnMessages(session),
-            { role: "user", content: question },
-          ],
-        });
-        if (fastStatus === 200 && text) {
-          const answer = text.replace(/\s*\[src_[^\]]*\]/g, "").trim();
-          // TTS speaks the AGENT's voice — and only ever this. The gemma reply
-          // already relays any Cortex knowledge in-character, so the on-screen
-          // text and the voice are one. Pre-warm synth NOW so it runs in parallel
-          // with the visitor reading the text and the client's audio GET hits a
-          // warm/in-flight cache instead of a cold synth (Venice TTS is several
-          // seconds; the lead is kept short to minimize it).
-          const audioUrl = speak ? prepareVoice(answer, voice, true) : null;
+        if (library) {
+          const ack = await makeAck(persona, question, voice, speak);
+          answer = ack.text;
           res.json({
             data: {
               answer,
               persona: persona.name,
               suggestions,
               mode: "fast",
-              ...(audioUrl ? { audioUrl } : {}),
+              ...(ack.audioUrl ? { audioUrl: ack.audioUrl } : {}),
             },
           });
-          // Async, after the reply is sent (fire-and-forget, like enrichStarters):
-          // fold the turn into session memory and mine deeper insights via Cortex
-          // for the NEXT reply. Only when we have a real (stored) session.
+          delivered = true;
+        } else {
+          // Deep FIRST answer: fold any insights already cached for this topic
+          // (pre-warmed at registration, or mined for an earlier visitor) in
+          // before building context — a cheap lookup, no added latency.
+          for (const ins of await gatherSharedInsights(ctx, question, here)) addSessionInsight(session, ins);
+          const { status: fastStatus, text, error: fastError } = await museumAgent.chat({
+            timeoutMs: FAST_REPLY_TIMEOUT_MS,
+            maxTokens: FAST_REPLY_MAX_TOKENS,
+            messages: [
+              { role: "system", content: buildSystemContext(ctx, persona, session, here) },
+              ...turnMessages(session),
+              { role: "user", content: question },
+            ],
+          });
+          if (fastStatus === 200 && text) {
+            answer = text.replace(/\s*\[src_[^\]]*\]/g, "").trim();
+            // Pre-warm synth NOW so it runs in parallel with the visitor reading
+            // the text and the client's audio GET hits a warm/in-flight cache.
+            const audioUrl = speak ? prepareVoice(answer, voice, true) : null;
+            res.json({
+              data: {
+                answer,
+                persona: persona.name,
+                suggestions,
+                mode: "fast",
+                ...(audioUrl ? { audioUrl } : {}),
+              },
+            });
+            delivered = true;
+          } else {
+            warnUpstream(
+              `MUSEUMAGENT fast reply failed (status ${fastStatus || "threw"}${fastError ? `: ${fastError}` : ""}) — ` +
+                `falling back to ${cortex.configured ? "Cortex" : "exhibition context"}.`,
+            );
+            // fall through to the Cortex-primary / context-only paths below
+          }
+        }
+
+        if (delivered) {
+          // Async, after the reply is sent: fold the turn into session memory and
+          // deliver the deeper, Cortex-backed answer via the follow-up channel
+          // (which EXTENDS a real answer, or IS the answer after an ack).
           if (sessionId) {
             session.turns.push({ role: "user", content: question.slice(0, 2000) });
             session.turns.push({ role: "assistant", content: answer.slice(0, 2000) });
@@ -1853,16 +1959,11 @@ export function registerGuideRoutes(
               session.turns.splice(0, session.turns.length - MAX_VERBATIM_TURNS * 2);
             }
             void saveSession(session);
-            void summarizeSession(session, question, answer);
-            void mineInsight(ctx, session, persona, question, here, voice, speak);
+            if (!priorWasAck) void summarizeSession(session, question, answer);
+            void mineInsight(ctx, session, persona, question, here, voice, speak, answer, priorWasAck);
           }
           return;
         }
-        warnUpstream(
-          `MUSEUMAGENT fast reply failed (status ${fastStatus || "threw"}${fastError ? `: ${fastError}` : ""}) — ` +
-            `falling back to ${cortex.configured ? "Cortex" : "exhibition context"}.`,
-        );
-        // fall through to the Cortex-primary / context-only paths below
       }
 
       if (!cortex.configured) {

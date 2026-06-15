@@ -495,6 +495,7 @@ if (world.isClient) {
   let thinkT = 0
   let clock = 0           // seconds, accumulated from update(dt)
   let speakingUntil = 0   // clock time the "speaking" indicator should hold until
+  let queuedFollowup = null // a follow-up waiting for the current clip to finish
 
   function clip(s, n) { s = String(s || ''); return s.length > n ? s.slice(0, n - 1) + '\\u2026' : s }
   function setVal(node, v) { if (node) { try { node.value = v } catch (e) {} } }
@@ -571,6 +572,7 @@ if (world.isClient) {
 
   app.on('moca:guide:thinking', (d) => {
     panelState = 'thinking'; thinkT = 0; speakingUntil = 0
+    queuedFollowup = null // a new turn supersedes any pending follow-up
     setVal(qNode, d && d.question ? 'you asked: \\u201c' + clip(d.question, 120) + '\\u201d' : '')
     setVal(aNode, '')
     renderStatus()
@@ -584,14 +586,20 @@ if (world.isClient) {
     if (au) speakAnswer(au, d.text)
     else { panelState = 'idle'; renderStatus() }
   })
-  // The proactive aside: a deeper detail the guide dug up after answering.
-  app.on('moca:guide:followup', (d) => {
-    if (!d || !d.text) return
+  // The librarian's deeper answer, dug up after the first reply. Render+speak it
+  // — but NEVER cut off the first reply's voice: if we're still speaking, queue
+  // it and the per-frame loop delivers it the moment the current clip finishes.
+  function deliverFollowup(d) {
     setVal(aNode, '\\u2726  ' + clip(d.text, 360))
     setColor(aNode, C.body)
     mirrorChat('\\u2726 ' + d.text, str(d.persona, NAME))
     const au = resolveAudio(d.audioUrl)
     if (au) speakAnswer(au, d.text)
+  }
+  app.on('moca:guide:followup', (d) => {
+    if (!d || !d.text) return
+    if (panelState === 'speaking' && clock < speakingUntil) queuedFollowup = d
+    else deliverFollowup(d)
   })
 
   // ---- hold E to engage (nudges the server to start following) --------------
@@ -627,6 +635,11 @@ if (world.isClient) {
 
     // Drop out of "speaking" once the estimated clip has played.
     if (panelState === 'speaking' && clock >= speakingUntil) { panelState = 'idle'; renderStatus() }
+    // A queued follow-up plays the moment the first reply's voice has finished —
+    // so the librarian answer never talks over the initial TTS.
+    if (queuedFollowup && (panelState !== 'speaking' || clock >= speakingUntil)) {
+      const d = queuedFollowup; queuedFollowup = null; deliverFollowup(d)
+    }
     // Animate the thinking dots while a question is in flight.
     if (panelState === 'thinking') { thinkT += dt; renderStatus() }
 
