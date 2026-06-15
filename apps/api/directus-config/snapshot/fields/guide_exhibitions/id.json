@@ -16,7 +16,7 @@
       "font": "monospace"
     },
     "readonly": true,
-    "required": false,
+    "required": true,
     "sort": 1,
     "special": null,
     "translations": null,
