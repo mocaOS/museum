@@ -40,6 +40,7 @@
         "@local/types": "workspace:*",
         "axios": "^1.12.2",
         "express": "^5.1.0",
+        "ioredis": "^5.4.1",
         "js-base64": "^3.7.8",
         "r2r-js": "^0.4.43",
       },
