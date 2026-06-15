@@ -188,29 +188,41 @@ no accounts. Code lives in `src/components/museum/three/`:
   **walks/flies/falls** mirroring the followed visitor and **gestures** while
   answering. (NB: a null blueprint `model` crashes the engine's `App.build` →
   red cube + a bricked world tick loop, so the model is always the vrm.) The
-  **conversation runs entirely in the world chat** — a dynamic "Welcome to
-  <exhibition> — how can I help you?" greeting and free-text Q&A (no preset
-  options), private per visitor via local `world.chat(..., false)`; the
-  above-head bubble is a **minimal always-visible label** (welcome ↔ a
-  "consulting the library…" loader while a question is in flight).
+  conversation is **pure free-form chat** (type your question, or hold E to
+  walk with the guide — no preset/numbered question picking), private per
+  visitor via local `world.chat(..., false)`. It renders in a **billboarded
+  world-space panel** above the guide — a live status line (here / thinking /
+  speaking), the guide name, the visitor's last question, the answer, and a
+  how-to hint — and the full text is **also mirrored to the visitor's private
+  world chat** as a scrollback transcript.
   Per-player private answers are fetched server-side from `POST /v1/guide/ask`.
   That endpoint runs a **hybrid** model (when the API has `MUSEUMAGENT_*`): a
   FAST direct LLM reply over exhibition metadata + an aggregated MOCA brief + the
   visitor's session memory (the in-world app sends a per-player `session` id),
-  while Cortex mines deeper insights **asynchronously** into a separate bucket
-  that enriches the next reply — so the conversation stays reactive and gets
-  smarter each turn (falls back to the Cortex-primary path + optional Art DeCC0
-  persona, **default 2875 = Oblak**, when `MUSEUMAGENT_*` is unset). When the Directus has a
-  `VENICE_API_KEY`, the guide also **speaks** each answer (Venice
-  `tts-qwen3-1-7b`; `audioUrl` → in-world `audio` node, autoplay on; `speak`/
-  `voice` are app inspector props). That endpoint lives in `apps/api`
-  (`src/v1/guide.ts`) and is Cortex-resilient: it retries a fast transient 5xx
-  and degrades to a context-only `fallback: true` answer rather than erroring,
-  so the in-world guide stays alive even when Cortex is slow/down — but it
-  **requires `CORTEX_API_URL`/`CORTEX_API_KEY` on the Directus deployment** to
-  hook the knowledge graph in (without them every answer is a context-only
-  fallback). NB: Hyperfy's app `fetch` can't stream, so the answer is fetched
-  whole and typed out client-side (no in-world SSE).
+  while Cortex mines deeper insights **asynchronously** that enrich a follow-up.
+  A deterministic **library router** (`needsLibrary()`) catches
+  macro/historical/era/market questions and artist deep-dives: those get a quick
+  in-character **acknowledgement** ("Great question — let me ask our
+  librarian…") and the real Cortex-backed answer arrives moments later as a
+  follow-up. EVERY question's Cortex result is delivered via the public
+  **`GET /v1/guide/followup?exhibition&session`** — it *extends* the fast answer
+  (no repetition) for normal questions, or *is* the answer after an ack. The
+  guide's server-half polls that endpoint for ~50s after a fast reply; a
+  follow-up that arrives mid-speech is **queued** and plays only once the first
+  TTS clip finishes (it never talks over the initial voice). Falls back to the
+  Cortex-primary path + optional Art DeCC0 persona (**default 2875 = Oblak**)
+  when `MUSEUMAGENT_*` is unset. When the Directus has a `VENICE_API_KEY`, the
+  guide also **speaks** each answer (Venice TTS, default `tts-kokoro` (~0.8s
+  synth); `audioUrl` → in-world `audio` node, autoplay on; `speak`/`voice` are
+  app inspector props). That endpoint lives in `apps/api` (`src/v1/guide.ts`)
+  and is Cortex-resilient: it retries a fast transient 5xx and degrades to a
+  context-only `fallback: true` answer rather than erroring, so the in-world
+  guide stays alive even when Cortex is slow/down — but it **requires
+  `CORTEX_API_URL`/`CORTEX_API_KEY` on the Directus deployment** to hook the
+  knowledge graph in (without them every answer is a context-only fallback).
+  NB: Hyperfy's app `fetch` can't stream, so the answer is fetched whole — it's
+  rendered in the panel, mirrored to chat, and spoken via the audio node (no
+  in-world SSE).
   The dialog's **Download guide app (.hyp)** button
   (`guide-hyp.ts` + `hyp.ts`) bundles the same guide as a drag-droppable
   Hyperfy app file — registers the context, then builds

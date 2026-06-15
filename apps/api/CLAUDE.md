@@ -103,7 +103,29 @@ source of truth.
   persona + the aggregated MOCA brief (`guide-intro.generated.ts`, built by
   `npm run build:intro` from apps/docs) + authoritative exhibition facts + the
   visitor's rolling **session memory** + an accumulated **insights bucket**
-  (`mode: 'fast'`). After replying, two things run ASYNCHRONOUSLY (fire-and-
+  (`mode: 'fast'`). The fast model is `MUSEUMAGENT_MODEL` (currently
+  `qwen3-5-35b-a3b`, 256k context); on Venice bases the client auto-sends
+  `venice_parameters: { disable_thinking: true, strip_thinking_response: true }`
+  so reasoning ("-it") models return non-empty content fast instead of burning
+  the budget on hidden chain-of-thought. Context budgets:
+  `MAX_CONTEXT_CHARS=256000`, `EXHIBITION_FACTS_MAX=50000`,
+  `MAX_ARTWORKS_PER_ROOM=256`, with `museum-agent.ts` `MSG_MAX_CHARS=300000`
+  (kept above `MAX_CONTEXT_CHARS` so the transport never truncates the prompt).
+  **Library routing:** a deterministic `needsLibrary()` router catches
+  macro/historical/era/market questions and artist deep-dives — those reply with
+  a quick in-character ACKNOWLEDGEMENT ("Great question — let me ask our
+  librarian…") and the real Cortex-backed answer is delivered moments later via
+  the follow-up (an earlier model-self-tagging `[ASK_LIBRARY]` approach was
+  tried and removed — the model wouldn't reliably defer; routing is now
+  server-side). **Spatial awareness:** the in-world guide sends `visitorPos`;
+  the API resolves the room via `whereIs()` — the room the visitor is inside,
+  else the NEAREST room (capped at ~3× its footprint radius) so "what's in this
+  room?" still resolves at a doorway/between rooms — and the location block
+  lists that room's full curated piece list with an exact count. **Mint dates:**
+  each artwork carries a best-effort mint/creation date parsed from OpenSea
+  traits (null when absent — MOCA has no mint-date column and the OpenSea blob
+  only has `updated_at`), surfaced in the exhibition facts + location line.
+  After replying, two things run ASYNCHRONOUSLY (fire-and-
   forget, never blocking): the turn is summarized into the session memory
   (compacted before limits), and Cortex mines the deeper knowledge the visitor
   referred to — in DEEP mode (`use_graph: true`) now that the reply path is
@@ -122,12 +144,13 @@ source of truth.
   audio GET hits a warm/in-flight cache instead of a cold synth. (Venice TTS is
   several seconds even for a short lead — `VENICE_TTS_MODEL` choice dominates
   this; pick a fast one. The spoken lead is capped short to minimize synth time.)
-  **Proactive follow-up (closes the loop):** when an async
-  mine lands a NEW insight, the guide composes a short in-character aside (its TTS
-  pre-warmed) and stashes it on the session; the in-world guide polls **`GET
-  /v1/guide/followup?exhibition&session`** for ~50s after a fast reply and, on a
-  hit, speaks it — so a late insight actually reaches the visitor, not just maybe
-  the next question. **Durable/shared state (optional):** with `REDIS_ENABLED` +
+  **Follow-up (closes the loop):** EVERY question's Cortex result is delivered
+  as a follow-up via the public **`GET /v1/guide/followup?exhibition&session`** —
+  the composer receives the prior fast reply and either **extends** it (no
+  repetition) for normal questions, or **is** the answer after a library-router
+  ack. The in-world guide polls that endpoint for ~50s after a fast reply and,
+  on a hit (TTS pre-warmed), speaks it; a follow-up that arrives mid-speech is
+  queued so it never talks over the initial voice. **Durable/shared state (optional):** with `REDIS_ENABLED` +
   `REDIS` set, sessions + the shared insight cache write through to Redis
   (`guide-store.ts`, `ioredis`) so they survive a redeploy and span replicas;
   unset → pure in-process maps, identical to before. The `pendingInsight` /
@@ -145,10 +168,14 @@ source of truth.
   `CORTEX_API_KEY` on this Directus deployment** (see Env below) to reach the
   Library at all; without them every answer is a `fallback`.
   **Voice (optional):** when `VENICE_API_KEY` is set, `/v1/guide/ask`
-  synthesizes the answer with Venice TTS (`tts-qwen3-1-7b`), caches the mp3, and
+  synthesizes the answer with Venice TTS (default `VENICE_TTS_MODEL=tts-kokoro`,
+  ~0.8s synth vs ~11s for the old `tts-qwen3-1-7b`), caches the mp3, and
   returns an `audioUrl` the in-world guide plays; served at the public
-  **`GET /v1/guide/tts/:id.mp3`** (short-TTL in-memory cache). `speak`/`voice`
-  ride in the ask body; no key → text-only, no error.
+  **`GET /v1/guide/tts/:id.mp3`** (short-TTL in-memory cache). The default voice
+  is **model-aware** (`af_heart` for kokoro, `Serena` for qwen) — set only when
+  `VENICE_TTS_VOICE` is unset, so swapping the model alone never 400s on an
+  incompatible voice id. `speak`/`voice` ride in the ask body; no key →
+  text-only, no error.
 - **Auth** (`src/v1/auth.ts`): keys in the **`moca_api_keys`** collection
   (admin-managed; generate with `echo "moca_$(openssl rand -hex 24)"`), sent
   as `X-API-Key` or `Authorization: Bearer`. In-memory key cache (60 s) +
@@ -161,11 +188,14 @@ source of truth.
   unset → `/v1/library/*` answers 503 **and** the museum guide answers from
   exhibition context only, `fallback: true`, with a `[moca-guide]` boot
   warning), `VENICE_API_KEY` (+ optional `VENICE_API_URL`, `VENICE_TTS_MODEL`
-  default `tts-qwen3-1-7b`, `VENICE_TTS_VOICE` default `Serena`) — the guide's
+  default `tts-kokoro`, `VENICE_TTS_VOICE` model-aware default — `af_heart` for
+  kokoro, `Serena` for qwen — set only when unset) — the guide's
   voice; unset → guide stays text-only, `MUSEUMAGENT_BASEURL` +
   `MUSEUMAGENT_API_KEY` + `MUSEUMAGENT_MODEL` (OpenAI-compatible chat completions
   — the guide's fast hybrid reply brain; all three required to enable it, else
-  the guide stays Cortex-primary), `SOULWEAVER_API_URL` +
+  the guide stays Cortex-primary; MOCA runs `qwen3-5-35b-a3b` on Venice),
+  optional `GUIDE_DEBUG_CORTEX=true` (traces the guide's Cortex calls — kind,
+  status, latency, source docs — in the logs), `SOULWEAVER_API_URL` +
   `SOULWEAVER_API_HEADERS` (defaults to the public deployment at
   `https://soulweaver.museumofcryptoart.com`; override for self-hosted); and the
   shared Directus `REDIS_ENABLED` + `REDIS` (when set, the guide persists

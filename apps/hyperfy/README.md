@@ -106,11 +106,17 @@ fails loudly, not silently.
 
 Spawn with `--guide` (or tick **Exhibit curator** in the browser dialog) and
 the exhibition arrives with a resident: a VRM avatar (Oblak by default) that
-greets visitors and answers **free-text questions typed into the world chat**
-while standing near it (hold **E** to engage + start it following). Every
-conversation is **private and per-player** (`app.sendTo`), with the running
-history riding along so the curator reacts to the dialogue, not just the last
-question; a minimal bubble over its head shows only a welcome/loader line.
+greets visitors and answers **free-form questions** — type them in the world
+chat or read the reply in the billboarded **world-space panel** above its head
+(status · your question · the answer · a how-to hint), while standing near it
+(hold **E** to engage + start it following). Every conversation is **private and
+per-player** (`app.sendTo`), with the running history riding along so the
+curator reacts to the dialogue, not just the last question. A deterministic
+**library router** sends macro/historical/market/artist-deep-dive questions to
+Cortex with a quick in-character ack; every question's Cortex result then
+arrives moments later as a **follow-up** (`GET /v1/guide/followup`) that extends
+the fast reply — queued so it never talks over the first spoken clip. The panel
+text is mirrored to the visitor's private world chat as a scrollback transcript.
 
 ```
 visitor ──E / chat──▶ guide app (server script) ──▶ MOCA API /v1/guide/ask

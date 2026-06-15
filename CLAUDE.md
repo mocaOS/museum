@@ -152,12 +152,19 @@ guide** (`--guide` / the dialog's Museum guide toggle): an agentic VRM avatar
 (default `decc0.vrm` — Oblak, Art DeCC0 #2875; catalog at `apps/museum/public/avatars/`) that
 visitors hold E to talk to — per-player private Q&A about the exhibition,
 served by the MOCA API's public `/v1/guide/*` endpoints (context registered at
-spawn, enriched from Directus). Answers run a **hybrid** model: a fast direct
-LLM reply (`MUSEUMAGENT_*`, OpenAI-compatible — MOCA uses Venice) over exhibition
-metadata + an aggregated MOCA brief + per-visitor session memory, while Cortex
-mines deeper insights asynchronously into a separate bucket that enriches the
-next reply — reactive, and smarter each turn (Cortex-primary fallback +
-optional Art DeCC0 persona when `MUSEUMAGENT_*` is unset); script generator
+spawn, enriched from Directus). The conversation lives in a billboarded
+world-space **panel** above the guide (status · question · answer · hint),
+also mirrored to the visitor's private world chat — pure free-form chat, no
+numbered-question picking. Answers run a **hybrid** model: a fast direct
+LLM reply (`MUSEUMAGENT_*`, OpenAI-compatible — MOCA uses Venice, currently
+`qwen3-5-35b-a3b`) over exhibition metadata + an aggregated MOCA brief +
+per-visitor session memory, while a deterministic library router
+(`needsLibrary()`) defers macro/historical/market/artist-deep-dive questions to
+Cortex with a quick in-character ack. EVERY question's Cortex result is then
+delivered via the public **`GET /v1/guide/followup`** — extending the fast
+answer, or being the answer after an ack — so it gets smarter each turn
+(Cortex-primary fallback + optional Art DeCC0 persona when `MUSEUMAGENT_*` is
+unset). Voice via Venice TTS (default `tts-kokoro`). Script generator
 twins in `lib/guide-script.mjs` /
 `apps/museum/src/lib/museum/hyperfy/guide-script.ts`. The guide also ships
 as a drag-droppable `.hyp` app (`build-guide-app.mjs` CLI or the dialog's
