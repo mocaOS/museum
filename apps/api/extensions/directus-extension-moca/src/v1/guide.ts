@@ -118,6 +118,9 @@ export interface GuideContextArtwork {
   artist: string | null;
   description: string | null;
   collection: string | null;
+  /** Best-effort mint/creation date (year or YYYY-MM-DD) from OpenSea traits;
+   * null when the source data doesn't carry one. */
+  mintedAt: string | null;
 }
 
 export interface GuideContextRoom {
@@ -328,6 +331,54 @@ function latestVersion(map: Record<string, unknown>): string | null {
   )[keys.length - 1];
 }
 
+// ------------------------------------------------------- mint date ----
+
+/** Normalize a loose date string to a year ("2021") or ISO day ("2021-03-08").
+ * Deliberately avoids the lenient Date.parse (which mis-parses "minted 2019"
+ * and timezone-shifts bare months) — we only trust a strict ISO prefix, a unix
+ * timestamp, or a plain embedded year. */
+function normalizeMintDate(raw: string): string | null {
+  const s = String(raw).trim();
+  if (!s) return null;
+  if (/^\d{4}$/.test(s)) return s; // bare year
+  const iso = /^(\d{4}-\d{2}-\d{2})(?:[T ]|$)/.exec(s); // ISO date / timestamp prefix
+  if (iso) return iso[1];
+  if (/^\d{10,13}$/.test(s)) {
+    const ms = s.length >= 13 ? Number(s) : Number(s) * 1000;
+    const d = new Date(ms);
+    if (!Number.isNaN(d.getTime())) return d.toISOString().slice(0, 10);
+  }
+  const y = /\b(?:19|20)\d{2}\b/.exec(s); // a year embedded in "March 2021" etc.
+  return y ? y[0] : null;
+}
+
+/**
+ * Best-effort mint/creation date for an artwork. MOCA's nfts have no mint-date
+ * column and the OpenSea blob only carries `updated_at`, so we mine the OpenSea
+ * traits (many generative collections expose a "Created"/"Year"/"Date" trait)
+ * plus a few date-ish top-level keys some stored blobs include. Null when none.
+ */
+function extractMintDate(nft: any): string | null {
+  const o = nft?.response_opensea;
+  if (!o || typeof o !== "object") return null;
+  for (const k of ["created_date", "created_at", "mint_date", "minted_at", "creation_date"]) {
+    if (typeof o[k] === "string" && o[k].trim()) {
+      const d = normalizeMintDate(o[k]);
+      if (d) return d;
+    }
+  }
+  if (Array.isArray(o.traits)) {
+    for (const tr of o.traits) {
+      const ty = String(tr?.trait_type || "").toLowerCase();
+      if (/(^|\s)(date|created|mint|year)/.test(ty) && tr?.value != null) {
+        const d = normalizeMintDate(String(tr.value));
+        if (d) return d;
+      }
+    }
+  }
+  return null;
+}
+
 // ------------------------------------------------------- spatial ----
 
 /**
@@ -402,7 +453,7 @@ function locationLine(room: GuideContextRoom | null): string | null {
   // List the room's full curated set (capped) so "what pieces are in this room?"
   // is answerable directly from the metadata, with an exact count.
   const works = room.artworks
-    .map((a) => (a.title ? `“${a.title}”${a.artist ? ` by ${a.artist}` : ""}` : null))
+    .map((a) => (a.title ? `“${a.title}”${a.artist ? ` by ${a.artist}` : ""}${a.mintedAt ? ` (minted ${a.mintedAt})` : ""}` : null))
     .filter(Boolean) as string[];
   const shown = works.slice(0, 40);
   const more = works.length > shown.length ? ` (+${works.length - shown.length} more)` : "";
@@ -958,6 +1009,7 @@ export function registerGuideRoutes(
             artist: clampText(nft?.artist_name ?? a?.artist, 120),
             description: clampText(nft?.response_opensea?.description, ART_DESC_MAX),
             collection: clampText(nft?.collection, 80),
+            mintedAt: extractMintDate(nft),
           };
         })
         .filter((a) => a.title || a.artist);
@@ -1178,6 +1230,7 @@ export function registerGuideRoutes(
         const bits = [
           `“${a.title ?? "Untitled"}”`,
           a.artist ? `by ${a.artist}` : null,
+          a.mintedAt ? `minted ${a.mintedAt}` : null,
           a.collection ? `(${a.collection})` : null,
         ]
           .filter(Boolean)
@@ -1204,8 +1257,11 @@ export function registerGuideRoutes(
       `  say "sources/notes/the library say". It's simply what you know.`,
       `- KEEP THE VISITOR IN FLOW: always give them something vivid right now and leave a thread`,
       `  they'll want to pull next, so the conversation never stalls while you dig deeper.`,
-      `- If you truly don't know yet, stay in character, say so lightly, and point them at a work`,
-      `  or artist you do know. Never invent artworks or attributions.`
+      `- Give your best reply NOW from what you know here. For anything beyond these works —`,
+      `  cryptoart history, movements/eras, an artist's wider career, market context — keep that`,
+      `  first reply SHORT and don't pad it with invented movements or art-historical claims;`,
+      `  your runners are already pulling the real detail and it lands in a moment as a follow-up.`,
+      `- Never invent artworks, attributions, dates, movements, or biographical facts.`
     );
     return lines.join("\n");
   }
@@ -1392,25 +1448,29 @@ export function registerGuideRoutes(
   ): Promise<void> {
     if (!cortex.configured || session.pendingInsight) return;
     const norm = normTopic(question.slice(0, 120));
-    if (!norm || session.insightTopics.includes(norm)) return; // already known to this session
+    if (!norm) return;
+    // Already deepened this exact topic this session (and the immediate reply
+    // already folded the cached insight in) — no need to re-deliver.
+    if (session.insightTopics.includes(norm)) return;
     session.pendingInsight = true;
     try {
-      // Another visitor (or pre-warm) may already have mined this — reuse it for
-      // free. The fast reply already folded shared hits in, so don't re-announce.
+      // Reuse a pre-warmed / cross-visitor cached insight when there is one.
+      let insight: GuideInsight | null = null;
       const bucket = await loadSharedBucket(ctx.id);
-      const cached = bucket.get(norm);
-      if (cached) {
-        addSessionInsight(session, cached);
-        return;
+      insight = bucket.get(norm) || null;
+      if (insight) addSessionInsight(session, insight);
+      if (!insight) {
+        insight = await cortexMine(ctx, persona, question, here, session.summary);
+        if (insight) {
+          addSessionInsight(session, insight);
+          await putSharedInsight(ctx.id, norm, insight);
+        }
       }
-      const insight = await cortexMine(ctx, persona, question, here, session.summary);
-      if (!insight) return;
-      const added = addSessionInsight(session, insight);
-      await putSharedInsight(ctx.id, norm, insight);
-      // Compose + pre-warm a proactive aside only when this is genuinely NEW
-      // knowledge (the reply couldn't have used it) and we have a fast model.
-      if (added && museumAgent?.configured) {
-        await composeFollowup(session, persona, insight, voice, speak);
+      // Always deliver the library's deeper take as a follow-up — it answers the
+      // questions the fast reply can't (history, an artist's wider career, etc.)
+      // and adds depth to the ones it can.
+      if (insight && museumAgent?.configured) {
+        await composeFollowup(session, persona, insight, voice, speak, question);
       }
     } catch {
       /* insight mining is best-effort */
@@ -1421,8 +1481,10 @@ export function registerGuideRoutes(
   }
 
   /**
-   * Turn a freshly-mined insight into a single, in-character "by the way" line
-   * and stash it (with pre-warmed audio) for the next /guide/followup poll.
+   * Stash a follow-up (with pre-warmed audio) for the next /guide/followup poll:
+   * the deeper, Cortex-backed take on what the visitor just asked. Framed to
+   * ANSWER the question (when the fast reply couldn't) while not repeating what
+   * was already said — so it works whether the first reply nailed it or punted.
    */
   async function composeFollowup(
     session: GuideSession,
@@ -1430,31 +1492,33 @@ export function registerGuideRoutes(
     insight: GuideInsight,
     voice: string,
     speak: boolean,
+    question: string,
   ): Promise<void> {
     if (!museumAgent?.configured) return;
     try {
       const { status, text } = await museumAgent.chat({
         timeoutMs: FOLLOWUP_TIMEOUT_MS,
         temperature: 0.6,
-        maxTokens: 140,
+        maxTokens: 420,
         messages: [
           {
             role: "system",
             content:
-              `${persona.prompt}\n\nYou are ${persona.name}, a museum guide mid-conversation. You just ` +
-              "recalled a deeper detail about what the visitor last asked. Offer it as ONE short, warm " +
-              "aside in your own voice — start naturally (e.g. \"Oh — one more thing…\"), 1-2 sentences, " +
-              "no preamble, no lists, never mention sources or a library.",
+              `${persona.prompt}\n\nYou are ${persona.name}, a museum guide. A moment ago you gave the ` +
+              `visitor a quick reply; your runners have now pulled deeper material on their question. ` +
+              `Come back to them naturally (e.g. "So — about that…") and give the real, specific answer ` +
+              `in your own voice — 2-4 sentences. DON'T repeat what you already said; add the substance. ` +
+              `Never mention "the library", "sources", or notes — it's simply what you know.`,
           },
-          { role: "user", content: `The detail you just recalled:\n${insight.text}` },
+          { role: "user", content: `The visitor asked: "${question}"\n\nWhat you've now dug up:\n${insight.text}` },
         ],
       });
       const line = status === 200 && text ? text.replace(/\s*\[src_[^\]]*\]/g, "").trim() : "";
       if (!line) return;
       const audioUrl = speak ? prepareVoice(line, voice, true) : null;
-      session.pendingFollowup = { text: line.slice(0, 600), audioUrl, at: Date.now() };
+      session.pendingFollowup = { text: line.slice(0, 900), audioUrl, at: Date.now() };
     } catch {
-      /* the aside is a bonus — never block on it */
+      /* the follow-up is best-effort — never block on it */
     }
   }
 
