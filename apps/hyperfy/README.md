@@ -218,6 +218,13 @@ registration moment — the exhibition context is sent to the MOCA API then,
 not at drop time. The dropped app is retargetable in its inspector:
 exhibition id, persona, name and API are all props.
 
+Pass **`--tile-size`** (default 16) to match the size the rooms were spawned
+at — the guide bakes its room footprints + spatial map at this scale, so a
+mismatch makes it mis-resolve which room/work a visitor stands at. (The
+builder's Spawn dialog threads its "Room size" through automatically.)
+`build-guide-app.mjs` also takes the same `--decc0` / `--voice` / `--no-speak`
+/ `--soul` / `--soulweaver` / `--api` persona + voice flags as above.
+
 ## Spawn an exhibition (CLI)
 
 ```bash
