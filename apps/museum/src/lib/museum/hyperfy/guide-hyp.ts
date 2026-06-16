@@ -75,7 +75,7 @@ export async function registerGuideExhibition(
           location: {
             x: k * p.position[0],
             z: k * p.position[2],
-            r: (tileMeters * (p.scale || 1)) / 2,
+            r: (tileMeters * (Number(p.scale) || 1)) / 2,
           },
           artworks: p.artworks.map(a => ({ id: a.id, name: a.name, artist: a.artist })),
         })),
@@ -116,6 +116,11 @@ export interface GuideHypOptions {
   speak?: boolean;
   /** TTS voice id (Venice). Empty → the API's default voice. */
   voice?: string;
+  /** Meters one builder tile maps to in-world — MUST match the value the rooms
+   * were (or will be) spawned at (the dialog's "Room size", default 16). The
+   * guide bakes the room footprints + spatial map at this scale; a mismatch
+   * makes the guide mis-resolve which room/work the visitor is at. */
+  tileMeters?: number;
 }
 
 export async function buildGuideHyp(
@@ -125,8 +130,9 @@ export async function buildGuideHyp(
   const apiUrl = (guide.apiUrl || DEFAULT_GUIDE_API).replace(/\/+$/, "");
   const guideName = guide.name || "Oblak";
   const decc0Id = guide.decc0Id || 2875;
+  const tileMeters = guide.tileMeters ?? 16;
 
-  const registration = await registerGuideExhibition(exhibition, apiUrl);
+  const registration = await registerGuideExhibition(exhibition, apiUrl, tileMeters);
 
   const vrmRes = await fetch(guide.avatarUrl);
   if (!vrmRes.ok) throw new Error(`Guide avatar unreachable (${vrmRes.status})`);
@@ -149,10 +155,10 @@ export async function buildGuideHyp(
       avatarUrl: avatarAssetUrl,
       speak: guide.speak !== false,
       voice: guide.voice,
-      // World map of rooms + hung works. 16 m/tile matches the footprints
-      // registered above (registerGuideExhibition's default) — the same scale a
-      // standalone .hyp guide expects when dropped beside this exhibition.
-      spatialMap: buildGuideSpatialMap(exhibition, 16),
+      // World map of rooms + hung works at the SAME tile scale the footprints
+      // were registered at above — so a dropped .hyp guide resolves rooms/works
+      // correctly beside an exhibition spawned at this Room size.
+      spatialMap: buildGuideSpatialMap(exhibition, tileMeters),
     }),
   );
   const scriptAssetUrl = await hypAssetUrl(scriptBytes, "js");

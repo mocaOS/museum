@@ -454,7 +454,6 @@ if (world.isServer) {
     const s = session(playerId)
     const now = Date.now()
     if (s.busy || now - s.lastAsk < 1500) return
-    // "1"/"2"/"3" picks one of the suggestions last shown to this player.
     const question = text
     if (!question || question.length < 2) return
     setFollow(playerId)
@@ -585,8 +584,8 @@ if (world.isServer) {
   })
 
   // Free text: any chat from a visitor standing near the guide is a question
-  // — no panel needed, exactly what the greeting promises. Typing "1"-"3"
-  // picks an offered question. "/ask <question>" also works.
+  // — no panel needed, exactly what the greeting promises. "/ask <question>"
+  // also works.
   world.on('chat', (msg) => {
     try {
       if (!msg || !msg.fromId || typeof msg.body !== 'string') return
@@ -708,8 +707,9 @@ if (world.isClient) {
   let queuedFollowup = null // a follow-up waiting for the current voice to finish
   // While the guide is consulting the Library (the first reply was a holding
   // line), hold the "consulting" status until the real answer arrives — or this
-  // deadline passes (matches the server's ~50s follow-up window) so it never
-  // sticks forever if the follow-up never lands.
+  // deadline passes (a few seconds beyond the server's ~50s follow-up poll
+  // window, to cover the last poll's round-trip) so it never sticks forever if
+  // the follow-up never lands.
   let consultingUntil = 0
   let awaitLibrary = false // the current reply was a holding line; real answer pending
 
@@ -779,6 +779,7 @@ if (world.isClient) {
   let chunkStartedAt = 0      // clock when the current chunk's audio.play() was called
   let sawPlaying = false      // the current chunk's audio actually began
   let speaking = false        // a message is being spoken/revealed right now
+  let speakingBridge = false  // the current message is a "still researching" filler (cut it off when the real answer lands)
   let speakSilent = false     // revealing text with no audio (TTS off) — pace by secs
   let revealHead = ''         // text shown before the answer (e.g. the aside marker)
   let spoken = ''             // answer text revealed so far (grows one chunk at a time)
@@ -794,7 +795,7 @@ if (world.isClient) {
     return typeof u === 'string' && u ? (u.charAt(0) === '/' ? API + u : u) : null
   }
   function endSpeaking() {
-    speaking = false; chunkIdx = -1; voiceChunks = []
+    speaking = false; speakingBridge = false; chunkIdx = -1; voiceChunks = []
     stopAudio()
     panelState = awaitLibrary ? 'consulting' : 'idle'; thinkT = 0; renderStatus()
   }
@@ -851,8 +852,14 @@ if (world.isClient) {
     if (!speakSilent && audio) {
       const playing = !!audio.isPlaying
       if (playing) sawPlaying = true
+      // Hard ceiling: a clip that stalls mid-play (isPlaying stuck true on a
+      // buffer hiccup) would otherwise freeze the teleprompter forever. The
+      // estimate already ~tracks real duration, so 2× + the load grace never
+      // cuts a normally-playing clip — only a genuinely stuck one.
+      const maxSecs = (c && c.secs ? c.secs : 3) * 2 + LOAD_TIMEOUT
       if (sawPlaying && !playing) done = true                          // clip ended naturally
       else if (!sawPlaying && clock - chunkStartedAt > LOAD_TIMEOUT) done = true // audio never started — don't stall
+      else if (clock - chunkStartedAt > maxSecs) done = true           // clip stuck mid-play — force-advance
     } else if (clock - chunkStartedAt >= (c ? c.secs : 3)) {
       done = true                                                       // silent reveal, paced by estimate
     }
@@ -914,6 +921,7 @@ if (world.isClient) {
     // that the real, Library-sourced answer is being looked up.
     awaitLibrary = d.consulting === true
     consultingUntil = awaitLibrary ? clock + 55 : 0
+    speakingBridge = false // the initial reply / ack — never a filler; don't let a follow-up cut it
     // Reveal + speak the answer in lockstep (text follows the voice, chunk by
     // chunk). No chat mirror — the panel is the whole surface now.
     speakMessage(chunkList(d), d.text, '')
@@ -922,7 +930,7 @@ if (world.isClient) {
   // — but NEVER cut off the first reply's voice: if we're still speaking it's
   // queued and the per-frame loop delivers it the moment the voice finishes.
   function deliverFollowup(d) {
-    awaitLibrary = false; consultingUntil = 0
+    awaitLibrary = false; consultingUntil = 0; speakingBridge = false
     speakMessage(chunkList(d), d.text, '\\u2726  ')
   }
   // A short "still researching" filler the guide speaks while the library is
@@ -931,6 +939,7 @@ if (world.isClient) {
   function deliverBridge(d) {
     if (!awaitLibrary) return // the answer already landed — no filler
     consultingUntil = clock + 55 // extend the hold while we keep waiting
+    speakingBridge = true // a filler: the real answer cuts it off when it lands
     speakMessage(chunkList(d), d.text, '')
   }
   app.on('moca:guide:followup', (d) => {
@@ -939,9 +948,10 @@ if (world.isClient) {
       if (!speaking) deliverBridge(d) // fill the gap only when nothing's playing
       return
     }
-    // Wait out any voice still playing; once we're merely holding (consulting),
-    // deliver the real answer immediately.
-    if (speaking) queuedFollowup = d
+    // If a "still researching" bridge is playing, cut it off and deliver the
+    // real answer now (the bridge is only a filler). If the INITIAL reply / ack
+    // voice is still playing, queue so we never talk over it.
+    if (speaking && !speakingBridge) queuedFollowup = d
     else deliverFollowup(d)
   })
 

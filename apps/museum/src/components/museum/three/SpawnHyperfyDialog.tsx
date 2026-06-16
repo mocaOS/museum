@@ -364,6 +364,9 @@ export default function SpawnHyperfyDialog({
         avatarUrl: avatar.url,
         decc0Id: Number.isNaN(decc0Id) ? undefined : decc0Id,
         apiUrl: guideApiOverride(),
+        // Bake the guide's footprints + spatial map at the SAME Room size the
+        // rooms spawn at, so a non-default size doesn't mis-resolve rooms/works.
+        tileMeters,
       });
       downloadGuideHyp(blob, filename);
       setHypMsg(

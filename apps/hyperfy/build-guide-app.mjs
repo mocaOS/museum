@@ -36,7 +36,7 @@ const opt = (name, fallback) => {
 const flag = (name) => args.includes(`--${name}`);
 
 if (!file) {
-  console.error("Usage: node build-guide-app.mjs <exhibition.json> [--decc0 2875] [--voice <id>] [--no-speak] [-o guide.hyp]");
+  console.error("Usage: node build-guide-app.mjs <exhibition.json> [--decc0 2875] [--voice <id>] [--no-speak] [--tile-size 16] [-o guide.hyp]");
   process.exit(1);
 }
 
@@ -53,6 +53,12 @@ const GUIDE_AVATAR = opt(
 );
 const DECC0_ID = Number(opt("decc0", "2875")) || 0;
 const MOCA_API = (opt("api", process.env.MOCA_API_URL || "https://api.moca.qwellco.de")).replace(/\/+$/, "");
+// Meters one builder tile maps to in-world — MUST match the --tile-size the
+// rooms were spawned at (spawn-exhibition.mjs, default 16), or the guide bakes
+// its room footprints + spatial map at the wrong scale and mis-resolves which
+// room/work a visitor is at.
+const BUILDER_TILE = 8;
+const TILE_METERS = Number(opt("tile-size", "16")) || 16;
 
 // Persona beyond DeCC0s: --soul <SOUL.md file> bakes a custom soul into the
 // guide; --soulweaver <chainId:0xcontract:tokenId> references a Soulweaver
@@ -81,6 +87,10 @@ if (exhibition.format !== "moca-exhibition@1") {
   console.error(`Unsupported format: ${exhibition.format}`);
   process.exit(1);
 }
+if (!Array.isArray(exhibition.placements) || !exhibition.placements.length) {
+  console.error("Exhibition has no placements — nothing for the guide to talk about.");
+  process.exit(1);
+}
 
 const exhibitionId
   = exhibition.id || (exhibition.name || "exhibition").replace(/[^\w.:-]+/g, "-").toLowerCase();
@@ -106,12 +116,12 @@ if (REGISTER) {
         placements: exhibition.placements.map((p) => ({
           uid: p.uid,
           room: { id: p.room.id, title: p.room.title },
-          // Floor-plane center + footprint radius (meters); 16 m/tile, matching
-          // the guide's baked spatial map below and the other registrations.
+          // Floor-plane center + footprint radius (meters) at TILE_METERS/tile,
+          // matching the guide's baked spatial map below and the room spawn.
           location: {
-            x: (16 / 8) * p.position[0],
-            z: (16 / 8) * p.position[2],
-            r: (16 * (Number(p.scale) || 1)) / 2,
+            x: (TILE_METERS / BUILDER_TILE) * p.position[0],
+            z: (TILE_METERS / BUILDER_TILE) * p.position[2],
+            r: (TILE_METERS * (Number(p.scale) || 1)) / 2,
           },
           artworks: p.artworks.map((a) => ({ id: a.id, name: a.name, artist: a.artist })),
         })),
@@ -160,9 +170,10 @@ const scriptBytes = Buffer.from(
     avatarUrl: avatarAssetUrl,
     speak: GUIDE_SPEAK,
     voice: GUIDE_VOICE,
-    // World map of rooms + hung works (16 m/tile, matching the registration
-    // above) so the guide knows which room the visitor is in and what they face.
-    spatialMap: buildGuideSpatialMap(exhibition, 16),
+    // World map of rooms + hung works at TILE_METERS/tile (matching the
+    // registration above) so the guide knows which room the visitor is in and
+    // what they face.
+    spatialMap: buildGuideSpatialMap(exhibition, TILE_METERS),
   }),
   "utf8",
 );
