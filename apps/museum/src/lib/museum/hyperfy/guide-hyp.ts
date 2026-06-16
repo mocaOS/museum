@@ -1,4 +1,4 @@
-import { generateGuideScript } from "./guide-script";
+import { buildGuideSpatialMap, generateGuideScript } from "./guide-script";
 import { randomUuid } from "./hash";
 import { buildHyp, hypAssetUrl } from "./hyp";
 import type { HyperfyExhibition } from "@/components/museum/three/hyperfy-export";
@@ -149,6 +149,10 @@ export async function buildGuideHyp(
       avatarUrl: avatarAssetUrl,
       speak: guide.speak !== false,
       voice: guide.voice,
+      // World map of rooms + hung works. 16 m/tile matches the footprints
+      // registered above (registerGuideExhibition's default) — the same scale a
+      // standalone .hyp guide expects when dropped beside this exhibition.
+      spatialMap: buildGuideSpatialMap(exhibition, 16),
     }),
   );
   const scriptAssetUrl = await hypAssetUrl(scriptBytes, "js");

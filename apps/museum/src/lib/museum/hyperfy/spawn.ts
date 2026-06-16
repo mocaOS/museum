@@ -1,5 +1,5 @@
 import { DEFAULT_GUIDE_API, registerGuideExhibition } from "./guide-hyp";
-import { generateGuideScript } from "./guide-script";
+import { buildGuideSpatialMap, generateGuideScript } from "./guide-script";
 import {
   HyperfySession,
   deterministicUuid,
@@ -522,6 +522,9 @@ async function pushGuide(
       avatarUrl,
       speak: guide.speak !== false,
       voice: guide.voice,
+      // World map of rooms + hung works (same tile scale as the room spawn) so
+      // the guide tracks which room the visitor is in and what they look at.
+      spatialMap: buildGuideSpatialMap(exhibition, tileMeters),
     }),
   );
   const guideScriptUrl = await uploadAsset({

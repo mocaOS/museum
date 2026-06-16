@@ -112,16 +112,27 @@ source of truth.
   `MAX_ARTWORKS_PER_ROOM=256`, with `museum-agent.ts` `MSG_MAX_CHARS=300000`
   (kept above `MAX_CONTEXT_CHARS` so the transport never truncates the prompt).
   **Library routing:** a deterministic `needsLibrary()` router catches
-  macro/historical/era/market questions and artist deep-dives — those reply with
-  a quick in-character ACKNOWLEDGEMENT ("Great question — let me ask our
-  librarian…") and the real Cortex-backed answer is delivered moments later via
-  the follow-up (an earlier model-self-tagging `[ASK_LIBRARY]` approach was
-  tried and removed — the model wouldn't reliably defer; routing is now
-  server-side). **Spatial awareness:** the in-world guide sends `visitorPos`;
-  the API resolves the room via `whereIs()` — the room the visitor is inside,
-  else the NEAREST room (capped at ~3× its footprint radius) so "what's in this
-  room?" still resolves at a doorway/between rooms — and the location block
-  lists that room's full curated piece list with an exact count. **Mint dates:**
+  macro/historical/era/market questions, artist deep-dives, **and biographical /
+  persona questions about people NOT in the exhibition** ("who is Beeple?",
+  "tell me about Pak") — those reply with a quick in-character ACKNOWLEDGEMENT
+  ("Great question — let me ask our librarian…") and the real Cortex-backed
+  answer is delivered moments later via the follow-up (an earlier
+  model-self-tagging `[ASK_LIBRARY]` approach was tried and removed — the model
+  wouldn't reliably defer; routing is now server-side). The ack response carries
+  **`consulting: true`** so the in-world guide shows a "consulting the museum
+  library" status (held until the follow-up lands) instead of going idle.
+  Deictic phrasing ("this piece", "this room", "it") stays on the fast path.
+  **Spatial awareness:** the in-world guide resolves the visitor's room itself
+  from a baked world map and sends **`roomUid`** (+ `visitorPos` as a fallback);
+  the API prefers the explicit room, else `whereIs()` — the room the visitor is
+  inside, else the NEAREST room (capped at ~3× its footprint radius). It also
+  notices when `roomUid` **changed since the last turn** and tells the model the
+  visitor MOVED, so the guide stops narrating the room they started in. The
+  guide additionally sends **`focus`** (the work the visitor stands in front of,
+  resolved from the baked map) → a `[THE WORK RIGHT IN FRONT OF THE VISITOR]`
+  context line so "which artwork is this?" answers about the right piece. The
+  location block still lists the room's full curated piece list with an exact
+  count. **Mint dates:**
   each artwork carries a best-effort mint/creation date parsed from OpenSea
   traits (null when absent — MOCA has no mint-date column and the OpenSea blob
   only has `updated_at`), surfaced in the exhibition facts + location line.
@@ -137,13 +148,17 @@ source of truth.
   topic is already deep and Cortex isn't re-queried per visitor — `/v1/guide/ask`
   folds any cached hits into the context synchronously before replying (no added
   latency), and `POST /v1/guide/exhibitions` fire-and-forget **pre-warms** a few
-  of the exhibition's rooms/works into that cache on registration. **Snappy +
-  immediate voice:** the fast reply uses a tight token budget and `prepareVoice`
-  **pre-warms TTS synthesis at ask time** (fire-and-forget `synthPending`) so
-  synthesis runs in parallel with the visitor reading the text and the in-world
-  audio GET hits a warm/in-flight cache instead of a cold synth. (Venice TTS is
-  several seconds even for a short lead — `VENICE_TTS_MODEL` choice dominates
-  this; pick a fast one. The spoken lead is capped short to minimize synth time.)
+  of the exhibition's rooms/works into that cache on registration. **Full-answer
+  voice (chunked):** the WHOLE answer is spoken — `spokenChunks()` splits it into
+  short, sentence-aligned segments (≤320 chars) and `prepareVoiceChunks()`
+  returns an **`audioUrls[]`** the in-world guide plays back-to-back (a single
+  `audioUrl` = first chunk stays for older guides). This fixes the old
+  mid-message cutoff (a single ~360-char "spoken lead" truncated every longer
+  answer). The first one or two chunks are **pre-warmed at ask time**
+  (fire-and-forget `synthPending`) so the voice lands ~1-2s after the text;
+  later chunks synthesize lazily on their own GET. (Venice TTS is
+  several seconds per request — `VENICE_TTS_MODEL` choice dominates
+  this; pick a fast one.)
   **Follow-up (closes the loop):** EVERY question's Cortex result is delivered
   as a follow-up via the public **`GET /v1/guide/followup?exhibition&session`** —
   the composer receives the prior fast reply and either **extends** it (no

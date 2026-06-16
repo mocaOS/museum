@@ -159,12 +159,20 @@ numbered-question picking. Answers run a **hybrid** model: a fast direct
 LLM reply (`MUSEUMAGENT_*`, OpenAI-compatible — MOCA uses Venice, currently
 `qwen3-5-35b-a3b`) over exhibition metadata + an aggregated MOCA brief +
 per-visitor session memory, while a deterministic library router
-(`needsLibrary()`) defers macro/historical/market/artist-deep-dive questions to
-Cortex with a quick in-character ack. EVERY question's Cortex result is then
-delivered via the public **`GET /v1/guide/followup`** — extending the fast
-answer, or being the answer after an ack — so it gets smarter each turn
-(Cortex-primary fallback + optional Art DeCC0 persona when `MUSEUMAGENT_*` is
-unset). Voice via Venice TTS (default `tts-kokoro`). Script generator
+(`needsLibrary()`) defers macro/historical/market/artist-deep-dive questions
+**and persona questions about people not in the exhibition** to Cortex with a
+quick in-character ack (the ack carries `consulting:true` so the guide shows a
+"consulting the museum library" status until the answer lands). EVERY question's
+Cortex result is then delivered via the public **`GET /v1/guide/followup`** —
+extending the fast answer, or being the answer after an ack — so it gets smarter
+each turn (Cortex-primary fallback + optional Art DeCC0 persona when
+`MUSEUMAGENT_*` is unset). **Spatially aware:** the guide is baked with a
+world-space map of the rooms + hung works (from the same slot geometry the room
+apps use), resolves which room the visitor is in (tracking them as they move)
+and which work they stand in front of, and sends `roomUid`+`focus` so answers
+ground in the here-and-now ("which artwork is this?"). Voice via Venice TTS
+(default `tts-kokoro`) speaks the WHOLE answer as back-to-back `audioUrls`
+chunks (no mid-message cutoff). Script generator
 twins in `lib/guide-script.mjs` /
 `apps/museum/src/lib/museum/hyperfy/guide-script.ts`. The guide also ships
 as a drag-droppable `.hyp` app (`build-guide-app.mjs` CLI or the dialog's

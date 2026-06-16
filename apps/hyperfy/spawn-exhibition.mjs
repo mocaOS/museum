@@ -80,7 +80,7 @@ import {
   uploadAsset,
   yawToQuaternion,
 } from "./lib/protocol.mjs";
-import { generateGuideScript } from "./lib/guide-script.mjs";
+import { buildGuideSpatialMap, generateGuideScript } from "./lib/guide-script.mjs";
 import { generateRoomScript } from "./lib/room-script.mjs";
 
 // ---------------------------------------------------------------- args ----
@@ -476,6 +476,9 @@ if (GUIDE) {
         avatarUrl,
         speak: GUIDE_SPEAK,
         voice: GUIDE_VOICE,
+        // World map of rooms + hung works (same TILE_METERS as the room spawn)
+        // so the guide tracks which room the visitor is in and what they face.
+        spatialMap: buildGuideSpatialMap(exhibition, TILE_METERS),
       }),
       "utf8",
     );

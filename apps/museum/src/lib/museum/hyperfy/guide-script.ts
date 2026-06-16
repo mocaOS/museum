@@ -37,6 +37,74 @@ function inline(value: unknown): string {
   return JSON.stringify(value).replace(/\u2028/g, "\\u2028").replace(/\u2029/g, "\\u2029");
 }
 
+const BUILDER_TILE = 8;
+
+export interface GuideSpatialMap {
+  rooms: { uid: string; title: string; x: number; z: number; r: number }[];
+  works: { uid: string; id: number | null; slot: string; title: string | null; artist: string | null; x: number; z: number }[];
+}
+
+/**
+ * Build the guide's world-space spatial map from an exhibition export \u2014 the
+ * SAME tile-normalization + slot transforms the spawners use to place rooms and
+ * hang works, so the guide's idea of "which room / which work" matches what's
+ * actually in the world. Rooms get their floor-plane center + footprint radius;
+ * every hung work gets its world x/z (room entity transform \u00d7 baked slot anchor).
+ *
+ * KEEP IN SYNC with the twin in apps/hyperfy/lib/guide-script.mjs.
+ *
+ * @param tileMeters meters one builder tile maps to (must match the spawn).
+ */
+export function buildGuideSpatialMap(
+  exhibition: { placements: any[] },
+  tileMeters = 16,
+): GuideSpatialMap {
+  const k = tileMeters / BUILDER_TILE;
+  const rooms: GuideSpatialMap["rooms"] = [];
+  const works: GuideSpatialMap["works"] = [];
+  const placements = Array.isArray(exhibition?.placements) ? exhibition.placements : [];
+  placements.forEach((p: any, i: number) => {
+    const uid = String(p?.uid || `p${i}`);
+    const rotY = p?.rotationY || 0;
+    const cos = Math.cos(rotY), sin = Math.sin(rotY);
+    const cx = k * p.position[0]; // tile center = room footprint center
+    const cz = k * p.position[2];
+    const fp = p?.room?.footprint;
+    const go = p?.room?.groundOffset;
+    let rootScale = 1;
+    let ex = cx, ez = cz; // room ENTITY world origin (includes the ground recenter)
+    if (fp && fp > 0 && Array.isArray(go)) {
+      rootScale = (tileMeters / fp) * (p.scale || 1);
+      const ox = rootScale * go[0], oz = rootScale * go[2];
+      ex = cx + ox * cos + oz * sin;
+      ez = cz - ox * sin + oz * cos;
+    }
+    rooms.push({
+      uid,
+      title: String(p?.room?.title || ""),
+      x: cx, z: cz,
+      r: (tileMeters * (p.scale || 1)) / 2,
+    });
+    const slotMap: Record<string, any> = {};
+    for (const s of (Array.isArray(p?.slots) ? p.slots : [])) if (s && s.id) slotMap[s.id] = s;
+    for (const a of (Array.isArray(p?.artworks) ? p.artworks : [])) {
+      const s = slotMap[a?.slotId];
+      if (!s || !Array.isArray(s.position)) continue;
+      const sx = rootScale * s.position[0], sz = rootScale * s.position[2];
+      works.push({
+        uid,
+        id: typeof a.id === "number" ? a.id : null,
+        slot: String(a.slotId || ""),
+        title: a.name != null ? a.name : null,
+        artist: a.artist != null ? a.artist : null,
+        x: ex + sx * cos + sz * sin,
+        z: ez - sx * sin + sz * cos,
+      });
+    }
+  });
+  return { rooms, works };
+}
+
 export interface GuideScriptOptions {
   /** Stable exhibition id (registered with the guide API). */
   exhibitionId: string;
@@ -64,6 +132,16 @@ export interface GuideScriptOptions {
   speak?: boolean;
   /** TTS voice id (Venice). Empty → the API's default voice. */
   voice?: string;
+  /**
+   * World-space map of the exhibition's rooms (center + footprint radius) and
+   * every hung work (world x/z) — baked from the SAME room/slot geometry the
+   * room apps use, so the guide knows which room a visitor is in and which work
+   * they're standing in front of, and follows them as they move between rooms.
+   */
+  spatialMap?: {
+    rooms?: { uid: string; title?: string; x: number; z: number; r: number }[];
+    works?: { uid: string; id?: number | null; slot?: string; title?: string | null; artist?: string | null; x: number; z: number }[];
+  } | null;
 }
 
 /** @returns the app script source */
@@ -82,6 +160,7 @@ export function generateGuideScript({
   avatarUrl = "",
   speak = true,
   voice = "",
+  spatialMap = null,
 }: GuideScriptOptions): string {
   const config = {
     exhibition: { id: exhibitionId, name: exhibitionName, rooms: roomCount, artworks: artworkCount },
@@ -97,6 +176,31 @@ export function generateGuideScript({
     avatarUrl: String(avatarUrl || ""),
     speak: speak !== false,
     voice: String(voice || "").slice(0, 40),
+    spatial: {
+      rooms: Array.isArray(spatialMap?.rooms)
+        ? spatialMap!.rooms
+            .filter((r) => r && typeof r.x === "number" && typeof r.z === "number")
+            .slice(0, 80)
+            .map((r) => ({
+              uid: String(r.uid || "").slice(0, 40),
+              title: String(r.title || "").slice(0, 160),
+              x: r.x, z: r.z, r: typeof r.r === "number" && r.r > 0 ? r.r : 8,
+            }))
+        : [],
+      works: Array.isArray(spatialMap?.works)
+        ? spatialMap!.works
+            .filter((w) => w && typeof w.x === "number" && typeof w.z === "number")
+            .slice(0, 2000)
+            .map((w) => ({
+              uid: String(w.uid || "").slice(0, 40),
+              id: Number.isInteger(Number(w.id)) ? Number(w.id) : null,
+              slot: String(w.slot || "").slice(0, 40),
+              title: w.title ? String(w.title).slice(0, 160) : null,
+              artist: w.artist ? String(w.artist).slice(0, 120) : null,
+              x: w.x, z: w.z,
+            }))
+        : [],
+    },
   };
 
   return `// MOCA museum guide — generated by the Museum of Crypto Art world builder.
@@ -122,6 +226,12 @@ app.configure([
 
 const BAKED = ${inline(config.exhibition)}
 const BAKED_SUGGESTIONS = ${inline(config.suggestions)}
+// World-space map of the exhibition (baked from the room/slot geometry the
+// room apps hang works on): rooms = floor-plane center + footprint radius,
+// works = each hung piece's world x/z. Lets the guide resolve which room the
+// visitor is in (so it tracks them across rooms) and which work they're
+// standing in front of (so "which artwork is this?" answers about the right one).
+const SPATIAL = ${inline(config.spatial)}
 
 const str = (v, d) => (typeof v === 'string' && v.trim() ? v.trim() : d)
 const numOr = (v, d) => (typeof v === 'number' && v === v ? v : d)
@@ -209,6 +319,42 @@ function moveGuide(dt, followId, home) {
   return following
 }
 
+// ---- spatial awareness ----------------------------------------------------
+// Resolve where the visitor is from their world position against the baked map,
+// so the guide tells the API the room (and the work they're facing) explicitly
+// — robust as they walk between rooms, instead of the API guessing from coords.
+const FOCUS_RANGE = 6 // meters: how close to a work counts as "standing at it"
+function resolveRoom(px, pz) {
+  let inside = null, bestIn = Infinity
+  let near = null, bestNear = Infinity, nearR = 0
+  for (const r of SPATIAL.rooms) {
+    const dx = r.x - px, dz = r.z - pz
+    const d = Math.sqrt(dx * dx + dz * dz)
+    if (d <= r.r && d < bestIn) { bestIn = d; inside = r }
+    if (d < bestNear) { bestNear = d; near = r; nearR = r.r }
+  }
+  if (inside) return inside
+  if (near) { const cap = Math.max(nearR * 3, nearR + 20); if (bestNear <= cap) return near }
+  return null
+}
+// The single work the visitor is at: nearest within range, biased toward the
+// piece they FACE (forward ≈ visitor − guide, since the guide trails them) and
+// toward works in the room they're in.
+function resolveFocus(px, pz, roomUid, fwdx, fwdz) {
+  let best = null, bestScore = -Infinity
+  const haveFwd = typeof fwdx === 'number' && typeof fwdz === 'number' && (fwdx || fwdz)
+  for (const w of SPATIAL.works) {
+    const dx = w.x - px, dz = w.z - pz
+    const d = Math.sqrt(dx * dx + dz * dz)
+    if (d > FOCUS_RANGE) continue
+    let score = -d
+    if (haveFwd && d > 0.001) score += ((dx / d) * fwdx + (dz / d) * fwdz) * 2.5 // reward ahead-of-you
+    if (roomUid && w.uid === roomUid) score += 1.5 // prefer this room's works
+    if (score > bestScore) { bestScore = score; best = w }
+  }
+  return best
+}
+
 // ---------------------------------------------------------------- server ----
 if (world.isServer) {
   // Whoever last interacts becomes the follow target (broadcast to clients via
@@ -259,6 +405,7 @@ if (world.isServer) {
           app.sendTo(playerId, 'moca:guide:followup', {
             text: String(d.text),
             audioUrl: typeof d.audioUrl === 'string' ? d.audioUrl : null,
+            audioUrls: Array.isArray(d.audioUrls) && d.audioUrls.length ? d.audioUrls : null,
             persona: NAME,
             suggestions: s.suggestions,
           })
@@ -299,9 +446,25 @@ if (world.isServer) {
     let persona = NAME
     let sources = []
     let audioUrl = null
+    let audioUrls = null
     let mode = null
+    let consulting = false
     try {
       const player = world.getPlayer(playerId)
+      // Resolve the visitor's room + the work they're standing in front of from
+      // their live world position (the guide trails them, so visitor − guide is
+      // a decent "facing" hint). Sent explicitly so the API tracks them as they
+      // move and grounds "which artwork is this?" on the right piece.
+      let roomUid, focus
+      if (player && player.position) {
+        const px = player.position.x, pz = player.position.z
+        const room = resolveRoom(px, pz)
+        roomUid = room ? room.uid : undefined
+        const fdx = px - app.position.x, fdz = pz - app.position.z
+        const flen = Math.sqrt(fdx * fdx + fdz * fdz)
+        const work = resolveFocus(px, pz, roomUid, flen > 0.3 ? fdx / flen : 0, flen > 0.3 ? fdz / flen : 0)
+        if (work) focus = { artworkId: work.id || undefined, slotId: work.slot || undefined, title: work.title || undefined, artist: work.artist || undefined }
+      }
       const res = await fetch(API + '/v1/guide/ask', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -318,10 +481,13 @@ if (world.isServer) {
           voice: VOICE || undefined,
           visitor: player && player.name ? String(player.name).slice(0, 48) : undefined,
           // Spatial awareness: where the visitor (whom the guide follows) and the
-          // guide are standing, in world meters — the API maps these to the room
-          // they're in to situate (and narrow) the answer.
+          // guide are standing, in world meters — plus the room + the specific
+          // work the guide resolved from the baked map, so the answer situates
+          // exactly where the visitor is (and what they're looking at).
           visitorPos: player && player.position ? { x: player.position.x, z: player.position.z } : undefined,
           guidePos: { x: app.position.x, z: app.position.z },
+          roomUid,
+          focus,
         }),
       })
       if (res && res.ok) {
@@ -333,7 +499,9 @@ if (world.isServer) {
           if (Array.isArray(d.suggestions) && d.suggestions.length) s.suggestions = d.suggestions
           if (Array.isArray(d.sources)) sources = d.sources
           if (typeof d.audioUrl === 'string') audioUrl = d.audioUrl
+          if (Array.isArray(d.audioUrls) && d.audioUrls.length) audioUrls = d.audioUrls
           if (typeof d.mode === 'string') mode = d.mode
+          consulting = d.consulting === true
         }
       }
     } catch (e) {
@@ -352,6 +520,11 @@ if (world.isServer) {
       persona,
       sources,
       audioUrl,
+      audioUrls,
+      // The answer is just a holding line — the real, Library-sourced answer is
+      // being looked up and arrives as a follow-up. The client shows a
+      // "consulting the museum library" state until then.
+      consulting,
       suggestions: s.suggestions,
       viaChat: !!viaChat,
     })
@@ -491,11 +664,17 @@ if (world.isClient) {
     hint: '#6f747b',
   }
   let panel = null, statusNode = null, titleNode = null, qNode = null, aNode = null
-  let panelState = 'idle' // idle | thinking | speaking
+  let panelState = 'idle' // idle | thinking | consulting | speaking
   let thinkT = 0
   let clock = 0           // seconds, accumulated from update(dt)
   let speakingUntil = 0   // clock time the "speaking" indicator should hold until
   let queuedFollowup = null // a follow-up waiting for the current clip to finish
+  // While the guide is consulting the Library (the first reply was a holding
+  // line), hold the "consulting" status until the real answer arrives — or this
+  // deadline passes (matches the server's ~50s follow-up window) so it never
+  // sticks forever if the follow-up never lands.
+  let consultingUntil = 0
+  let awaitLibrary = false // the current reply was a holding line; real answer pending
 
   function clip(s, n) { s = String(s || ''); return s.length > n ? s.slice(0, n - 1) + '\\u2026' : s }
   function setVal(node, v) { if (node) { try { node.value = v } catch (e) {} } }
@@ -505,6 +684,12 @@ if (world.isClient) {
     if (panelState === 'thinking') {
       const dots = '.'.repeat(1 + (Math.floor(thinkT * 2) % 3))
       setVal(statusNode, '\\u25cf  ' + NAME + ' is thinking' + dots)
+      setColor(statusNode, C.think)
+    } else if (panelState === 'consulting') {
+      // Searching the deeper records — held from the holding-line until the
+      // real, Library-sourced answer lands as a follow-up.
+      const dots = '.'.repeat(1 + (Math.floor(thinkT * 2) % 3))
+      setVal(statusNode, '\\u25c8  consulting the museum library' + dots)
       setColor(statusNode, C.think)
     } else if (panelState === 'speaking') {
       setVal(statusNode, '\\u25cf  speaking\\u2026')
@@ -538,27 +723,51 @@ if (world.isClient) {
   }
   buildPanel()
 
-  // ---- voice: an audio node that plays each synthesized answer --------------
+  // ---- voice: play the WHOLE answer as a sequence of audio clips ------------
+  // The API returns one short audio chunk per ~sentence-group (audioUrls) so the
+  // voice never cuts off mid-message. We play them BACK-TO-BACK: there's no
+  // end-event in the sandbox, so each clip's length is estimated from the text
+  // and the next chunk starts when that estimate elapses.
   let audio = null
-  function speakAnswer(url, text) {
-    if (!SPEAK || !url) return
-    try {
-      if (audio) {
-        try { audio.stop() } catch (e) {}
-        try { app.remove(audio) } catch (e) {}
-        audio = null
-      }
-      audio = app.create('audio', { src: url, spatial: true, volume: 1, loop: false })
-      app.add(audio)
-      audio.play()
-      // Hold the "speaking" state for a rough estimate of the clip length so the
-      // indicator + talk emote track the voice (no end-event in the sandbox).
-      const secs = Math.min(15, Math.max(3, Math.round(String(text || '').length * 0.055)))
-      speakingUntil = clock + secs
-      panelState = 'speaking'; renderStatus()
-    } catch (e) {
-      console.error('[moca-guide] audio failed', e && e.message)
+  let speakQueue = []     // remaining chunk URLs to play this turn
+  let perChunkSecs = 0    // estimated seconds per chunk
+  let nextChunkAt = 0     // clock time to start the next chunk
+  function stopAudio() {
+    speakQueue = []; nextChunkAt = 0
+    if (audio) {
+      try { audio.stop() } catch (e) {}
+      try { app.remove(audio) } catch (e) {}
+      audio = null
     }
+  }
+  function playNextChunk() {
+    if (!speakQueue.length) { nextChunkAt = 0; return }
+    const url = resolveAudio(speakQueue.shift())
+    if (audio) { try { audio.stop() } catch (e) {}; try { app.remove(audio) } catch (e) {}; audio = null }
+    if (url) {
+      try {
+        audio = app.create('audio', { src: url, spatial: true, volume: 1, loop: false })
+        app.add(audio)
+        audio.play()
+      } catch (e) {
+        console.error('[moca-guide] audio failed', e && e.message)
+      }
+    }
+    nextChunkAt = speakQueue.length ? clock + perChunkSecs : 0
+  }
+  // urls: array of chunk URLs covering the whole message (falls back to [url]).
+  function speakAnswer(urls, text) {
+    if (!SPEAK) return
+    const list = (Array.isArray(urls) ? urls : [urls]).filter((u) => typeof u === 'string' && u).slice(0, 12)
+    if (!list.length) return
+    stopAudio()
+    speakQueue = list
+    // Estimate total spoken length from the text, split across the chunks.
+    const totalSecs = Math.min(120, Math.max(3, Math.round(String(text || '').length * 0.06)))
+    perChunkSecs = totalSecs / list.length
+    speakingUntil = clock + totalSecs
+    panelState = 'speaking'; renderStatus()
+    playNextChunk()
   }
   function resolveAudio(u) {
     return typeof u === 'string' && u ? (u.charAt(0) === '/' ? API + u : u) : null
@@ -570,8 +779,16 @@ if (world.isClient) {
     chunks.slice(0, 6).forEach((c) => { try { world.chat({ from: from || NAME, body: c }, false) } catch (e) {} })
   }
 
+  // The chunk list from a payload (whole-message audioUrls; falls back to the
+  // single audioUrl for older API responses).
+  function audioList(d) {
+    if (d && Array.isArray(d.audioUrls) && d.audioUrls.length) return d.audioUrls
+    return d && typeof d.audioUrl === 'string' && d.audioUrl ? [d.audioUrl] : []
+  }
   app.on('moca:guide:thinking', (d) => {
     panelState = 'thinking'; thinkT = 0; speakingUntil = 0
+    awaitLibrary = false; consultingUntil = 0
+    stopAudio() // a new question cuts off any answer still being spoken
     queuedFollowup = null // a new turn supersedes any pending follow-up
     setVal(qNode, d && d.question ? 'you asked: \\u201c' + clip(d.question, 120) + '\\u201d' : '')
     setVal(aNode, '')
@@ -581,23 +798,32 @@ if (world.isClient) {
     if (!d) return
     setVal(qNode, d.question ? 'you asked: \\u201c' + clip(d.question, 120) + '\\u201d' : '')
     setVal(aNode, clip(d.text, 380))
+    setColor(aNode, C.body)
     mirrorChat(d.text, str(d.persona, NAME))
-    const au = resolveAudio(d.audioUrl)
-    if (au) speakAnswer(au, d.text)
-    else { panelState = 'idle'; renderStatus() }
+    // A "consulting" reply is just a holding line — keep the visitor informed
+    // that the real, Library-sourced answer is being looked up.
+    awaitLibrary = d.consulting === true
+    consultingUntil = awaitLibrary ? clock + 55 : 0
+    const list = audioList(d)
+    if (list.length) speakAnswer(list, d.text)
+    else { panelState = awaitLibrary ? 'consulting' : 'idle'; thinkT = 0; renderStatus() }
   })
   // The librarian's deeper answer, dug up after the first reply. Render+speak it
   // — but NEVER cut off the first reply's voice: if we're still speaking, queue
   // it and the per-frame loop delivers it the moment the current clip finishes.
   function deliverFollowup(d) {
+    awaitLibrary = false; consultingUntil = 0
     setVal(aNode, '\\u2726  ' + clip(d.text, 360))
     setColor(aNode, C.body)
     mirrorChat('\\u2726 ' + d.text, str(d.persona, NAME))
-    const au = resolveAudio(d.audioUrl)
-    if (au) speakAnswer(au, d.text)
+    const list = audioList(d)
+    if (list.length) speakAnswer(list, d.text)
+    else { panelState = 'idle'; thinkT = 0; renderStatus() }
   }
   app.on('moca:guide:followup', (d) => {
     if (!d || !d.text) return
+    // Wait out the holding-line's own voice, but a consulting state can be
+    // replaced immediately (that's the answer the visitor is waiting for).
     if (panelState === 'speaking' && clock < speakingUntil) queuedFollowup = d
     else deliverFollowup(d)
   })
@@ -633,22 +859,31 @@ if (world.isClient) {
     clock += dt
     const following = moveGuide(dt, followId, HOME)
 
-    // Drop out of "speaking" once the estimated clip has played.
-    if (panelState === 'speaking' && clock >= speakingUntil) { panelState = 'idle'; renderStatus() }
+    // Advance through the answer's audio chunks so the WHOLE message is spoken.
+    if (nextChunkAt && clock >= nextChunkAt) playNextChunk()
+    // Drop out of "speaking" once the estimated clips have played — into the
+    // "consulting" hold if the real Library answer is still pending, else idle.
+    if (panelState === 'speaking' && clock >= speakingUntil) {
+      panelState = awaitLibrary ? 'consulting' : 'idle'; thinkT = 0; renderStatus()
+    }
+    // Give up the consulting hold if the follow-up never lands within the window.
+    if (panelState === 'consulting' && consultingUntil && clock >= consultingUntil) {
+      awaitLibrary = false; consultingUntil = 0; panelState = 'idle'; renderStatus()
+    }
     // A queued follow-up plays the moment the first reply's voice has finished —
     // so the librarian answer never talks over the initial TTS.
     if (queuedFollowup && (panelState !== 'speaking' || clock >= speakingUntil)) {
       const d = queuedFollowup; queuedFollowup = null; deliverFollowup(d)
     }
-    // Animate the thinking dots while a question is in flight.
-    if (panelState === 'thinking') { thinkT += dt; renderStatus() }
+    // Animate the dots while a question is in flight or the library is consulted.
+    if (panelState === 'thinking' || panelState === 'consulting') { thinkT += dt; renderStatus() }
 
     // Locomotion emote: mirror the FOLLOWED player's motion so the curator
     // flies when they fly up, falls when they drop, and walks on the ground.
     // (The player proxy has no velocity/grounded flag, so derive it from their
     // per-frame position; HOME.y is the curator's ground post = ground ref.)
     const mdt = Math.max(dt, 0.001)
-    let want = (panelState === 'thinking' || panelState === 'speaking') ? EMOTE.talk : EMOTE.idle
+    let want = (panelState === 'thinking' || panelState === 'speaking' || panelState === 'consulting') ? EMOTE.talk : EMOTE.idle
     let fp = null
     if (followId) { try { fp = world.getPlayer(followId) } catch (e) {} }
     if (fp && fp.position) {

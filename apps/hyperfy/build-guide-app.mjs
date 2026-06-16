@@ -23,7 +23,7 @@
 
 import crypto from "node:crypto";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { generateGuideScript } from "./lib/guide-script.mjs";
+import { buildGuideSpatialMap, generateGuideScript } from "./lib/guide-script.mjs";
 import { buildHyp, hypAssetUrl } from "./lib/hyp.mjs";
 
 // ---------------------------------------------------------------- args ----
@@ -106,6 +106,13 @@ if (REGISTER) {
         placements: exhibition.placements.map((p) => ({
           uid: p.uid,
           room: { id: p.room.id, title: p.room.title },
+          // Floor-plane center + footprint radius (meters); 16 m/tile, matching
+          // the guide's baked spatial map below and the other registrations.
+          location: {
+            x: (16 / 8) * p.position[0],
+            z: (16 / 8) * p.position[2],
+            r: (16 * (Number(p.scale) || 1)) / 2,
+          },
           artworks: p.artworks.map((a) => ({ id: a.id, name: a.name, artist: a.artist })),
         })),
       }),
@@ -153,6 +160,9 @@ const scriptBytes = Buffer.from(
     avatarUrl: avatarAssetUrl,
     speak: GUIDE_SPEAK,
     voice: GUIDE_VOICE,
+    // World map of rooms + hung works (16 m/tile, matching the registration
+    // above) so the guide knows which room the visitor is in and what they face.
+    spatialMap: buildGuideSpatialMap(exhibition, 16),
   }),
   "utf8",
 );

@@ -174,9 +174,15 @@ interface GuideSession {
   insightTopics: string[];
   pendingInsight: boolean;
   summarizing: boolean;
+  /** The room the visitor was in on the previous turn — lets us notice when
+   * they've walked into a NEW room and tell the guide so it stops narrating the
+   * room they started in. In-memory only (live spatial state; not persisted). */
+  lastRoomUid?: string | null;
   /** A proactive aside the guide composed when a deeper insight landed AFTER
-   * the reply — delivered when the in-world guide next polls /guide/followup. */
-  pendingFollowup?: { text: string; audioUrl: string | null; at: number } | null;
+   * the reply — delivered when the in-world guide next polls /guide/followup.
+   * `audioUrls` covers the WHOLE aside (sequential chunks); `audioUrl` is the
+   * first chunk, kept for older in-world guides. */
+  pendingFollowup?: { text: string; audioUrl: string | null; audioUrls?: string[]; at: number } | null;
 }
 
 /** Normalize a topic/question so trivial rewordings collapse to one key. */
@@ -467,6 +473,23 @@ function locationLine(room: GuideContextRoom | null): string | null {
   );
 }
 
+/** The single work the visitor is standing in front of (resolved in-world from
+ * their position) — so "which artwork is this?" / "tell me about this piece"
+ * answers about the RIGHT work, not a guess from the room's list. */
+function focusLine(focus: { title?: string | null; artist?: string | null } | null): string | null {
+  if (!focus) return null;
+  const title = clampText(focus.title, 160);
+  const artist = clampText(focus.artist, 120);
+  if (!title && !artist) return null;
+  const work = title ? `“${title}”${artist ? ` by ${artist}` : ""}` : `a work by ${artist}`;
+  return (
+    `[THE WORK RIGHT IN FRONT OF THE VISITOR] They are standing directly in front of ${work}. ` +
+    `When they say “this”, “this piece/work/artwork”, “this one”, or ask “which artwork is this?” / ` +
+    `“what am I looking at?”, THIS specific work is what they mean — name it and speak about it directly. ` +
+    `Only look past it if they clearly ask about something else.`
+  );
+}
+
 // ------------------------------------------------------- routing ----
 
 // Warm, in-character holding lines while the librarian is consulted (fallback
@@ -495,8 +518,19 @@ function needsLibrary(ctx: GuideContext, question: string): boolean {
   if (/\b(in|around|during|by|before|after) (?:the )?(?:19|20)\d\d\b/.test(q) &&
       /(crypto|nft|art|scene|world|happen|movement|going on|mint)/.test(q)) return true;
   if (/\b(art history|movement|zeitgeist|influenced? by|influence of|compared to|compare it|legacy|significance|how does this relate)\b/.test(q)) return true;
-  // Deep-dive on an exhibition artist (their wider story, not the work on show).
-  if (/\b(who is|who was|tell me (?:more )?about|more about|background on|her career|his career|their career|other works?|what else|known for|famous for|biograph)\b/.test(q)) {
+  // Biographical / persona deep-dive: "who is X", "tell me about X", "what is X
+  // known for". These belong to the Library whether or not X is on show — a
+  // visitor asking about a person/persona NOT in this exhibition must get a
+  // brief "let me look that up" and the real, sourced answer as a follow-up,
+  // not an invented mini-bio from the fast model. We DON'T route when the
+  // visitor is clearly pointing at the here-and-now ("this piece", "this room",
+  // "it") — the fast path grounds those in the exhibition facts in front of them.
+  const biographical =
+    /\b(who (?:is|was|are|were)|tell me (?:more )?about|more about|background on|biograph|known for|famous for|other works?|what else (?:did|has|have)|(?:her|his|their) (?:career|story|life|practice|background))\b/.test(q);
+  if (biographical) {
+    const deictic = /\b(this|that|these|those|\bit\b|here|the room|the piece|the work|the artwork|the exhibition|the show|you|your)\b/.test(q);
+    if (!deictic) return true;
+    // Deictic phrasing but it names an exhibition artist outright → still a deep-dive.
     for (const a of ctx.artists) if (a && q.includes(` ${a.toLowerCase()}`)) return true;
   }
   return false;
@@ -629,7 +663,8 @@ export function registerGuideRoutes(
   // /guide/tts/:id.mp3, which synthesizes on first hit and caches the bytes.
   // No Venice key → no audioUrl, silently text-only.
   const TTS_TTL_MS = 15 * 60_000;
-  const TTS_MAX_ENTRIES = 80;
+  // Higher than before: each answer now caches several short chunks, not one lead.
+  const TTS_MAX_ENTRIES = 240;
   const ttsCache = new Map<string, { at: number; bytes: Buffer; ct: string }>();
   const ttsPending = new Map<string, { at: number; text: string; voice: string }>();
   const ttsInflight = new Map<string, Promise<{ bytes: Buffer; ct: string } | null>>();
@@ -649,39 +684,68 @@ export function registerGuideRoutes(
    * plays — WITHOUT synthesizing yet (that happens lazily on the first GET, so
    * the text reply is never blocked on TTS). Null when TTS is unavailable.
    */
-  // Cap spoken text so Venice synth stays FAST — a concise lead (1-2 sentences)
-  // synthesizes in ~1-2s, which is what makes the voice feel immediate. The full
-  // answer is on the panel; the voice speaks the lead. Short answers spoken whole.
-  const SPOKEN_LEAD_MAX = 360;
-  function spokenLead(answer: string): string {
+  // We speak the WHOLE answer — but split into short, sentence-aligned CHUNKS
+  // the in-world guide plays back-to-back. Each chunk synthesizes FAST (~1-2s),
+  // so the voice lands immediately AND never cuts off mid-message (the old
+  // single ~360-char lead truncated every longer answer). A chunk cap keeps a
+  // single Venice request snappy; a chunk-count cap bounds total synth cost.
+  const SPOKEN_CHUNK_MAX = 320;
+  const MAX_SPOKEN_CHUNKS = 12;
+  function spokenChunks(answer: string): string[] {
     const text = String(answer || "").replace(/\s+/g, " ").trim();
-    if (text.length <= SPOKEN_LEAD_MAX) return text;
-    const cut = text.slice(0, SPOKEN_LEAD_MAX);
-    const end = Math.max(cut.lastIndexOf(". "), cut.lastIndexOf("! "), cut.lastIndexOf("? "));
-    return (end > 160 ? cut.slice(0, end + 1) : cut).trim();
+    if (!text) return [];
+    if (text.length <= SPOKEN_CHUNK_MAX) return [text];
+    const sentences = text.match(/[^.!?]+[.!?]+|\S[^.!?]*$/g) || [text];
+    const chunks: string[] = [];
+    let cur = "";
+    const flush = () => { const s = cur.trim(); if (s) chunks.push(s); cur = ""; };
+    for (const raw of sentences) {
+      const sentence = raw.trim();
+      if (!sentence) continue;
+      if (sentence.length > SPOKEN_CHUNK_MAX) {
+        // A single over-long sentence: flush, then hard-wrap at word boundaries.
+        flush();
+        let rest = sentence;
+        while (rest.length > SPOKEN_CHUNK_MAX) {
+          let cut = rest.lastIndexOf(" ", SPOKEN_CHUNK_MAX);
+          if (cut < SPOKEN_CHUNK_MAX * 0.6) cut = SPOKEN_CHUNK_MAX; // no good break — hard cut
+          chunks.push(rest.slice(0, cut).trim());
+          rest = rest.slice(cut).trim();
+        }
+        cur = rest;
+        continue;
+      }
+      if ((cur ? `${cur} ${sentence}` : sentence).length > SPOKEN_CHUNK_MAX) flush();
+      cur = cur ? `${cur} ${sentence}` : sentence;
+    }
+    flush();
+    return chunks.slice(0, MAX_SPOKEN_CHUNKS);
   }
 
   /**
-   * Register an answer for speech and return the audio URL the in-world guide
-   * plays. With `prewarm` we kick synthesis IMMEDIATELY (fire-and-forget) so the
-   * client's later GET hits a warm cache / coalesces onto the in-flight synth
-   * instead of paying a cold 10-40s Venice round-trip — the voice lands ~1-2s
-   * after the text. Null when TTS is unavailable.
+   * Register an answer for speech as a SEQUENCE of audio URLs the in-world guide
+   * plays back-to-back so the whole message is spoken. With `prewarm` we kick
+   * synthesis of the first couple of chunks IMMEDIATELY (fire-and-forget) so the
+   * voice lands ~1-2s after the text; later chunks synthesize lazily on their
+   * own GET, just before the client reaches them. Empty when TTS is unavailable.
+   * Each URL is absolute when PUBLIC_URL is set, else a path the guide resolves
+   * against its own API base.
    */
-  function prepareVoice(answer: string, voice: string, prewarm = false): string | null {
-    if (!venice?.configured) return null;
-    const text = spokenLead(answer);
-    if (!text) return null;
-    const id = hash32(`${voice}:${text}`).toString(36);
-    if (!ttsCache.has(id) && !ttsPending.has(id)) {
-      prune(ttsPending);
-      ttsPending.set(id, { at: Date.now(), text, voice });
-    }
-    if (prewarm) void synthPending(id);
-    // Absolute when PUBLIC_URL is set; otherwise a relative path the in-world
-    // guide resolves against its own API base — so TTS works even if PUBLIC_URL
-    // isn't configured on the Directus deployment.
-    return `${publicUrl || ""}/v1/guide/tts/${id}.mp3`;
+  function prepareVoiceChunks(answer: string, voice: string, prewarm = false): string[] {
+    if (!venice?.configured) return [];
+    const chunks = spokenChunks(answer);
+    if (!chunks.length) return [];
+    const urls: string[] = [];
+    chunks.forEach((text, i) => {
+      const id = hash32(`${voice}:${text}`).toString(36);
+      if (!ttsCache.has(id) && !ttsPending.has(id)) {
+        prune(ttsPending);
+        ttsPending.set(id, { at: Date.now(), text, voice });
+      }
+      if (prewarm && i < 2) void synthPending(id); // warm the first two; rest on demand
+      urls.push(`${publicUrl || ""}/v1/guide/tts/${id}.mp3`);
+    });
+    return urls;
   }
 
   /** Synthesize a pending id (deduped across concurrent GETs); cache + return. */
@@ -1315,15 +1379,31 @@ export function registerGuideRoutes(
     persona: Persona,
     session: GuideSession,
     here: GuideContextRoom | null,
+    focus?: { title?: string | null; artist?: string | null } | null,
+    movedRooms?: boolean,
   ): string {
     const blocks: string[] = [contextBlock(ctx, persona)];
     let budget = MAX_CONTEXT_CHARS - blocks[0]!.length;
 
     // Spatial awareness leads — it's the most situationally important signal.
+    // When the visitor has just walked into a NEW room, say so loudly so the
+    // guide narrates where they ARE now, not the room they started in.
+    if (movedRooms && here && budget > 200) {
+      const moved = `[THE VISITOR JUST MOVED] They have walked into a different room since your last reply. They are NOW in “${here.title ?? "this room"}”. Talk about where they are NOW — do not keep describing the previous room.`;
+      blocks.push(`\n\n${moved}`);
+      budget -= moved.length + 4;
+    }
     const loc = locationLine(here);
     if (loc) {
       blocks.push(`\n\n${loc}`);
       budget -= loc.length + 4;
+    }
+    // The specific work they're standing in front of beats the room list for
+    // "this piece" / "which artwork is this?".
+    const foc = focusLine(focus ?? null);
+    if (foc) {
+      blocks.push(`\n\n${foc}`);
+      budget -= foc.length + 4;
     }
 
     if (MOCA_GUIDE_INTRO && budget > 2000) {
@@ -1475,7 +1555,7 @@ export function registerGuideRoutes(
   /** A short, in-character "let me look that up" line for library-routed
    * questions — minted by the fast model, with a template fallback. Never tries
    * to answer (the real answer arrives via the follow-up). */
-  async function makeAck(persona: Persona, question: string, voice: string, speak: boolean): Promise<{ text: string; audioUrl: string | null }> {
+  async function makeAck(persona: Persona, question: string, voice: string, speak: boolean): Promise<{ text: string; audioUrl: string | null; audioUrls: string[] }> {
     let text = "";
     if (museumAgent?.configured) {
       try {
@@ -1500,7 +1580,8 @@ export function registerGuideRoutes(
       }
     }
     if (!text) text = LIBRARY_ACKS[hash32(question) % LIBRARY_ACKS.length];
-    return { text, audioUrl: speak ? prepareVoice(text, voice, true) : null };
+    const audioUrls = speak ? prepareVoiceChunks(text, voice, true) : [];
+    return { text, audioUrl: audioUrls[0] ?? null, audioUrls };
   }
 
   async function mineInsight(
@@ -1542,7 +1623,8 @@ export function registerGuideRoutes(
       } else if (priorWasAck) {
         // We promised an answer but Cortex came up empty — don't leave them hanging.
         const miss = "Hm — my deeper records came up short on that one. Ask me about any of the works or artists here and I'll dig right in.";
-        session.pendingFollowup = { text: miss, audioUrl: speak ? prepareVoice(miss, voice, true) : null, at: Date.now() };
+        const missAudio = speak ? prepareVoiceChunks(miss, voice, true) : [];
+        session.pendingFollowup = { text: miss, audioUrl: missAudio[0] ?? null, audioUrls: missAudio, at: Date.now() };
       }
     } catch {
       /* insight mining is best-effort */
@@ -1592,8 +1674,8 @@ export function registerGuideRoutes(
       });
       const line = status === 200 && text ? text.replace(/\s*\[src_[^\]]*\]/g, "").trim() : "";
       if (!line) return;
-      const audioUrl = speak ? prepareVoice(line, voice, true) : null;
-      session.pendingFollowup = { text: line.slice(0, 900), audioUrl, at: Date.now() };
+      const audioUrls = speak ? prepareVoiceChunks(line, voice, true) : [];
+      session.pendingFollowup = { text: line.slice(0, 900), audioUrl: audioUrls[0] ?? null, audioUrls, at: Date.now() };
     } catch {
       /* the follow-up is best-effort — never block on it */
     }
@@ -1849,14 +1931,25 @@ export function registerGuideRoutes(
       const speak = body.speak !== false;
       const voice = clampText(body.voice, 40) || venice?.defaultVoice || "";
 
-      // Spatial awareness: resolve the room the visitor means by "here" from the
-      // world position the in-world guide reports — the room they're inside, or
-      // the nearest one — so answers (and retrieval) are grounded in the
-      // here-and-now and "what's in this room?" pulls the right piece list.
+      // Spatial awareness. The in-world guide now resolves the visitor's room
+      // itself (from the baked room footprints) and sends `roomUid` — authoritative,
+      // so the guide tracks them as they walk between rooms. We trust that when
+      // present, and fall back to mapping the reported `visitorPos` to a room
+      // (the room they're inside, else the nearest) for older guides / safety.
+      const roomUid = clampText(body.roomUid, 40);
       const vp = body.visitorPos;
       const here =
-        vp && typeof vp.x === "number" && vp.x === vp.x && typeof vp.z === "number" && vp.z === vp.z
+        (roomUid ? ctx.rooms.find((r) => r.uid === roomUid) ?? null : null) ||
+        (vp && typeof vp.x === "number" && vp.x === vp.x && typeof vp.z === "number" && vp.z === vp.z
           ? whereIs(ctx, vp.x, vp.z)
+          : null);
+
+      // The specific work the visitor is standing in front of (resolved in-world
+      // from their position). Grounds "which artwork is this?" on the right piece.
+      const rawFocus = body.focus;
+      const focus =
+        rawFocus && typeof rawFocus === "object" && (rawFocus.title || rawFocus.artist)
+          ? { title: clampText(rawFocus.title, 160), artist: clampText(rawFocus.artist, 120) }
           : null;
 
       const history = Array.isArray(body.history)
@@ -1888,6 +1981,12 @@ export function registerGuideRoutes(
               pendingFollowup: null,
             } as GuideSession);
 
+        // Has the visitor walked into a different room since their last turn?
+        // (Only meaningful once we've seen them somewhere before.) Tell the
+        // model loudly so it narrates where they ARE now, then remember it.
+        const movedRooms = !!(here && session.lastRoomUid && session.lastRoomUid !== here.uid);
+        if (here) session.lastRoomUid = here.uid;
+
         // Macro / historical / artist-deep questions route straight to the
         // Library: a quick in-character acknowledgement now, the real answer via
         // the follow-up. (The fast model would otherwise pad a misleading
@@ -1906,7 +2005,12 @@ export function registerGuideRoutes(
               persona: persona.name,
               suggestions,
               mode: "fast",
+              // The ack is a holding line, NOT the answer — tell the guide the
+              // real answer is being looked up so it shows a "consulting the
+              // library" state (and keeps it until the follow-up lands).
+              consulting: true,
               ...(ack.audioUrl ? { audioUrl: ack.audioUrl } : {}),
+              ...(ack.audioUrls.length ? { audioUrls: ack.audioUrls } : {}),
             },
           });
           delivered = true;
@@ -1919,7 +2023,7 @@ export function registerGuideRoutes(
             timeoutMs: FAST_REPLY_TIMEOUT_MS,
             maxTokens: FAST_REPLY_MAX_TOKENS,
             messages: [
-              { role: "system", content: buildSystemContext(ctx, persona, session, here) },
+              { role: "system", content: buildSystemContext(ctx, persona, session, here, focus, movedRooms) },
               ...turnMessages(session),
               { role: "user", content: question },
             ],
@@ -1928,14 +2032,16 @@ export function registerGuideRoutes(
             answer = text.replace(/\s*\[src_[^\]]*\]/g, "").trim();
             // Pre-warm synth NOW so it runs in parallel with the visitor reading
             // the text and the client's audio GET hits a warm/in-flight cache.
-            const audioUrl = speak ? prepareVoice(answer, voice, true) : null;
+            // audioUrls covers the WHOLE answer (played back-to-back in-world).
+            const audioUrls = speak ? prepareVoiceChunks(answer, voice, true) : [];
             res.json({
               data: {
                 answer,
                 persona: persona.name,
                 suggestions,
                 mode: "fast",
-                ...(audioUrl ? { audioUrl } : {}),
+                ...(audioUrls[0] ? { audioUrl: audioUrls[0] } : {}),
+                ...(audioUrls.length ? { audioUrls } : {}),
               },
             });
             delivered = true;
@@ -1990,6 +2096,7 @@ export function registerGuideRoutes(
           { role: "user", content: contextBlock(ctx, persona) },
           { role: "assistant", content: `Understood — I am ${persona.name}, guiding visitors through “${ctx.name}”.` },
           ...(locationLine(here) ? [{ role: "user", content: locationLine(here) as string }] : []),
+          ...(focusLine(focus) ? [{ role: "user", content: focusLine(focus) as string }] : []),
           ...history,
         ],
       };
@@ -2029,7 +2136,7 @@ export function registerGuideRoutes(
       // on the Cortex path: voice it only in pure legacy mode (no MUSEUMAGENT —
       // Cortex IS the guide's brain). When MUSEUMAGENT is configured but this turn
       // failed over to Cortex, stay text-only rather than speaking raw retrieval.
-      const audioUrl = speak && !museumAgent?.configured ? prepareVoice(answer, voice) : null;
+      const audioUrls = speak && !museumAgent?.configured ? prepareVoiceChunks(answer, voice) : [];
 
       res.json({
         data: {
@@ -2038,7 +2145,8 @@ export function registerGuideRoutes(
           suggestions,
           sources,
           mode: "cortex",
-          ...(audioUrl ? { audioUrl } : {}),
+          ...(audioUrls[0] ? { audioUrl: audioUrls[0] } : {}),
+          ...(audioUrls.length ? { audioUrls } : {}),
         },
       });
     } catch (e: any) {
@@ -2081,7 +2189,13 @@ export function registerGuideRoutes(
     }
     session.pendingFollowup = null;
     void saveSession(session);
-    res.json({ data: { text: fu.text, ...(fu.audioUrl ? { audioUrl: fu.audioUrl } : {}) } });
+    res.json({
+      data: {
+        text: fu.text,
+        ...(fu.audioUrl ? { audioUrl: fu.audioUrl } : {}),
+        ...(fu.audioUrls && fu.audioUrls.length ? { audioUrls: fu.audioUrls } : {}),
+      },
+    });
   });
 
   // Serve a synthesized answer's audio (public, keyless like the rest of the
