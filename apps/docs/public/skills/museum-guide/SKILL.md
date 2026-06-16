@@ -64,11 +64,13 @@ curl -X POST "https://api.moca.qwellco.de/v1/guide/ask" \
     "question": "Who designed this room, and what should I look at first?",
     "history": [{"role":"user","content":"…"},{"role":"assistant","content":"…"}],
     "decc0": 1,
-    "visitor": "rene"
+    "visitor": "rene",
+    "roomUid": "p3",
+    "focus": { "artworkId": 812, "title": "Genesis", "artist": "XCOPY" }
   }'
 ```
 
-→ `{ "data": { answer, persona, suggestions, mode, sources?, audioUrl?, fallback? } }`
+→ `{ "data": { answer, persona, suggestions, mode, consulting?, sources?, audioUrl?, audioUrls?, fallback? } }`
 
 The guide runs a **hybrid** conversation model. When the deployment has a fast
 agent configured, each reply is a direct, reactive LLM answer (`mode: "fast"`)
@@ -81,9 +83,21 @@ memory; without it you still get a fast stateless reply. Otherwise the guide
 answers Cortex-first (`mode: "cortex"`). Optional fields: `history` (the running
 conversation, last ~8 turns, a fallback when no `session` memory exists) and
 `visitor` (display name); `speak` (default true) + `voice` (a Venice voice id,
-e.g. `Serena`) request spoken audio — when the deployment has TTS configured the
-response carries an **`audioUrl`** (an mp3 served from `GET /v1/guide/tts/:id.mp3`)
-you can play back. Plus **who answers** — first match wins:
+e.g. `Serena`) request spoken audio. **Spatial awareness:** pass `roomUid` (the
+room the visitor is in) and/or `focus` (`{ artworkId?, slotId?, title?, artist? }`
+— the work they're standing in front of) so the guide grounds answers in the
+here-and-now ("what's in this room?", "which artwork is this?"). `roomUid` is
+authoritative; as a fallback you may pass `visitorPos: { x, z }` (world meters)
+and the API maps it to a room. **Voice:** when TTS is configured the response
+carries **`audioUrls`** — the whole answer split into short, sentence-aligned
+mp3 chunks (served from `GET /v1/guide/tts/:id.mp3`) to play back-to-back so the
+voice covers the full message; `audioUrl` (the first chunk) is kept for simple
+clients. **Library routing:** macro/historical/market questions, artist
+deep-dives, and persona questions about people not in the exhibition return a
+brief in-character ack with **`consulting: true`** — the real, Cortex-sourced
+answer arrives moments later from `GET /v1/guide/followup?exhibition&session`
+(which also carries `audioUrls`); show a "consulting the library" state until
+then. Plus **who answers** — first match wins:
 
 - `soul` (string) — a complete SOUL.md the guide embodies, with optional
   `soulName`;

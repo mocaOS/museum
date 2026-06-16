@@ -133,19 +133,33 @@ sync). Each room = one Hyperfy app — artworks hang on baked slot anchors
 from the export (works for un_MUSEUM `Auto_NNN` slots that never exist as
 GLB nodes), curated images upload into the world as assets, `app.configure`
 exposes room-level refinement props, and an embedded in-world slot editor.
-**Rooms are solid**: the room GLBs carry no collider-tagged meshes (Hyperfy's
-default `collision:'auto'` → walk-through), so each room script walks the loaded
-model (`app.traverse`) and gives every mesh a static trimesh collider from its
-own geometry (`rigidbody`+`collider{type:'geometry'}` parented to the mesh).
-NB: `app.create('model')` is not a runtime node — blueprint-only component — so
-the traversal is the supported path; logs `[moca] room solid — N collider(s)`.
+**Rooms are solid** (floors, walls, stairs all walkable): the room GLBs carry no
+collider-tagged meshes (Hyperfy's default `collision:'auto'` → walk-through), so
+each room script gives every mesh a static trimesh collider from its own geometry
+(`rigidbody`+`collider{type:'geometry'}` parented to the mesh). It **collects the
+meshes first, then creates colliders in a second pass** — never inside the
+`app.traverse` callback: `Node.traverse` reads a node's children AFTER the
+callback and a `collider`'s `.geometry` getter is always truthy, so creating one
+during traversal makes it recurse into the collider and run away to the cap on
+the FIRST mesh (the bug that left multi-mesh rooms walk-through while single-mesh
+un_MUSEUMs stayed solid). NB: `app.create('model')` is not a runtime node —
+blueprint-only — so the traversal is the supported path; logs `[moca] room solid
+— N collider(s)` (N = real mesh count, capped 4000). The engine cooks each
+trimesh against the entity's world scale, so no pre-scaling is needed. **Artwork
+LOD**: spawns upload a small **768w** webp per still work (snappy uploads) and the
+room script swaps `image.src` to a remote **2048w** `/api/museum/texture` HQ url
+when a visitor comes within ~7m (revert beyond ~12m, hysteresis) — the engine
+loader fetches + caches the HQ per client (the proxy sends `Access-Control-Allow-
+Origin: *`; the HQ is NOT uploaded into the world).
 **Native room scale**: each room carries a per-room scaling
 factor (the `scale` field in the export; the base entity scale = tile-fit ×
 this), pre-configured in the builder — new rooms default to **2×** — and
 resizable further in-world (grab + Shift+scroll), which idempotent re-spawns
 preserve (`--relayout` pushes the layout + native scale back). The slot editor
-(hold E at a work) lets **scene admins** fine-place pieces with admin-gated,
-world-storage-persisted adjustments. Spawns are idempotent (deterministic
+(build mode / Tab, then hold E at a work) lets **scene admins** fine-place pieces
+with admin-gated, world-storage-persisted adjustments — admin is re-checked when
+build mode is entered (not once at load), so it works even if the player loads /
+becomes admin after the room script ran. Spawns are idempotent (deterministic
 ids from the exhibition id → re-spawning updates rooms in place, preserving
 ALL in-world refinements) and end with a verification pass. **The museum
 guide** (`--guide` / the dialog's Museum guide toggle): an agentic VRM avatar

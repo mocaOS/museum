@@ -50,14 +50,21 @@ museum layout + native scale back onto already-placed rooms).
 
 **Solid rooms (colliders).** The room GLBs ship no `_collider`-tagged meshes, so
 Hyperfy's default `collision: 'auto'` would leave them walk-through. Each room
-app therefore walks the loaded model (`app.traverse`) and gives **every mesh a
-static trimesh collider** built from its own geometry (a `rigidbody` +
-`collider{type:'geometry'}` parented to the mesh, inheriting its world
-transform) — floors, walls and ceilings collide, and the colliders scale with
-the room entity. (`app.create('model')` is **not** a runtime node in the engine —
-that's a blueprint-only component — so the per-mesh traversal is the supported
-in-script path.) The script logs `[moca] room solid — N mesh collider(s)` on
-load; mesh-heavy rooms are capped at 2000 colliders.
+app therefore gives **every mesh a static trimesh collider** built from its own
+geometry (a `rigidbody` + `collider{type:'geometry'}` parented to the mesh,
+inheriting its world transform) — floors, walls, ceilings **and stairs** collide,
+and the engine cooks each trimesh against the entity's world scale. It
+**collects the meshes first (`app.traverse`), then creates the colliders in a
+second pass** — never inside the traverse callback: `Node.traverse` reads a
+node's children *after* the callback, and a `collider`'s `.geometry` getter is
+always truthy, so creating one mid-traversal makes it recurse into the new
+collider and run away to the cap on the FIRST mesh. That bug left multi-mesh
+museum rooms walk-through while single-mesh un_MUSEUMs (one real collider before
+the runaway) stayed solid. (`app.create('model')` is **not** a runtime node —
+blueprint-only — so the per-mesh traversal is the supported in-script path.) The
+script logs `[moca] room solid — N mesh collider(s)` on load (N = real mesh
+count, capped 4000). Note: PhysX may warn "triangles are too big" for low-poly
+meshes scaled up large — a stability hint, not an error; colliders still work.
 
 **Modular.** Every placed room becomes its own Hyperfy app. Its generated
 script hangs the curated works on **baked slot anchors** — the export carries
@@ -70,10 +77,15 @@ spatial video, optional title/artist placards. The artworks are **child nodes
 of the room app**, so they stay attached to their room no matter how admins
 rearrange things in-engine.
 
-**Self-contained.** Curated images are fetched and uploaded into the world as
-content-addressed assets at spawn time — the exhibition keeps rendering even
-if museum infrastructure is unreachable. (Videos stay remote: they can be
-huge and stream fine.)
+**Self-contained, with HQ on approach.** Curated images are fetched and uploaded
+into the world as content-addressed assets at spawn time — the exhibition keeps
+rendering even if museum infrastructure is unreachable. To keep spawns snappy,
+only a compressed **768w** webp is uploaded per still work; the room app then
+**swaps to a remote 2048w HQ variant when a visitor comes within ~7m** (reverts
+beyond ~12m, with hysteresis), which the engine loader fetches + caches per
+client from the CORS-open `/api/museum/texture` proxy (the HQ is *not* uploaded).
+So far works load instantly at low-res and sharpen up close. (Videos stay remote:
+they can be huge and stream fine.)
 
 **Refinable in-engine.** Each room app ships an inspector panel
 (`app.configure`): artwork scale, wall gap, placards on/off, art lighting,
@@ -84,10 +96,11 @@ top of its native scale), X deletes it, the curation travels with it (spawn
 with `--pinned` / "Lock layout" to protect the arrangement; P toggles a room's
 pin in-world).
 
-**Per-slot refinement in-world.** Slot editing is **on by default**:
-builders/admins hold **E** at any hung work to edit it in place: arrow
-keys nudge it along the wall (Shift = faster), the scroll wheel resizes, R
-resets, Enter/Esc finishes. Every change syncs live to everyone, is
+**Per-slot refinement in-world.** Slot editing is **on by default**: a scene
+admin enters **build mode (Tab)** and holds **E** at any hung work to edit it in
+place: arrow keys nudge it along the wall (Shift = faster), the scroll wheel
+resizes, R resets, Enter/Esc finishes. (The editor re-checks admin each time
+build mode is entered, so it works even if you `/admin` *after* the room loaded.) Every change syncs live to everyone, is
 rank-checked server-side, and persists in the world's `storage.json` keyed by
 the room's deterministic entity id — so slot refinements survive server
 restarts, blueprint rebuilds AND museum curation re-spawns. (The engine

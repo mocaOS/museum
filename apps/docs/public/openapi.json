@@ -1656,13 +1656,55 @@
                         "type": "string"
                       }
                     }
+                  },
+                  "session": {
+                    "type": "string",
+                    "maxLength": 64,
+                    "pattern": "^[\\w-]{1,64}$",
+                    "description": "Stable per-visitor id. Enables server-side session memory + the async Library follow-up. Omit for a stateless reply."
+                  },
+                  "speak": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Synthesize spoken audio for the answer (when the deployment has TTS configured)."
+                  },
+                  "voice": {
+                    "type": "string",
+                    "maxLength": 40,
+                    "description": "Venice TTS voice id (e.g. Serena). Empty = the deployment default."
+                  },
+                  "roomUid": {
+                    "type": "string",
+                    "maxLength": 40,
+                    "description": "The placement uid of the room the visitor is in (authoritative spatial signal). Grounds 'what's in this room?' and lets the guide notice when the visitor moves rooms."
+                  },
+                  "visitorPos": {
+                    "type": "object",
+                    "description": "Fallback spatial signal when roomUid is absent: the visitor's world position (meters); the API maps it to the room they're inside, else the nearest.",
+                    "properties": {
+                      "x": { "type": "number" },
+                      "z": { "type": "number" }
+                    }
+                  },
+                  "focus": {
+                    "type": "object",
+                    "description": "The single work the visitor is standing in front of \u2014 grounds 'which artwork is this?' on the right piece.",
+                    "properties": {
+                      "artworkId": { "type": "integer" },
+                      "slotId": { "type": "string" },
+                      "title": { "type": "string" },
+                      "artist": { "type": "string" }
+                    }
                   }
                 }
               },
               "example": {
                 "exhibition": "echoes-of-the-mind",
+                "session": "visitor-42",
                 "question": "Who designed this room, and what should I look at first?",
-                "decc0": 1
+                "decc0": 1,
+                "roomUid": "p3",
+                "focus": { "artworkId": 812, "title": "Genesis", "artist": "XCOPY" }
               }
             }
           }
@@ -2591,6 +2633,29 @@
           "fallback": {
             "type": "boolean",
             "description": "True when the answer was built from exhibition context alone (Library unreachable)."
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "fast",
+              "cortex"
+            ],
+            "description": "`fast` = direct hybrid reply (or a library-routed ack); `cortex` = Cortex-primary reply. Absent on a context-only fallback."
+          },
+          "consulting": {
+            "type": "boolean",
+            "description": "True when this answer is a brief holding line and the real, Library-sourced answer is being looked up — fetch it from GET /v1/guide/followup. Show a 'consulting the library' state until it arrives."
+          },
+          "audioUrl": {
+            "type": "string",
+            "description": "First spoken chunk (mp3 at GET /v1/guide/tts/:id.mp3). Present when TTS is configured and `speak` is not false. Kept for simple clients; prefer `audioUrls`."
+          },
+          "audioUrls": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The whole answer as short, sentence-aligned mp3 chunk URLs — play back-to-back so the voice covers the full message (no mid-message cutoff)."
           }
         }
       },
