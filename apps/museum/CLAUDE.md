@@ -200,11 +200,13 @@ no accounts. Code lives in `src/components/museum/three/`:
   red cube + a bricked world tick loop, so the model is always the vrm.) The
   conversation is **pure free-form chat** (type your question, or hold E to
   walk with the guide — no preset/numbered question picking), private per
-  visitor via local `world.chat(..., false)`. It renders in a **billboarded
+  visitor. It renders in a **billboarded
   world-space panel** above the guide — a live status line (here / thinking /
-  speaking), the guide name, the visitor's last question, the answer, and a
-  how-to hint — and the full text is **also mirrored to the visitor's private
-  world chat** as a scrollback transcript.
+  consulting / speaking), the guide name, the visitor's last question, and the
+  answer, which is **revealed in lockstep with the spoken voice** (a teleprompter
+  that scrolls within a trailing window for long answers). The panel is the whole
+  surface — the native world-chat mirror was **removed** (it cluttered and isn't
+  built for long-form answers).
   Per-player private answers are fetched server-side from `POST /v1/guide/ask`.
   That endpoint runs a **hybrid** model (when the API has `MUSEUMAGENT_*`): a
   FAST direct LLM reply over exhibition metadata + an aggregated MOCA brief + the
@@ -217,21 +219,29 @@ no accounts. Code lives in `src/components/museum/three/`:
   follow-up. EVERY question's Cortex result is delivered via the public
   **`GET /v1/guide/followup?exhibition&session`** — it *extends* the fast answer
   (no repetition) for normal questions, or *is* the answer after an ack. The
-  guide's server-half polls that endpoint for ~50s after a fast reply; a
-  follow-up that arrives mid-speech is **queued** and plays only once the first
-  TTS clip finishes (it never talks over the initial voice). Falls back to the
+  guide's server-half polls that endpoint every ~2s for ~50s after a fast reply;
+  a follow-up that arrives mid-speech is **queued** and plays only once the
+  current voice finishes (it never talks over the initial TTS). While a
+  library-routed answer is still being mined, that same poll also hands back
+  short, **LLM-minted "still researching" bridge** one-liners (unique per turn,
+  pre-warmed TTS, flagged `bridge:true`) once the wait crosses **~4s** — the
+  guide speaks them to hold attention and keeps the *consulting* state (a bridge
+  fills silence only; it's never queued behind the real answer). Falls back to the
   Cortex-primary path + optional Art DeCC0 persona (**default 2875 = Oblak**)
   when `MUSEUMAGENT_*` is unset. When the Directus has a `VENICE_API_KEY`, the
   guide also **speaks** each answer (Venice TTS, default `tts-kokoro` (~0.8s
-  synth); `audioUrl` → in-world `audio` node, autoplay on; `speak`/`voice` are
-  app inspector props). That endpoint lives in `apps/api` (`src/v1/guide.ts`)
+  synth); the API returns `audioChunks` — per-sentence `{url,text,secs}` — that
+  the in-world guide plays back-to-back through an `audio` node, revealing each
+  chunk's text as its clip starts and advancing on the clip's **real** end
+  (`audio.isPlaying`), so the voice never cuts off early or overlaps the next
+  chunk; `speak`/`voice` are app inspector props). That endpoint lives in `apps/api` (`src/v1/guide.ts`)
   and is Cortex-resilient: it retries a fast transient 5xx and degrades to a
   context-only `fallback: true` answer rather than erroring, so the in-world
   guide stays alive even when Cortex is slow/down — but it **requires
   `CORTEX_API_URL`/`CORTEX_API_KEY` on the Directus deployment** to hook the
   knowledge graph in (without them every answer is a context-only fallback).
   NB: Hyperfy's app `fetch` can't stream, so the answer is fetched whole — it's
-  rendered in the panel, mirrored to chat, and spoken via the audio node (no
+  revealed in the panel in lockstep with the voice spoken via the audio node (no
   in-world SSE).
   The dialog's **Download guide app (.hyp)** button
   (`guide-hyp.ts` + `hyp.ts`) bundles the same guide as a drag-droppable

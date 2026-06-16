@@ -128,8 +128,12 @@ curator reacts to the dialogue, not just the last question. A deterministic
 **library router** sends macro/historical/market/artist-deep-dive questions to
 Cortex with a quick in-character ack; every question's Cortex result then
 arrives moments later as a **follow-up** (`GET /v1/guide/followup`) that extends
-the fast reply — queued so it never talks over the first spoken clip. The panel
-text is mirrored to the visitor's private world chat as a scrollback transcript.
+the fast reply — queued so it never talks over the first spoken clip. If the
+library takes more than **~4s**, the guide speaks short, LLM-minted **"still
+researching" bridge** one-liners (unique per turn) to hold attention until the
+answer lands. The panel answer is **revealed in lockstep with the spoken voice**
+(a teleprompter, advancing on each clip's real end) and scrolls within a trailing
+window for long answers — the panel is the whole surface (no native-chat mirror).
 
 ```
 visitor ──E / chat──▶ guide app (server script) ──▶ MOCA API /v1/guide/ask

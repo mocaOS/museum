@@ -6,15 +6,20 @@
  * avatar node (`app.get('avatar')`) and drives locomotion + gesture emotes as
  * the guide follows the visitor (with gravity). The conversation lives in a
  * beautiful billboarded WORLD-SPACE PANEL above the guide — a live status line
- * (here/thinking/speaking), name, the visitor's last question, the answer, and
- * tappable suggestions — with the full text mirrored to the visitor's private
- * world chat as a transcript. When enabled the guide speaks each answer aloud
- * via an audio node fed by the guide API's TTS — synthesis is pre-warmed
- * server-side at ask time so it runs in parallel while the visitor reads the
- * text and the voice catches up in a few seconds (no cold synth on the GET).
- * After a fast reply the server briefly
+ * (here/thinking/consulting/speaking), name, the visitor's last question, and
+ * the answer, which is REVEALED IN LOCKSTEP WITH THE SPOKEN VOICE (a teleprompter
+ * that scrolls within a trailing window for long answers). The panel is the whole
+ * surface — we no longer mirror to the native world chat, which clutters and isn't
+ * built for long-form. When enabled the guide speaks each answer aloud via an audio
+ * node fed by the guide API's TTS, played as back-to-back per-sentence CHUNKS;
+ * synthesis is pre-warmed server-side at ask time so the voice lands a beat after
+ * the text. Each chunk advances on the clip's REAL end (audio.isPlaying flips
+ * false), never a text-length estimate — so the voice never cuts off a few words
+ * early or starts the next chunk too soon. After a fast reply the server briefly
  * polls `/v1/guide/followup` and, when a deeper insight lands, the guide
- * proactively offers it as a short spoken aside — closing the loop.
+ * proactively offers it as a short spoken aside — closing the loop; while a
+ * library answer is still being mined it also speaks short, LLM-minted "still
+ * researching" BRIDGE one-liners (once the wait crosses ~4s) to hold attention.
  *
  * Answers are AGENTIC and per-player: the SERVER side of the script calls
  * the MOCA API (`POST /v1/guide/ask`) — which combines the registered
@@ -365,7 +370,10 @@ if (world.isServer) {
   // Close the loop: after a fast reply, the API may mine a deeper insight and
   // compose a short proactive aside. Poll for it briefly and, when it lands,
   // push it privately to the visitor — so the conversation gets richer on its
-  // own, not just on the next question.
+  // own, not just on the next question. While a library answer is still being
+  // mined, the API also hands back short "still researching" BRIDGE fillers
+  // (d.bridge) to hold attention — we relay those but keep polling (a bridge is
+  // not the answer) and never fold them into history.
   async function pollFollowup(playerId, s) {
     if (s.polling) return
     s.polling = true
@@ -376,13 +384,18 @@ if (world.isServer) {
         const body = await res.json()
         const d = body && body.data
         if (d && d.text) {
-          s.pollUntil = 0 // one aside per turn is enough
-          s.history.push({ role: 'assistant', content: String(d.text).slice(0, 2000) })
-          if (s.history.length > 16) s.history.splice(0, s.history.length - 16)
+          const bridge = d.bridge === true
+          if (!bridge) {
+            s.pollUntil = 0 // the real answer landed — one aside per turn is enough
+            s.history.push({ role: 'assistant', content: String(d.text).slice(0, 2000) })
+            if (s.history.length > 16) s.history.splice(0, s.history.length - 16)
+          }
           app.sendTo(playerId, 'moca:guide:followup', {
             text: String(d.text),
+            bridge,
             audioUrl: typeof d.audioUrl === 'string' ? d.audioUrl : null,
             audioUrls: Array.isArray(d.audioUrls) && d.audioUrls.length ? d.audioUrls : null,
+            audioChunks: Array.isArray(d.audioChunks) && d.audioChunks.length ? d.audioChunks : null,
             persona: NAME,
             suggestions: s.suggestions,
           })
@@ -563,10 +576,11 @@ if (world.isServer) {
   let pollT = 0
   app.on('fixedUpdate', (dt) => {
     try { moveGuide(dt, followId, HOME) } catch (e) {}
-    // Poll for proactive follow-ups roughly every 5s for any visitor in their
-    // post-reply window — cheap, and stops the moment an aside is delivered.
+    // Poll for proactive follow-ups every ~2s for any visitor in their
+    // post-reply window — frequent enough that a "still researching" bridge
+    // lands close to the 4s gap; stops the moment the real answer is delivered.
     pollT += dt
-    if (pollT < 5) return
+    if (pollT < 2) return
     pollT = 0
     const now = Date.now()
     for (const pid in sessions) {
@@ -624,10 +638,12 @@ if (world.isClient) {
 
   // ---- a beautiful world-space conversation panel --------------------------
   // The whole exchange lives in a billboarded panel above the guide: status
-  // line, name, the visitor's last question, the guide's answer, suggested
-  // questions, and a how-to hint. We build it ONCE and only swap text values
-  // (rebuilding nodes per turn is expensive and flickers). Full answers are
-  // also mirrored to this client's private world chat as a transcript.
+  // line, name, the visitor's last question, and the guide's answer — which is
+  // revealed in lockstep with the spoken voice (a teleprompter) and scrolls
+  // within a trailing window for long answers. We build it ONCE and only swap
+  // text values (rebuilding nodes per turn is expensive and flickers). This
+  // panel is the whole surface — we no longer mirror to the native world chat,
+  // which clutters and isn't built for long-form answers.
   const C = {
     bg: 'rgba(11, 11, 14, 0.93)',
     name: '#ffffff',
@@ -644,8 +660,7 @@ if (world.isClient) {
   let panelState = 'idle' // idle | thinking | consulting | speaking
   let thinkT = 0
   let clock = 0           // seconds, accumulated from update(dt)
-  let speakingUntil = 0   // clock time the "speaking" indicator should hold until
-  let queuedFollowup = null // a follow-up waiting for the current clip to finish
+  let queuedFollowup = null // a follow-up waiting for the current voice to finish
   // While the guide is consulting the Library (the first reply was a holding
   // line), hold the "consulting" status until the real answer arrives — or this
   // deadline passes (matches the server's ~50s follow-up window) so it never
@@ -679,7 +694,7 @@ if (world.isClient) {
   function buildPanel() {
     try {
       panel = app.create('ui', {
-        space: 'world', width: 580, height: 392,
+        space: 'world', width: 580, height: 448,
         backgroundColor: C.bg, borderRadius: 22, padding: 28,
         flexDirection: 'column', justifyContent: 'flex-start', gap: 9,
         billboard: 'y', doubleside: true, pointerEvents: false,
@@ -687,7 +702,7 @@ if (world.isClient) {
       panel.size = 0.004
       panel.position.set(0, 2.85, 0)
       statusNode = app.create('uitext', { value: '', fontSize: 13, color: C.ready, lineHeight: 1.2 })
-      titleNode = app.create('uitext', { value: NAME + '  \\u00b7  your guide', fontSize: 21, color: C.name, fontWeight: 'bold', lineHeight: 1.2 })
+      titleNode = app.create('uitext', { value: NAME + '  \\u00b7  your guide', fontSize: 17, color: C.name, fontWeight: 'bold', lineHeight: 1.2 })
       qNode = app.create('uitext', { value: '', fontSize: 14, color: C.muted, lineHeight: 1.35 })
       aNode = app.create('uitext', { value: GREETING, fontSize: 16, color: C.body, lineHeight: 1.5 })
       const hint = app.create('uitext', { value: '\\u2328 just type your question, or hold E to walk with me', fontSize: 12, color: C.hint, lineHeight: 1.3 })
@@ -700,72 +715,148 @@ if (world.isClient) {
   }
   buildPanel()
 
-  // ---- voice: play the WHOLE answer as a sequence of audio clips ------------
-  // The API returns one short audio chunk per ~sentence-group (audioUrls) so the
-  // voice never cuts off mid-message. We play them BACK-TO-BACK: there's no
-  // end-event in the sandbox, so each clip's length is estimated from the text
-  // and the next chunk starts when that estimate elapses.
+  // ---- voice + synced teleprompter -----------------------------------------
+  // We speak the answer as a sequence of short audio chunks AND reveal each
+  // chunk's text in lockstep with its voice — the panel reads like a
+  // teleprompter that moves AS the guide speaks, never racing ahead of the
+  // audio (the old bug) nor lagging it. Chunk advance is driven by the REAL end
+  // of each clip: the engine flips audio.isPlaying to false when a non-looping
+  // clip finishes (and it's false while the clip is still loading), so we wait
+  // for a chunk to actually START, then for it to END — no fragile text-length
+  // estimate that cut a few words off and started the next chunk too early. The
+  // whole exchange lives in this panel only (we no longer mirror to the native
+  // chat); long answers scroll within a trailing window.
+  const REVEAL_WINDOW = 580   // max chars of the answer kept on screen (it scrolls)
+  const LOAD_TIMEOUT = 12     // s to wait for a chunk's audio to begin before moving on
   let audio = null
-  let speakQueue = []     // remaining chunk URLs to play this turn
-  let perChunkSecs = 0    // estimated seconds per chunk
-  let nextChunkAt = 0     // clock time to start the next chunk
+  let voiceChunks = []        // [{ url, text, secs }] for the whole current message
+  let chunkIdx = -1           // index of the chunk currently playing/revealing
+  let chunkStartedAt = 0      // clock when the current chunk's audio.play() was called
+  let sawPlaying = false      // the current chunk's audio actually began
+  let speaking = false        // a message is being spoken/revealed right now
+  let speakSilent = false     // revealing text with no audio (TTS off) — pace by secs
+  let revealHead = ''         // text shown before the answer (e.g. the aside marker)
+  let spoken = ''             // answer text revealed so far (grows one chunk at a time)
+
   function stopAudio() {
-    speakQueue = []; nextChunkAt = 0
     if (audio) {
       try { audio.stop() } catch (e) {}
       try { app.remove(audio) } catch (e) {}
       audio = null
     }
   }
-  function playNextChunk() {
-    if (!speakQueue.length) { nextChunkAt = 0; return }
-    const url = resolveAudio(speakQueue.shift())
-    if (audio) { try { audio.stop() } catch (e) {}; try { app.remove(audio) } catch (e) {}; audio = null }
-    if (url) {
-      try {
-        audio = app.create('audio', { src: url, spatial: true, volume: 1, loop: false })
-        app.add(audio)
-        audio.play()
-      } catch (e) {
-        console.error('[moca-guide] audio failed', e && e.message)
-      }
-    }
-    nextChunkAt = speakQueue.length ? clock + perChunkSecs : 0
-  }
-  // urls: array of chunk URLs covering the whole message (falls back to [url]).
-  function speakAnswer(urls, text) {
-    if (!SPEAK) return
-    const list = (Array.isArray(urls) ? urls : [urls]).filter((u) => typeof u === 'string' && u).slice(0, 12)
-    if (!list.length) return
-    stopAudio()
-    speakQueue = list
-    // Estimate total spoken length from the text, split across the chunks.
-    const totalSecs = Math.min(120, Math.max(3, Math.round(String(text || '').length * 0.06)))
-    perChunkSecs = totalSecs / list.length
-    speakingUntil = clock + totalSecs
-    panelState = 'speaking'; renderStatus()
-    playNextChunk()
-  }
   function resolveAudio(u) {
     return typeof u === 'string' && u ? (u.charAt(0) === '/' ? API + u : u) : null
   }
-  // Private transcript: mirror the spoken text into THIS client's chat only
-  // (false = local) so visitors can scroll back through the conversation.
-  function mirrorChat(text, from) {
-    const chunks = String(text || '').match(/[\\s\\S]{1,300}/g) || []
-    chunks.slice(0, 6).forEach((c) => { try { world.chat({ from: from || NAME, body: c }, false) } catch (e) {} })
+  function endSpeaking() {
+    speaking = false; chunkIdx = -1; voiceChunks = []
+    stopAudio()
+    panelState = awaitLibrary ? 'consulting' : 'idle'; thinkT = 0; renderStatus()
   }
-
-  // The chunk list from a payload (whole-message audioUrls; falls back to the
-  // single audioUrl for older API responses).
-  function audioList(d) {
-    if (d && Array.isArray(d.audioUrls) && d.audioUrls.length) return d.audioUrls
-    return d && typeof d.audioUrl === 'string' && d.audioUrl ? [d.audioUrl] : []
+  // Reveal the answer up to (and including) chunk i and start its audio. The
+  // visible text is the trailing REVEAL_WINDOW chars so a long answer scrolls
+  // with the voice (the newest words always on screen) instead of overflowing.
+  function startChunk(i) {
+    chunkIdx = i
+    const c = voiceChunks[i] || { text: '', url: '', secs: 3 }
+    spoken = spoken ? spoken + ' ' + c.text : c.text
+    const full = revealHead + spoken
+    setVal(aNode, full.length > REVEAL_WINDOW ? '\\u2026 ' + full.slice(full.length - REVEAL_WINDOW) : full)
+    setColor(aNode, C.body)
+    stopAudio()
+    sawPlaying = false
+    chunkStartedAt = clock
+    const url = SPEAK ? resolveAudio(c.url) : null
+    if (url) {
+      try {
+        audio = app.create('audio', { src: url, spatial: true, volume: 1.3, loop: false })
+        app.add(audio)
+        audio.play()
+      } catch (e) {
+        audio = null
+      }
+    }
+  }
+  // Begin speaking/revealing a whole message. chunks: [{url,text,secs}] aligned
+  // 1:1 with the audio (from the API); head: a prefix (e.g. the aside marker).
+  function speakMessage(chunks, text, head) {
+    stopAudio()
+    revealHead = head || ''
+    spoken = ''
+    let list = Array.isArray(chunks) ? chunks.filter((c) => c && typeof c.text === 'string' && c.text) : []
+    if (!list.length) list = splitChunks(text)
+    if (!list.length) {
+      setVal(aNode, (head || '') + clip(text, REVEAL_WINDOW)); setColor(aNode, C.body)
+      speaking = false; chunkIdx = -1; voiceChunks = []
+      panelState = awaitLibrary ? 'consulting' : 'idle'; thinkT = 0; renderStatus()
+      return
+    }
+    voiceChunks = list.slice(0, 16)
+    speakSilent = !SPEAK || !voiceChunks.some((c) => c.url)
+    speaking = true
+    panelState = 'speaking'; renderStatus()
+    startChunk(0)
+  }
+  // Advance the teleprompter: step to the next chunk when the current one's
+  // audio has finished (or, with no audio, when its reading time elapses).
+  function tickSpeech() {
+    if (!speaking || chunkIdx < 0) return
+    const c = voiceChunks[chunkIdx]
+    let done = false
+    if (!speakSilent && audio) {
+      const playing = !!audio.isPlaying
+      if (playing) sawPlaying = true
+      if (sawPlaying && !playing) done = true                          // clip ended naturally
+      else if (!sawPlaying && clock - chunkStartedAt > LOAD_TIMEOUT) done = true // audio never started — don't stall
+    } else if (clock - chunkStartedAt >= (c ? c.secs : 3)) {
+      done = true                                                       // silent reveal, paced by estimate
+    }
+    if (!done) return
+    if (chunkIdx + 1 < voiceChunks.length) startChunk(chunkIdx + 1)
+    else endSpeaking()
+  }
+  // Normalize an answer payload into chunks: prefer the API's audio-aligned
+  // audioChunks (text+url+secs); fall back to splitting the text locally (and
+  // attaching any bare audioUrls in order) for older API responses / TTS-less.
+  function chunkList(d) {
+    if (d && Array.isArray(d.audioChunks) && d.audioChunks.length) {
+      return d.audioChunks
+        .filter((c) => c && typeof c.text === 'string' && c.text)
+        .map((c) => ({
+          url: typeof c.url === 'string' ? c.url : '',
+          text: c.text,
+          secs: typeof c.secs === 'number' && c.secs > 0 ? c.secs : Math.max(1.4, c.text.length * 0.07 + 0.9),
+        }))
+    }
+    const urls = d && Array.isArray(d.audioUrls) && d.audioUrls.length
+      ? d.audioUrls
+      : (d && typeof d.audioUrl === 'string' && d.audioUrl ? [d.audioUrl] : [])
+    const parts = splitChunks(d && d.text)
+    if (urls.length) parts.forEach((p, i) => { p.url = urls[i] || '' })
+    return parts
+  }
+  // Local fallback split (~sentence groups) with a reading-time estimate, so a
+  // TTS-less guide still reveals progressively and paces itself.
+  function splitChunks(text) {
+    const t = String(text || '').replace(/\\s+/g, ' ').trim()
+    if (!t) return []
+    const sentences = t.match(/[^.!?]+[.!?]+|\\S[^.!?]*$/g) || [t]
+    const out = []
+    let cur = ''
+    const flush = () => { const s = cur.trim(); if (s) out.push({ url: '', text: s, secs: Math.min(40, Math.max(1.4, s.length * 0.07 + 0.9)) }); cur = '' }
+    for (const raw of sentences) {
+      const piece = raw.trim(); if (!piece) continue
+      if ((cur ? cur + ' ' + piece : piece).length > 320) flush()
+      cur = cur ? cur + ' ' + piece : piece
+    }
+    flush()
+    return out.slice(0, 16)
   }
   app.on('moca:guide:thinking', (d) => {
-    panelState = 'thinking'; thinkT = 0; speakingUntil = 0
+    panelState = 'thinking'; thinkT = 0
     awaitLibrary = false; consultingUntil = 0
-    stopAudio() // a new question cuts off any answer still being spoken
+    // A new question cuts off any answer still being spoken/revealed.
+    stopAudio(); speaking = false; chunkIdx = -1; voiceChunks = []
     queuedFollowup = null // a new turn supersedes any pending follow-up
     setVal(qNode, d && d.question ? 'you asked: \\u201c' + clip(d.question, 120) + '\\u201d' : '')
     setVal(aNode, '')
@@ -774,34 +865,38 @@ if (world.isClient) {
   app.on('moca:guide:answer', (d) => {
     if (!d) return
     setVal(qNode, d.question ? 'you asked: \\u201c' + clip(d.question, 120) + '\\u201d' : '')
-    setVal(aNode, clip(d.text, 380))
-    setColor(aNode, C.body)
-    mirrorChat(d.text, str(d.persona, NAME))
     // A "consulting" reply is just a holding line — keep the visitor informed
     // that the real, Library-sourced answer is being looked up.
     awaitLibrary = d.consulting === true
     consultingUntil = awaitLibrary ? clock + 55 : 0
-    const list = audioList(d)
-    if (list.length) speakAnswer(list, d.text)
-    else { panelState = awaitLibrary ? 'consulting' : 'idle'; thinkT = 0; renderStatus() }
+    // Reveal + speak the answer in lockstep (text follows the voice, chunk by
+    // chunk). No chat mirror — the panel is the whole surface now.
+    speakMessage(chunkList(d), d.text, '')
   })
   // The librarian's deeper answer, dug up after the first reply. Render+speak it
-  // — but NEVER cut off the first reply's voice: if we're still speaking, queue
-  // it and the per-frame loop delivers it the moment the current clip finishes.
+  // — but NEVER cut off the first reply's voice: if we're still speaking it's
+  // queued and the per-frame loop delivers it the moment the voice finishes.
   function deliverFollowup(d) {
     awaitLibrary = false; consultingUntil = 0
-    setVal(aNode, '\\u2726  ' + clip(d.text, 360))
-    setColor(aNode, C.body)
-    mirrorChat('\\u2726 ' + d.text, str(d.persona, NAME))
-    const list = audioList(d)
-    if (list.length) speakAnswer(list, d.text)
-    else { panelState = 'idle'; thinkT = 0; renderStatus() }
+    speakMessage(chunkList(d), d.text, '\\u2726  ')
+  }
+  // A short "still researching" filler the guide speaks while the library is
+  // taking its time — keeps the consulting state (the real answer is still
+  // coming) and only fills SILENCE (never queued behind the real answer).
+  function deliverBridge(d) {
+    if (!awaitLibrary) return // the answer already landed — no filler
+    consultingUntil = clock + 55 // extend the hold while we keep waiting
+    speakMessage(chunkList(d), d.text, '')
   }
   app.on('moca:guide:followup', (d) => {
     if (!d || !d.text) return
-    // Wait out the holding-line's own voice, but a consulting state can be
-    // replaced immediately (that's the answer the visitor is waiting for).
-    if (panelState === 'speaking' && clock < speakingUntil) queuedFollowup = d
+    if (d.bridge) {
+      if (!speaking) deliverBridge(d) // fill the gap only when nothing's playing
+      return
+    }
+    // Wait out any voice still playing; once we're merely holding (consulting),
+    // deliver the real answer immediately.
+    if (speaking) queuedFollowup = d
     else deliverFollowup(d)
   })
 
@@ -836,20 +931,16 @@ if (world.isClient) {
     clock += dt
     const following = moveGuide(dt, followId, HOME)
 
-    // Advance through the answer's audio chunks so the WHOLE message is spoken.
-    if (nextChunkAt && clock >= nextChunkAt) playNextChunk()
-    // Drop out of "speaking" once the estimated clips have played — into the
-    // "consulting" hold if the real Library answer is still pending, else idle.
-    if (panelState === 'speaking' && clock >= speakingUntil) {
-      panelState = awaitLibrary ? 'consulting' : 'idle'; thinkT = 0; renderStatus()
-    }
+    // Drive the synced teleprompter: reveal text in lockstep with the voice,
+    // advancing to the next chunk only when the current clip truly ends.
+    tickSpeech()
     // Give up the consulting hold if the follow-up never lands within the window.
-    if (panelState === 'consulting' && consultingUntil && clock >= consultingUntil) {
+    if (!speaking && panelState === 'consulting' && consultingUntil && clock >= consultingUntil) {
       awaitLibrary = false; consultingUntil = 0; panelState = 'idle'; renderStatus()
     }
     // A queued follow-up plays the moment the first reply's voice has finished —
     // so the librarian answer never talks over the initial TTS.
-    if (queuedFollowup && (panelState !== 'speaking' || clock >= speakingUntil)) {
+    if (queuedFollowup && !speaking) {
       const d = queuedFollowup; queuedFollowup = null; deliverFollowup(d)
     }
     // Animate the dots while a question is in flight or the library is consulted.

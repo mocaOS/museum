@@ -167,9 +167,11 @@ guide** (`--guide` / the dialog's Museum guide toggle): an agentic VRM avatar
 visitors hold E to talk to — per-player private Q&A about the exhibition,
 served by the MOCA API's public `/v1/guide/*` endpoints (context registered at
 spawn, enriched from Directus). The conversation lives in a billboarded
-world-space **panel** above the guide (status · question · answer · hint),
-also mirrored to the visitor's private world chat — pure free-form chat, no
-numbered-question picking. Answers run a **hybrid** model: a fast direct
+world-space **panel** above the guide (status · question · answer · hint) — the
+answer is **revealed in lockstep with the spoken voice** (a teleprompter that
+scrolls within a trailing window for long answers); the panel is the whole
+surface (the native world-chat mirror was dropped — it cluttered and isn't built
+for long-form). Pure free-form chat, no numbered-question picking. Answers run a **hybrid** model: a fast direct
 LLM reply (`MUSEUMAGENT_*`, OpenAI-compatible — MOCA uses Venice, currently
 `qwen3-5-35b-a3b`) over exhibition metadata + an aggregated MOCA brief +
 per-visitor session memory, while a deterministic library router
@@ -185,8 +187,15 @@ world-space map of the rooms + hung works (from the same slot geometry the room
 apps use), resolves which room the visitor is in (tracking them as they move)
 and which work they stand in front of, and sends `roomUid`+`focus` so answers
 ground in the here-and-now ("which artwork is this?"). Voice via Venice TTS
-(default `tts-kokoro`) speaks the WHOLE answer as back-to-back `audioUrls`
-chunks (no mid-message cutoff). Script generator
+(default `tts-kokoro`) speaks the WHOLE answer as back-to-back per-sentence
+chunks; the API returns `audioChunks` (per-chunk `{url,text,secs}`) so the panel
+text follows the voice exactly, and each chunk advances on the clip's **real**
+end (`audio.isPlaying` flips false), never a text-length estimate — so it never
+cuts off a few words early or starts the next chunk too soon. While a
+library-routed answer is still being mined, the guide also speaks short,
+LLM-minted **"still researching" bridge** one-liners (unique per turn,
+pre-warmed TTS, handed out via `/v1/guide/followup` with `bridge:true` once the
+wait crosses ~4s) to hold attention. Script generator
 twins in `lib/guide-script.mjs` /
 `apps/museum/src/lib/museum/hyperfy/guide-script.ts`. The guide also ships
 as a drag-droppable `.hyp` app (`build-guide-app.mjs` CLI or the dialog's

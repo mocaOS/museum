@@ -159,6 +159,15 @@ interface GuideInsight {
   sources: string[];
 }
 
+/** One spoken chunk: an audio URL, the exact text it speaks, and a generous
+ * seconds estimate (watchdog only — the in-world guide detects real chunk-end
+ * from the audio node and reveals each chunk's `text` in lockstep with it). */
+interface VoiceChunk {
+  url: string;
+  text: string;
+  secs: number;
+}
+
 /**
  * Per-visitor conversation state for the hybrid path — ephemeral, in-memory,
  * TTL'd (nothing persisted; same privacy posture as /v1/presence). The two
@@ -180,9 +189,19 @@ interface GuideSession {
   lastRoomUid?: string | null;
   /** A proactive aside the guide composed when a deeper insight landed AFTER
    * the reply — delivered when the in-world guide next polls /guide/followup.
-   * `audioUrls` covers the WHOLE aside (sequential chunks); `audioUrl` is the
-   * first chunk, kept for older in-world guides. */
-  pendingFollowup?: { text: string; audioUrl: string | null; audioUrls?: string[]; at: number } | null;
+   * `audioChunks` carries the per-chunk text+url+secs the in-world guide reveals
+   * in lockstep with the voice; `audioUrls`/`audioUrl` are kept for older guides. */
+  pendingFollowup?: { text: string; audioUrl: string | null; audioUrls?: string[]; audioChunks?: VoiceChunk[]; at: number } | null;
+  /** When a library-routed question's ack was sent (the moment the visitor
+   * starts waiting for the real answer). Bridge fillers fire once the wait
+   * crosses ~4s. */
+  libAskedAt?: number;
+  /** Last time a bridge filler was handed out — paces the second one. */
+  lastBridgeAt?: number;
+  /** Pre-generated "still researching" one-liners (unique per turn, LLM-minted
+   * + pre-warmed TTS) the guide speaks to hold attention while Cortex works.
+   * Consumed one per /guide/followup poll once the 4s gap opens. */
+  bridges?: { text: string; audioUrls: string[]; audioChunks: VoiceChunk[] }[];
 }
 
 /** Normalize a topic/question so trivial rewordings collapse to one key. */
@@ -722,30 +741,40 @@ export function registerGuideRoutes(
     return chunks.slice(0, MAX_SPOKEN_CHUNKS);
   }
 
+  // Generous per-chunk seconds estimate (kokoro speaks ~14-16 chars/s). Used
+  // in-world ONLY as a watchdog ceiling (when a chunk's audio never loads) and to
+  // pace the text reveal when TTS is off — real chunk-end is detected from the
+  // audio node, so an over-estimate here never truncates a clip that IS playing.
+  function estimateSpokenSecs(text: string): number {
+    const chars = String(text || "").trim().length;
+    return Math.min(40, Math.max(1.4, Math.round((chars * 0.07 + 0.9) * 100) / 100));
+  }
+
   /**
-   * Register an answer for speech as a SEQUENCE of audio URLs the in-world guide
-   * plays back-to-back so the whole message is spoken. With `prewarm` we kick
-   * synthesis of the first couple of chunks IMMEDIATELY (fire-and-forget) so the
-   * voice lands ~1-2s after the text; later chunks synthesize lazily on their
-   * own GET, just before the client reaches them. Empty when TTS is unavailable.
-   * Each URL is absolute when PUBLIC_URL is set, else a path the guide resolves
-   * against its own API base.
+   * Register an answer for speech as a SEQUENCE of audio chunks the in-world guide
+   * plays back-to-back so the whole message is spoken — returning each chunk's
+   * URL, the exact TEXT it speaks, and a watchdog seconds estimate (the guide
+   * reveals each chunk's text in lockstep with its audio: a teleprompter). With
+   * `prewarm` we kick synthesis of the first couple of chunks IMMEDIATELY
+   * (fire-and-forget) so the voice lands ~1-2s after the text; later chunks
+   * synthesize lazily on their own GET. Empty when TTS is unavailable. Each URL is
+   * absolute when PUBLIC_URL is set, else a path the guide resolves against its
+   * own API base.
    */
-  function prepareVoiceChunks(answer: string, voice: string, prewarm = false): string[] {
-    if (!venice?.configured) return [];
-    const chunks = spokenChunks(answer);
-    if (!chunks.length) return [];
-    const urls: string[] = [];
-    chunks.forEach((text, i) => {
+  function prepareVoice(answer: string, voice: string, prewarm = false): { urls: string[]; chunks: VoiceChunk[] } {
+    if (!venice?.configured) return { urls: [], chunks: [] };
+    const parts = spokenChunks(answer);
+    if (!parts.length) return { urls: [], chunks: [] };
+    const chunks: VoiceChunk[] = parts.map((text, i) => {
       const id = hash32(`${voice}:${text}`).toString(36);
       if (!ttsCache.has(id) && !ttsPending.has(id)) {
         prune(ttsPending);
         ttsPending.set(id, { at: Date.now(), text, voice });
       }
       if (prewarm && i < 2) void synthPending(id); // warm the first two; rest on demand
-      urls.push(`${publicUrl || ""}/v1/guide/tts/${id}.mp3`);
+      return { url: `${publicUrl || ""}/v1/guide/tts/${id}.mp3`, text, secs: estimateSpokenSecs(text) };
     });
-    return urls;
+    return { urls: chunks.map((c) => c.url), chunks };
   }
 
   /** Synthesize a pending id (deduped across concurrent GETs); cache + return. */
@@ -1555,7 +1584,7 @@ export function registerGuideRoutes(
   /** A short, in-character "let me look that up" line for library-routed
    * questions — minted by the fast model, with a template fallback. Never tries
    * to answer (the real answer arrives via the follow-up). */
-  async function makeAck(persona: Persona, question: string, voice: string, speak: boolean): Promise<{ text: string; audioUrl: string | null; audioUrls: string[] }> {
+  async function makeAck(persona: Persona, question: string, voice: string, speak: boolean): Promise<{ text: string; audioUrl: string | null; audioUrls: string[]; audioChunks: VoiceChunk[] }> {
     let text = "";
     if (museumAgent?.configured) {
       try {
@@ -1580,8 +1609,62 @@ export function registerGuideRoutes(
       }
     }
     if (!text) text = LIBRARY_ACKS[hash32(question) % LIBRARY_ACKS.length];
-    const audioUrls = speak ? prepareVoiceChunks(text, voice, true) : [];
-    return { text, audioUrl: audioUrls[0] ?? null, audioUrls };
+    const { urls, chunks } = speak ? prepareVoice(text, voice, true) : { urls: [], chunks: [] };
+    return { text, audioUrl: urls[0] ?? null, audioUrls: urls, audioChunks: chunks };
+  }
+
+  /**
+   * Mint a couple of UNIQUE, in-character "still researching" one-liners and
+   * pre-warm their TTS, stashed on the session. While a library-routed answer is
+   * still being mined, /guide/followup hands these out (once the wait crosses
+   * ~4s) so the guide bridges the silence — "almost there, the records run deep"
+   * — instead of going quiet. Minted by the agent model so they're organic and
+   * never repeat verbatim; best-effort (the guide just stays quiet without them).
+   */
+  async function prepareBridges(
+    session: GuideSession,
+    persona: Persona,
+    question: string,
+    voice: string,
+    speak: boolean,
+  ): Promise<void> {
+    if (!museumAgent?.configured) return;
+    try {
+      const { status, text } = await museumAgent.chat({
+        timeoutMs: 7000,
+        temperature: 0.95,
+        maxTokens: 90,
+        messages: [
+          {
+            role: "system",
+            content:
+              `${persona.prompt}\n\nYou are ${persona.name}, a museum guide. You've just sent the visitor's ` +
+              `question off to the museum library and it's taking a moment to come back. Write TWO DIFFERENT, ` +
+              `short, warm, in-character one-liners to keep them company while they wait — e.g. "Almost there — ` +
+              `the records run deep on this one." or "Bear with me, just pulling the threads together." Each ` +
+              `must be DISTINCT, under 14 words, no numbering, no quotes. Do NOT answer the question itself. ` +
+              `One per line.`,
+          },
+          { role: "user", content: question },
+        ],
+      });
+      if (status !== 200 || !text) return;
+      const lines = text
+        .split("\n")
+        .map((l) => l.replace(/^[\s\-*\d.)"']+/, "").replace(/\s*\[src_[^\]]*\]/g, "").trim())
+        .filter((l) => l.length > 2)
+        .slice(0, 2);
+      const bridges = lines.map((line) => {
+        const { urls, chunks } = speak ? prepareVoice(line, voice, true) : { urls: [], chunks: [] };
+        return { text: line, audioUrls: urls, audioChunks: chunks };
+      });
+      if (bridges.length) {
+        session.bridges = bridges;
+        void saveSession(session);
+      }
+    } catch {
+      /* bridges are a nicety — never block on them */
+    }
   }
 
   async function mineInsight(
@@ -1602,6 +1685,10 @@ export function registerGuideRoutes(
     // turns dedup — the immediate reply already folded any cached insight in.
     if (!priorWasAck && session.insightTopics.includes(norm)) return;
     session.pendingInsight = true;
+    // Library-routed turns make the visitor wait for the real answer — mint a
+    // couple of organic "still researching" bridges in parallel with the mine,
+    // so the guide can hold attention if Cortex takes more than a few seconds.
+    if (priorWasAck) void prepareBridges(session, persona, question, voice, speak);
     try {
       // Reuse this session's or a pre-warmed / cross-visitor cached insight first.
       let insight: GuideInsight | null = session.insights.find((i) => normTopic(i.topic) === norm) || null;
@@ -1623,8 +1710,8 @@ export function registerGuideRoutes(
       } else if (priorWasAck) {
         // We promised an answer but Cortex came up empty — don't leave them hanging.
         const miss = "Hm — my deeper records came up short on that one. Ask me about any of the works or artists here and I'll dig right in.";
-        const missAudio = speak ? prepareVoiceChunks(miss, voice, true) : [];
-        session.pendingFollowup = { text: miss, audioUrl: missAudio[0] ?? null, audioUrls: missAudio, at: Date.now() };
+        const { urls: missAudio, chunks: missChunks } = speak ? prepareVoice(miss, voice, true) : { urls: [], chunks: [] };
+        session.pendingFollowup = { text: miss, audioUrl: missAudio[0] ?? null, audioUrls: missAudio, audioChunks: missChunks, at: Date.now() };
       }
     } catch {
       /* insight mining is best-effort */
@@ -1674,8 +1761,8 @@ export function registerGuideRoutes(
       });
       const line = status === 200 && text ? text.replace(/\s*\[src_[^\]]*\]/g, "").trim() : "";
       if (!line) return;
-      const audioUrls = speak ? prepareVoiceChunks(line, voice, true) : [];
-      session.pendingFollowup = { text: line.slice(0, 900), audioUrl: audioUrls[0] ?? null, audioUrls, at: Date.now() };
+      const { urls: audioUrls, chunks: audioChunks } = speak ? prepareVoice(line, voice, true) : { urls: [], chunks: [] };
+      session.pendingFollowup = { text: line.slice(0, 900), audioUrl: audioUrls[0] ?? null, audioUrls, audioChunks, at: Date.now() };
     } catch {
       /* the follow-up is best-effort — never block on it */
     }
@@ -1999,6 +2086,11 @@ export function registerGuideRoutes(
         if (library) {
           const ack = await makeAck(persona, question, voice, speak);
           answer = ack.text;
+          // The visitor starts waiting now — open the bridge-filler window and
+          // clear any fillers left over from a previous turn.
+          session.libAskedAt = Date.now();
+          session.lastBridgeAt = 0;
+          session.bridges = [];
           res.json({
             data: {
               answer,
@@ -2011,6 +2103,7 @@ export function registerGuideRoutes(
               consulting: true,
               ...(ack.audioUrl ? { audioUrl: ack.audioUrl } : {}),
               ...(ack.audioUrls.length ? { audioUrls: ack.audioUrls } : {}),
+              ...(ack.audioChunks.length ? { audioChunks: ack.audioChunks } : {}),
             },
           });
           delivered = true;
@@ -2032,8 +2125,9 @@ export function registerGuideRoutes(
             answer = text.replace(/\s*\[src_[^\]]*\]/g, "").trim();
             // Pre-warm synth NOW so it runs in parallel with the visitor reading
             // the text and the client's audio GET hits a warm/in-flight cache.
-            // audioUrls covers the WHOLE answer (played back-to-back in-world).
-            const audioUrls = speak ? prepareVoiceChunks(answer, voice, true) : [];
+            // audioChunks covers the WHOLE answer (played back-to-back in-world,
+            // each chunk's text revealed in lockstep with its voice).
+            const { urls: audioUrls, chunks: audioChunks } = speak ? prepareVoice(answer, voice, true) : { urls: [], chunks: [] };
             res.json({
               data: {
                 answer,
@@ -2042,6 +2136,7 @@ export function registerGuideRoutes(
                 mode: "fast",
                 ...(audioUrls[0] ? { audioUrl: audioUrls[0] } : {}),
                 ...(audioUrls.length ? { audioUrls } : {}),
+                ...(audioChunks.length ? { audioChunks } : {}),
               },
             });
             delivered = true;
@@ -2136,7 +2231,8 @@ export function registerGuideRoutes(
       // on the Cortex path: voice it only in pure legacy mode (no MUSEUMAGENT —
       // Cortex IS the guide's brain). When MUSEUMAGENT is configured but this turn
       // failed over to Cortex, stay text-only rather than speaking raw retrieval.
-      const audioUrls = speak && !museumAgent?.configured ? prepareVoiceChunks(answer, voice) : [];
+      const { urls: audioUrls, chunks: audioChunks } =
+        speak && !museumAgent?.configured ? prepareVoice(answer, voice) : { urls: [], chunks: [] };
 
       res.json({
         data: {
@@ -2147,6 +2243,7 @@ export function registerGuideRoutes(
           mode: "cortex",
           ...(audioUrls[0] ? { audioUrl: audioUrls[0] } : {}),
           ...(audioUrls.length ? { audioUrls } : {}),
+          ...(audioChunks.length ? { audioChunks } : {}),
         },
       });
     } catch (e: any) {
@@ -2170,6 +2267,13 @@ export function registerGuideRoutes(
   // insight, the guide composed a short in-character aside which we hand back
   // ONCE (then clear it). Closes the loop so deeper knowledge actually reaches
   // the visitor — not just maybe-helps a later question. Cheap: no LLM here.
+  //
+  // While a library-routed answer is still being mined, this ALSO hands out the
+  // pre-minted "still researching" bridge fillers (flagged `bridge:true`) once
+  // the wait crosses ~4s — paced ~4s apart — so the guide keeps the visitor
+  // company instead of going silent. The in-world guide keeps polling after a
+  // bridge (it isn't the answer), and stops once the real follow-up lands.
+  const BRIDGE_GAP_MS = 4000;
   router.get("/guide/followup", async (req: any, res: any) => {
     if (!allowFollowup(req)) {
       res.set("Retry-After", "10");
@@ -2179,23 +2283,56 @@ export function registerGuideRoutes(
     const sid = sanitizeSession(req.query.session);
     if (!id || !sid) return res.json({ data: null });
     const session = await peekSession(id, sid);
+    const now = Date.now();
     const fu = session?.pendingFollowup;
-    if (!session || !fu || Date.now() - fu.at > FOLLOWUP_TTL_MS) {
-      if (session && fu) {
-        session.pendingFollowup = null;
-        void saveSession(session);
-      }
-      return res.json({ data: null });
+
+    // The real answer is ready → deliver it (and drop any unused fillers).
+    if (session && fu && now - fu.at <= FOLLOWUP_TTL_MS) {
+      session.pendingFollowup = null;
+      session.bridges = [];
+      session.libAskedAt = 0;
+      void saveSession(session);
+      return res.json({
+        data: {
+          text: fu.text,
+          ...(fu.audioUrl ? { audioUrl: fu.audioUrl } : {}),
+          ...(fu.audioUrls && fu.audioUrls.length ? { audioUrls: fu.audioUrls } : {}),
+          ...(fu.audioChunks && fu.audioChunks.length ? { audioChunks: fu.audioChunks } : {}),
+        },
+      });
     }
-    session.pendingFollowup = null;
-    void saveSession(session);
-    res.json({
-      data: {
-        text: fu.text,
-        ...(fu.audioUrl ? { audioUrl: fu.audioUrl } : {}),
-        ...(fu.audioUrls && fu.audioUrls.length ? { audioUrls: fu.audioUrls } : {}),
-      },
-    });
+
+    // No answer yet, but the visitor has been waiting a beat — bridge the gap.
+    if (
+      session &&
+      Array.isArray(session.bridges) &&
+      session.bridges.length &&
+      session.libAskedAt &&
+      now - session.libAskedAt >= BRIDGE_GAP_MS &&
+      now - (session.lastBridgeAt || 0) >= BRIDGE_GAP_MS
+    ) {
+      const bridge = session.bridges.shift();
+      session.lastBridgeAt = now;
+      void saveSession(session);
+      if (bridge) {
+        return res.json({
+          data: {
+            text: bridge.text,
+            bridge: true,
+            ...(bridge.audioUrls[0] ? { audioUrl: bridge.audioUrls[0] } : {}),
+            ...(bridge.audioUrls.length ? { audioUrls: bridge.audioUrls } : {}),
+            ...(bridge.audioChunks.length ? { audioChunks: bridge.audioChunks } : {}),
+          },
+        });
+      }
+    }
+
+    // Nothing to send (and clear an expired follow-up if one lingered).
+    if (session && fu) {
+      session.pendingFollowup = null;
+      void saveSession(session);
+    }
+    return res.json({ data: null });
   });
 
   // Serve a synthesized answer's audio (public, keyless like the rest of the

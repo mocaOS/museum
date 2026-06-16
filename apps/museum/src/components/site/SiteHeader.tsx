@@ -8,8 +8,8 @@ import { useState } from "react";
 // "Enter the Library" CTA. Vibe Studio lives in the footer (and on /decc0s).
 const NAV = [
   { href: "/decc0s", label: "DeCC0s" },
-  { href: "/soulweaver", label: "Soulweaver" },
   { href: "/cortex", label: "Cortex" },
+  { href: "/soulweaver", label: "Soulweaver" },
   { href: "/rooms", label: "ROOMs" },
   { href: "/collections", label: "Collections", right: true },
   { href: "/writings", label: "Writings", right: true },
