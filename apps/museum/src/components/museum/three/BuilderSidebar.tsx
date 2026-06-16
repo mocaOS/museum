@@ -851,15 +851,13 @@ export default function BuilderSidebar({
           <div className="flex items-center gap-1.5">
             <SmallBtn onClick={onSetSpawn} title="Click the ground in the 3D view to choose where visitors enter the Hyperfy world, then aim which way they face">
               <IconFocus size={13} />
-              {hasSpawn ? "Move spawn point" : "Set spawn point"}
+              {hasSpawn ? "Move player spawn" : "Set player spawn"}
             </SmallBtn>
             {hasSpawn && (
-              <SmallBtn onClick={onClearSpawn} title="Remove the custom spawn point">
+              <SmallBtn onClick={onClearSpawn} title="Remove the custom player spawn">
                 <IconClose size={13} />
               </SmallBtn>
             )}
-          </div>
-          <div className="flex items-center gap-1.5">
             <SmallBtn onClick={onSetGuide} title="Click the ground in the 3D view to place the museum guide, then aim which way it faces (otherwise it auto-places by the entrance)">
               <IconFocus size={13} />
               {hasGuide ? "Move guide spawn" : "Set guide spawn"}
