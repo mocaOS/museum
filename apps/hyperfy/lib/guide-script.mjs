@@ -319,9 +319,11 @@ function resolveRoom(px, pz) {
   if (near) { const cap = Math.max(nearR * 3, nearR + 20); if (bestNear <= cap) return near }
   return null
 }
-// The single work the visitor is at: nearest within range, biased toward the
-// piece they FACE (forward ≈ visitor − guide, since the guide trails them) and
-// toward works in the room they're in.
+// The single work the visitor is at: the piece they FACE, nearest first. Facing
+// (the visitor's real body heading) DOMINATES — a piece dead ahead beats a closer
+// one off to the side, and anything behind the visitor is excluded outright, so
+// "the piece in front of me" never resolves to one at their back. Distance is a
+// gentle tiebreaker; works in the current room get a small nudge.
 function resolveFocus(px, pz, roomUid, fwdx, fwdz) {
   let best = null, bestScore = -Infinity
   const haveFwd = typeof fwdx === 'number' && typeof fwdz === 'number' && (fwdx || fwdz)
@@ -330,7 +332,11 @@ function resolveFocus(px, pz, roomUid, fwdx, fwdz) {
     const d = Math.sqrt(dx * dx + dz * dz)
     if (d > FOCUS_RANGE) continue
     let score = -d
-    if (haveFwd && d > 0.001) score += ((dx / d) * fwdx + (dz / d) * fwdz) * 2.5 // reward ahead-of-you
+    if (haveFwd && d > 0.001) {
+      const dot = (dx / d) * fwdx + (dz / d) * fwdz // +1 dead ahead, -1 behind
+      if (dot < -0.15) continue // behind the visitor — not what's "in front"
+      score += dot * (FOCUS_RANGE + 1) // facing dominates the distance term
+    }
     if (roomUid && w.uid === roomUid) score += 1.5 // prefer this room's works
     if (score > bestScore) { bestScore = score; best = w }
   }
@@ -442,17 +448,33 @@ if (world.isServer) {
     try {
       const player = world.getPlayer(playerId)
       // Resolve the visitor's room + the work they're standing in front of from
-      // their live world position (the guide trails them, so visitor − guide is
-      // a decent "facing" hint). Sent explicitly so the API tracks them as they
-      // move and grounds "which artwork is this?" on the right piece.
+      // their live world position AND their real body heading. We derive the
+      // forward vector from the player's networked quaternion (the VRM faces
+      // local -Z), NOT visitor − guide — the guide trails the visitor, so that
+      // old hint pointed along their path of travel, not their gaze, which is why
+      // "the piece in front of me" kept resolving to the wrong work. Sent
+      // explicitly so the API grounds the answer on the right piece.
       let roomUid, focus
       if (player && player.position) {
         const px = player.position.x, pz = player.position.z
         const room = resolveRoom(px, pz)
         roomUid = room ? room.uid : undefined
-        const fdx = px - app.position.x, fdz = pz - app.position.z
-        const flen = Math.sqrt(fdx * fdx + fdz * fdz)
-        const work = resolveFocus(px, pz, roomUid, flen > 0.3 ? fdx / flen : 0, flen > 0.3 ? fdz / flen : 0)
+        let fwdx = 0, fwdz = 0
+        const q = player.quaternion
+        if (q && (q.x || q.y || q.z || q.w)) {
+          // forward = quaternion · (0,0,-1), horizontal components.
+          fwdx = -2 * (q.x * q.z + q.w * q.y)
+          fwdz = -(1 - 2 * (q.x * q.x + q.y * q.y))
+          const fl = Math.sqrt(fwdx * fwdx + fwdz * fwdz)
+          if (fl > 0.001) { fwdx /= fl; fwdz /= fl } else { fwdx = 0; fwdz = 0 }
+        }
+        if (!fwdx && !fwdz) {
+          // Fallback when the heading isn't available yet: visitor − guide.
+          const fdx = px - app.position.x, fdz = pz - app.position.z
+          const flen = Math.sqrt(fdx * fdx + fdz * fdz)
+          if (flen > 0.3) { fwdx = fdx / flen; fwdz = fdz / flen }
+        }
+        const work = resolveFocus(px, pz, roomUid, fwdx, fwdz)
         if (work) focus = { artworkId: work.id || undefined, slotId: work.slot || undefined, title: work.title || undefined, artist: work.artist || undefined }
       }
       const res = await fetch(API + '/v1/guide/ask', {

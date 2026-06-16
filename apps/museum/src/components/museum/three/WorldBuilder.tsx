@@ -928,6 +928,32 @@ function Ghost({
   );
 }
 
+// A spawn marker: a ground ring + a cone pointing the way the avatar will face
+// (local +Z, matching the spawners' yaw) + a small pole. Used for both the
+// player spawn (green) and the guide spawn (MOCA gold). The parent group carries
+// the position + rotationY so this is purely visual.
+function SpawnMarkerInner({ color }: { color: string }) {
+  return (
+    <>
+      <mesh rotation={[ -Math.PI / 2, 0, 0 ]} position={[ 0, 0.02, 0 ]}>
+        <ringGeometry args={[ 0.7, 0.95, 40 ]} />
+        <meshBasicMaterial color={color} transparent opacity={0.9} />
+      </mesh>
+      <mesh position={[ 0, 0.02, 1.25 ]} rotation={[ Math.PI / 2, 0, 0 ]}>
+        <coneGeometry args={[ 0.28, 0.7, 3 ]} />
+        <meshBasicMaterial color={color} transparent opacity={0.9} />
+      </mesh>
+      <mesh position={[ 0, 0.6, 0 ]}>
+        <cylinderGeometry args={[ 0.03, 0.03, 1.2, 8 ]} />
+        <meshBasicMaterial color={color} />
+      </mesh>
+    </>
+  );
+}
+
+const SPAWN_COLOR = "#9effa5"; // player spawn — green
+const GUIDE_COLOR = "#e8c14a"; // guide spawn — MOCA gold
+
 export default function WorldBuilder({ rooms }: { rooms: WorldRoom[] }) {
   const placeable = useMemo(() => rooms.filter(r => r.modelUrl), [ rooms ]);
   const roomById = useMemo(() => new Map(rooms.map(r => [ r.id, r ])), [ rooms ]);
@@ -937,7 +963,16 @@ export default function WorldBuilder({ rooms }: { rooms: WorldRoom[] }) {
   // Exhibition spawn point: where visitors enter the Hyperfy world. Set by
   // clicking the ground in "set spawn" mode; travels with layout + export.
   const [ spawnPoint, setSpawnPoint ] = useState<{ position: [number, number, number]; rotationY: number } | null>(null);
-  const [ settingSpawn, setSettingSpawn ] = useState(false);
+  const [ guidePoint, setGuidePoint ] = useState<{ position: [number, number, number]; rotationY: number } | null>(null);
+  // Two-stage marker placement, shared by the player spawn and the guide spawn:
+  // first ground click drops the point, then the cursor AIMS its facing and a
+  // second click locks it. `pos` null = waiting for the drop; set = aiming.
+  const [ markerMode, setMarkerMode ] =
+    useState<{ kind: "spawn" | "guide"; pos: [number, number, number] | null } | null>(null);
+  // Live facing during the aim stage — updated imperatively on the preview group
+  // so we don't re-render per mousemove (committed to state on the second click).
+  const aimGroupRef = useRef<THREE.Group>(null);
+  const aimRotRef = useRef(0);
   // Placement ghost lives outside React state: pointer moves write the group's
   // transform directly (see Ghost) so placing mode costs zero re-renders.
   const ghostRef = useRef<THREE.Group>(null);
@@ -1009,6 +1044,7 @@ export default function WorldBuilder({ rooms }: { rooms: WorldRoom[] }) {
       counter.current = Math.max(counter.current, maxN);
       exhibitionIdRef.current = layout.exhibitionId || newExhibitionId();
       setSpawnPoint(layout.spawn ?? null);
+      setGuidePoint(layout.guideSpawn ?? null);
       // Mirror synchronously so camera verbs fired right after a load (e.g.
       // frameExhibition) already see the restored placements.
       placedRef.current = restored;
@@ -1039,8 +1075,9 @@ export default function WorldBuilder({ rooms }: { rooms: WorldRoom[] }) {
         overrides: overrides[p.uid] || {},
       })),
       spawn: spawnPoint ?? undefined,
+      guideSpawn: guidePoint ?? undefined,
     }),
-    [ placed, assignments, overrides, spawnPoint ],
+    [ placed, assignments, overrides, spawnPoint, guidePoint ],
   );
 
   // Hydrate the saved layout once on mount (rooms come from the server props).
@@ -1297,6 +1334,7 @@ export default function WorldBuilder({ rooms }: { rooms: WorldRoom[] }) {
     buildHyperfyExhibition({
       id: exhibitionIdRef.current,
       spawn: spawnPoint ?? undefined,
+      guideSpawn: guidePoint ?? undefined,
       // The exhibit's name from the Exhibits tab — "Unnamed exhibit" until
       // the curator renames it. Travels into spawns, exports and the guide.
       name: currentExhibitName(exhibitionIdRef.current),
@@ -1464,10 +1502,10 @@ export default function WorldBuilder({ rooms }: { rooms: WorldRoom[] }) {
       } else if (e.code === "KeyF") {
         if (selected) selectAndFocus(selected);
       } else if (e.code === "Escape") {
-        // Step back one layer at a time: spawn mode → placing → active slot
+        // Step back one layer at a time: marker mode → placing → active slot
         // → curate mode → help panel → selection.
-        if (settingSpawn) {
-          setSettingSpawn(false);
+        if (markerMode) {
+          setMarkerMode(null);
         } else if (placing) {
           setPlacing(null);
         } else if (curatingUid && activeSlotId) {
@@ -1559,7 +1597,16 @@ export default function WorldBuilder({ rooms }: { rooms: WorldRoom[] }) {
           rotation={[ -Math.PI / 2, 0, 0 ]}
           position={[ 0, 0, 0 ]}
           onPointerMove={(e) => {
-            if (placing) {
+            if (markerMode?.pos) {
+              // Aim stage: point the marker toward the cursor (+Z-forward), live
+              // and imperative so we don't re-render per mousemove.
+              const dx = e.point.x - markerMode.pos[0];
+              const dz = e.point.z - markerMode.pos[2];
+              if (dx * dx + dz * dz > 1e-4) {
+                aimRotRef.current = Math.atan2(dx, dz);
+                aimGroupRef.current?.rotation.set(0, aimRotRef.current, 0);
+              }
+            } else if (placing) {
               // Imperative ghost update — no React re-render per mousemove.
               ghostState.current.pos = [ e.point.x, 0, e.point.z ];
               ghostRef.current?.position.set(e.point.x, 0, e.point.z);
@@ -1578,14 +1625,20 @@ export default function WorldBuilder({ rooms }: { rooms: WorldRoom[] }) {
           }}
           onPointerUp={() => (draggingRef.current = null)}
           onClick={(e) => {
-            if (settingSpawn) {
+            if (markerMode) {
               e.stopPropagation();
-              // Visitors face the exhibition center from where they appear.
-              setSpawnPoint({
-                position: [ e.point.x, 0, e.point.z ],
-                rotationY: Math.atan2(-e.point.x, -e.point.z),
-              });
-              setSettingSpawn(false);
+              if (!markerMode.pos) {
+                // Stage 1 — drop the point. Default facing toward the exhibition
+                // center; the aim stage then lets the curator override it.
+                aimRotRef.current = Math.atan2(-e.point.x, -e.point.z);
+                setMarkerMode({ ...markerMode, pos: [ e.point.x, 0, e.point.z ] });
+              } else {
+                // Stage 2 — lock the facing aimed with the cursor.
+                const marker = { position: markerMode.pos, rotationY: aimRotRef.current };
+                if (markerMode.kind === "spawn") setSpawnPoint(marker);
+                else setGuidePoint(marker);
+                setMarkerMode(null);
+              }
             } else if (placing) {
               e.stopPropagation();
               placeAt(e.point.x, e.point.z);
@@ -1604,21 +1657,24 @@ export default function WorldBuilder({ rooms }: { rooms: WorldRoom[] }) {
           />
         )}
 
-        {/* Exhibition spawn point — where visitors enter the Hyperfy world. */}
-        {spawnPoint && (
+        {/* Player spawn point — where visitors enter; cone shows their facing.
+            Hidden while re-aiming the spawn (the live preview stands in). */}
+        {spawnPoint && !(markerMode?.kind === "spawn") && (
           <group position={spawnPoint.position} rotation={[ 0, spawnPoint.rotationY, 0 ]}>
-            <mesh rotation={[ -Math.PI / 2, 0, 0 ]} position={[ 0, 0.02, 0 ]}>
-              <ringGeometry args={[ 0.7, 0.95, 40 ]} />
-              <meshBasicMaterial color="#9effa5" transparent opacity={0.9} />
-            </mesh>
-            <mesh position={[ 0, 0.02, -1.25 ]} rotation={[ -Math.PI / 2, 0, Math.PI ]}>
-              <coneGeometry args={[ 0.28, 0.7, 3 ]} />
-              <meshBasicMaterial color="#9effa5" transparent opacity={0.9} />
-            </mesh>
-            <mesh position={[ 0, 0.6, 0 ]}>
-              <cylinderGeometry args={[ 0.03, 0.03, 1.2, 8 ]} />
-              <meshBasicMaterial color="#9effa5" />
-            </mesh>
+            <SpawnMarkerInner color={SPAWN_COLOR} />
+          </group>
+        )}
+        {/* Guide spawn point — where the museum guide stands + which way it faces. */}
+        {guidePoint && !(markerMode?.kind === "guide") && (
+          <group position={guidePoint.position} rotation={[ 0, guidePoint.rotationY, 0 ]}>
+            <SpawnMarkerInner color={GUIDE_COLOR} />
+          </group>
+        )}
+        {/* Live aim preview during the second placement stage (facing follows
+            the cursor, updated imperatively via aimGroupRef). */}
+        {markerMode?.pos && (
+          <group ref={aimGroupRef} position={markerMode.pos} rotation={[ 0, aimRotRef.current, 0 ]}>
+            <SpawnMarkerInner color={markerMode.kind === "spawn" ? SPAWN_COLOR : GUIDE_COLOR} />
           </group>
         )}
 
@@ -1691,11 +1747,17 @@ export default function WorldBuilder({ rooms }: { rooms: WorldRoom[] }) {
         onAutoFill={autoPopulate}
         onScaleRoom={scaleRoom}
         onSetSpawn={() => {
-          setSettingSpawn(true);
+          setMarkerMode({ kind: "spawn", pos: null });
           setPlacing(null);
         }}
         onClearSpawn={() => setSpawnPoint(null)}
         hasSpawn={!!spawnPoint}
+        onSetGuide={() => {
+          setMarkerMode({ kind: "guide", pos: null });
+          setPlacing(null);
+        }}
+        onClearGuide={() => setGuidePoint(null)}
+        hasGuide={!!guidePoint}
         onBrowserQuery={(q) => {
           browserQueryRef.current = q;
         }}
@@ -1721,8 +1783,8 @@ export default function WorldBuilder({ rooms }: { rooms: WorldRoom[] }) {
         onGuide={() => setGuideOpen(true)}
       />
 
-      {/* Set-spawn banner */}
-      {settingSpawn && !placing && (
+      {/* Marker-placement banner (player spawn or guide spawn): drop, then aim. */}
+      {markerMode && !placing && (
         <div
           className={`
             pointer-events-none absolute top-3 z-20 flex justify-center
@@ -1733,7 +1795,9 @@ export default function WorldBuilder({ rooms }: { rooms: WorldRoom[] }) {
             className="rounded-full px-4 py-1.5 text-xs"
             style={{ background: "var(--accent)", color: "var(--accent-fg)" }}
           >
-            Click the ground to set where visitors spawn · Esc cancels
+            {markerMode.pos
+              ? `Move the cursor to aim where the ${markerMode.kind === "guide" ? "guide" : "visitor"} faces · click to set · Esc cancels`
+              : `Click the ground to place the ${markerMode.kind === "guide" ? "guide" : "visitor spawn"} · Esc cancels`}
           </div>
         </div>
       )}

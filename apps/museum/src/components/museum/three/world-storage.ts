@@ -50,6 +50,9 @@ export interface WorldLayout {
   placements: StoredPlacement[];
   /** Where visitors enter the Hyperfy world (tile space; default: engine spawn). */
   spawn?: { position: [number, number, number]; rotationY: number };
+  /** Where the museum guide stands + which way it faces (tile space). Without
+   * it the spawners auto-place the guide beside the entry-nearest room. */
+  guideSpawn?: { position: [number, number, number]; rotationY: number };
 }
 
 export function newExhibitionId(): string {
@@ -67,10 +70,12 @@ function normalizeLayout(parsed: unknown): WorldLayout | null {
     return null;
   }
   const spawn = (p as { spawn?: WorldLayout["spawn"] }).spawn;
+  const guideSpawn = (p as { guideSpawn?: WorldLayout["guideSpawn"] }).guideSpawn;
   return {
     version: 2,
     exhibitionId: p.exhibitionId,
     spawn,
+    guideSpawn,
     placements: p.placements.map(pl => ({
       ...pl,
       assignments: pl.assignments || {},

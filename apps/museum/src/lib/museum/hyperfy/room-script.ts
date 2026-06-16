@@ -432,18 +432,34 @@ if (world.isServer) {
 // Throttled with hysteresis so a wall of far works costs nothing and the
 // boundary never flickers. Old exports (no srcHi) just keep the default.
 if (world.isClient) {
-  const HQ_NEAR = 7  // meters: within this, show HQ
-  const HQ_FAR = 12  // meters: beyond this, drop back to the default
-  const S = 1 / M    // room entity scale (meters per GLB-local unit)
+  const HQ_NEAR = 7      // meters: within this AND settled, show HQ
+  const HQ_FAR = 12      // meters: beyond this, drop back to the default
+  const STILL_SECS = 2   // must pause this long before paying for the HQ swap
+  const MOVE_EPS = 0.6   // meters moved per check that counts as "still moving"
+  const S = 1 / M        // room entity scale (meters per GLB-local unit)
   let lodT = 0
+  let stillFor = 0
+  let lx = null, ly = null, lz = null
   app.on('update', (dt) => {
     lodT += dt
     if (lodT < 0.4) return
+    const step = lodT
     lodT = 0
     let me = null
     try { me = world.getPlayer() } catch (e) {}
     if (!me || !me.position) return
-    const px = me.position.x, pz = me.position.z
+    const px = me.position.x, py = me.position.y, pz = me.position.z
+    // Only swap to HQ once the visitor has actually PAUSED near a piece — walking
+    // or flying by (any axis) keeps resetting the timer, so a fly-through never
+    // triggers a wall of expensive texture fetches. Reverting on distance is
+    // immediate (cheap, and frees memory as they leave).
+    if (lx === null) { stillFor = 0 } else {
+      const mdx = px - lx, mdy = py - ly, mdz = pz - lz
+      if (mdx * mdx + mdy * mdy + mdz * mdz > MOVE_EPS * MOVE_EPS) stillFor = 0
+      else stillFor += step
+    }
+    lx = px; ly = py; lz = pz
+    const settled = stillFor >= STILL_SECS
     for (const slotId in HUNG) {
       const h = HUNG[slotId]
       if (!h || !h.srcHi || !h.node) continue
@@ -451,7 +467,7 @@ if (world.isClient) {
       const dx = px - (app.position.x + r.x)
       const dz = pz - (app.position.z + r.z)
       const d2 = dx * dx + dz * dz
-      if (!h.hi && d2 < HQ_NEAR * HQ_NEAR) {
+      if (!h.hi && settled && d2 < HQ_NEAR * HQ_NEAR) {
         h.hi = true
         try { h.node.src = h.srcHi } catch (e) {}
       } else if (h.hi && d2 > HQ_FAR * HQ_FAR) {

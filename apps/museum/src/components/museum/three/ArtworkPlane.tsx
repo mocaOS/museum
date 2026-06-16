@@ -60,8 +60,10 @@ export default function ArtworkPlane({
     grab: THREE.Vector3; // pointer offset from the piece center, local space
   }>(null);
 
-  const url = useMemo(() => artworkTextureUrl(art, 1024), [art]);
-  const videoUrl = useMemo(() => artworkVideoUrl(art, 1024), [art]);
+  // Builder previews load at 512w — plenty for the editor view and much lighter
+  // on the texture proxy than 1024 (the spawned world fetches its own HQ).
+  const url = useMemo(() => artworkTextureUrl(art, 512), [art]);
+  const videoUrl = useMemo(() => artworkVideoUrl(art, 512), [art]);
 
   useEffect(() => {
     let cancelled = false;

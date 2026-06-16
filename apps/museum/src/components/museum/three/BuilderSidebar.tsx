@@ -338,6 +338,9 @@ export default function BuilderSidebar({
   onSetSpawn,
   onClearSpawn,
   hasSpawn,
+  onSetGuide,
+  onClearGuide,
+  hasGuide,
   onBrowserQuery,
 }: {
   tab: SidebarTab;
@@ -383,6 +386,9 @@ export default function BuilderSidebar({
   onSetSpawn: () => void;
   onClearSpawn: () => void;
   hasSpawn: boolean;
+  onSetGuide: () => void;
+  onClearGuide: () => void;
+  hasGuide: boolean;
   onBrowserQuery: (q: { slugs: string | null; search: string }) => void;
 }) {
   const TABS: { id: SidebarTab; label: string; icon: ReactNode }[] = [
@@ -843,12 +849,23 @@ export default function BuilderSidebar({
         <ExhibitsPanel getLayout={getLayout} hasContent={hasContent} onLoad={onLoadLayout} />
         <div className="flex flex-col gap-2 border-t p-3" style={{ borderColor: "var(--border)" }}>
           <div className="flex items-center gap-1.5">
-            <SmallBtn onClick={onSetSpawn} title="Click the ground in the 3D view to choose where visitors enter the Hyperfy world">
+            <SmallBtn onClick={onSetSpawn} title="Click the ground in the 3D view to choose where visitors enter the Hyperfy world, then aim which way they face">
               <IconFocus size={13} />
               {hasSpawn ? "Move spawn point" : "Set spawn point"}
             </SmallBtn>
             {hasSpawn && (
               <SmallBtn onClick={onClearSpawn} title="Remove the custom spawn point">
+                <IconClose size={13} />
+              </SmallBtn>
+            )}
+          </div>
+          <div className="flex items-center gap-1.5">
+            <SmallBtn onClick={onSetGuide} title="Click the ground in the 3D view to place the museum guide, then aim which way it faces (otherwise it auto-places by the entrance)">
+              <IconFocus size={13} />
+              {hasGuide ? "Move guide spawn" : "Set guide spawn"}
+            </SmallBtn>
+            {hasGuide && (
+              <SmallBtn onClick={onClearGuide} title="Remove the custom guide spawn (back to auto-placement)">
                 <IconClose size={13} />
               </SmallBtn>
             )}

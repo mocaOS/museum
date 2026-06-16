@@ -534,30 +534,42 @@ async function pushGuide(
     mime: "text/javascript",
   });
 
-  // 4. Stand the guide beside the room nearest the player spawn (world origin),
-  //    on the approach side and facing arrivals, so visitors meet it on the way
-  //    in. After someone talks to it, it follows them (see generateGuideScript).
+  // 4. Place the guide. If the curator set an explicit guide spawn in the
+  //    builder, honour it (position + facing, tile space). Otherwise stand the
+  //    guide beside the room nearest the player spawn (world origin), on the
+  //    approach side and facing arrivals. After someone talks to it, it follows
+  //    them (see generateGuideScript).
   onStatus?.("spawning");
   const k = tileMeters / BUILDER_TILE;
-  let nearWX = 0;
-  let nearWZ = 0;
-  let best = Infinity;
-  for (const p of exhibition.placements) {
-    const wx = k * p.position[0];
-    const wz = k * p.position[2];
-    const d = wx * wx + wz * wz; // distance² to the spawn point (world origin)
-    if (d < best) { best = d; nearWX = wx; nearWZ = wz; }
+  let gPosition: number[];
+  let gQuaternion: number[];
+  if (exhibition.guideSpawn && Array.isArray(exhibition.guideSpawn.position)) {
+    const gs = exhibition.guideSpawn;
+    gPosition = [ k * gs.position[0], k * (gs.position[1] || 0), k * gs.position[2] ];
+    // Builder facing is +Z-forward; the VRM faces local -Z, so add π (same
+    // correction the auto path and the in-world facing math use).
+    gQuaternion = yawToQuaternion((gs.rotationY || 0) + Math.PI);
+  } else {
+    let nearWX = 0;
+    let nearWZ = 0;
+    let best = Infinity;
+    for (const p of exhibition.placements) {
+      const wx = k * p.position[0];
+      const wz = k * p.position[2];
+      const d = wx * wx + wz * wz; // distance² to the spawn point (world origin)
+      if (d < best) { best = d; nearWX = wx; nearWZ = wz; }
+    }
+    // Offset from that room toward the spawn point so the guide stands on the
+    // path in, not buried inside the room.
+    const len = Math.hypot(nearWX, nearWZ) || 1;
+    const off = tileMeters * 0.6;
+    const gx = nearWX - (nearWX / len) * off;
+    const gz = nearWZ - (nearWZ / len) * off;
+    gPosition = [ gx, 0, gz ];
+    // Face the spawn point (where arrivals come from); the script re-faces toward
+    // whoever approaches. Same yaw convention as the script: atan2(dx,dz)+π.
+    gQuaternion = yawToQuaternion(Math.atan2(-gx, -gz) + Math.PI);
   }
-  // Offset from that room toward the spawn point so the guide stands on the
-  // path in, not buried inside the room.
-  const len = Math.hypot(nearWX, nearWZ) || 1;
-  const off = tileMeters * 0.6;
-  const gx = nearWX - (nearWX / len) * off;
-  const gz = nearWZ - (nearWZ / len) * off;
-  const gPosition = [ gx, 0, gz ];
-  // Face the spawn point (where arrivals come from); the script re-faces toward
-  // whoever approaches. Same yaw convention as the script: atan2(dx,dz)+π.
-  const gQuaternion = yawToQuaternion(Math.atan2(-gx, -gz) + Math.PI);
 
   const bpId = await deterministicUuid(`${exhibitionKey}:guide:blueprint`);
   const enId = await deterministicUuid(`${exhibitionKey}:guide:entity`);

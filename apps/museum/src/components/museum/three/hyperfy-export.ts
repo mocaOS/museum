@@ -120,6 +120,11 @@ export interface HyperfyExhibition {
    * Optional — without it the world keeps its engine default spawn.
    */
   spawn?: { position: [number, number, number]; rotationY: number };
+  /**
+   * Where the museum guide stands + which way it faces (tile space). Optional —
+   * without it the spawners auto-place the guide beside the entry-nearest room.
+   */
+  guideSpawn?: { position: [number, number, number]; rotationY: number };
 }
 
 function absolute(url: string): string {
@@ -134,6 +139,7 @@ export function buildHyperfyExhibition(opts: {
   id?: string;
   name: string;
   spawn?: { position: [number, number, number]; rotationY: number };
+  guideSpawn?: { position: [number, number, number]; rotationY: number };
   placed: { uid: string; room: WorldRoom; position: [number, number, number]; rotationY: number; scale?: number }[];
   assignments: Record<string, Assignments>;
   overrides: Record<string, SlotOverrides>;
@@ -145,6 +151,7 @@ export function buildHyperfyExhibition(opts: {
     id: opts.id,
     name: opts.name,
     spawn: opts.spawn,
+    guideSpawn: opts.guideSpawn,
     createdAt: new Date().toISOString(),
     generator:
       typeof window !== "undefined" ? window.location.origin : "museumofcryptoart.com",

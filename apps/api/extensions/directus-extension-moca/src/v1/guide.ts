@@ -710,8 +710,22 @@ export function registerGuideRoutes(
   // single Venice request snappy; a chunk-count cap bounds total synth cost.
   const SPOKEN_CHUNK_MAX = 320;
   const MAX_SPOKEN_CHUNKS = 12;
+  // Strip everything the TTS voice stumbles over — markdown (*, #, _, `), emoji,
+  // bullets, brackets, pipes — keeping only letters, numbers, whitespace and the
+  // basic sentence punctuation that shapes natural prosody. Removed glyphs become
+  // a space (so "a*b" → "a b", not "ab") and runs collapse. Curly apostrophes are
+  // normalized so contractions survive. Applied to EVERY string before synthesis
+  // (it also feeds the in-world teleprompter text, so the panel matches the voice).
+  function cleanForSpeech(text: string): string {
+    return String(text || "")
+      .replace(/’/g, "'")
+      .replace(/[^\p{L}\p{N}\s.,!?;:'\-]/gu, " ")
+      .replace(/\s+([.,!?;:])/g, "$1")
+      .replace(/\s{2,}/g, " ")
+      .trim();
+  }
   function spokenChunks(answer: string): string[] {
-    const text = String(answer || "").replace(/\s+/g, " ").trim();
+    const text = cleanForSpeech(answer).replace(/\s+/g, " ").trim();
     if (!text) return [];
     if (text.length <= SPOKEN_CHUNK_MAX) return [text];
     const sentences = text.match(/[^.!?]+[.!?]+|\S[^.!?]*$/g) || [text];
