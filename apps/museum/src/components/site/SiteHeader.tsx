@@ -7,7 +7,7 @@ import { useState } from "react";
 // `right: true` places an item in the right-hand group, just left of the
 // "Enter the Library" CTA. Vibe Studio lives in the footer (and on /decc0s).
 const NAV = [
-  { href: "/decc0s", label: "Art DeCC0s" },
+  { href: "/decc0s", label: "DeCC0s" },
   { href: "/soulweaver", label: "Soulweaver" },
   { href: "/cortex", label: "Cortex" },
   { href: "/rooms", label: "ROOMs" },

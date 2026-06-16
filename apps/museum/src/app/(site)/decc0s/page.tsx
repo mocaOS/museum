@@ -341,7 +341,7 @@ export default function ArtDecc0sPage() {
               className="underline underline-offset-4 transition-colors"
               style={{ color: "var(--fg2)" }}
             >
-              Dig the Codex docs
+              Dig the Codex Docs
             </a>
           </p>
         </section>

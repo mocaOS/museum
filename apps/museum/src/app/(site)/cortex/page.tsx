@@ -46,7 +46,7 @@ const CAPABILITIES = [
   },
   {
     title: "API-first",
-    text: "60+ REST endpoints with full OpenAPI docs, webhooks, and background task tracking. Collections namespace knowledge per agent, customer, or use case.",
+    text: "60+ REST endpoints with full OpenAPI Docs, webhooks, and background task tracking. Collections namespace knowledge per agent, customer, or use case.",
   },
   {
     title: "Ask AI, with receipts",
@@ -114,7 +114,7 @@ export default function CortexPage() {
               className="flex h-11 items-center rounded-[var(--radius)] border px-6 text-sm font-medium"
               style={{ borderColor: "var(--border)", color: "var(--fg1)" }}
             >
-              Cortex docs
+              Cortex Docs
             </a>
           </div>
         </section>
@@ -280,7 +280,7 @@ export default function CortexPage() {
           </h2>
           <p className="mx-auto mt-3 max-w-xl text-base" style={{ color: "var(--fg2)" }}>
             Cortex is the infrastructure behind agents that actually know. Read
-            the docs now — the platform opens soon.
+            the Docs now — the platform opens soon.
           </p>
           <div className="mt-7 flex flex-wrap items-center justify-center gap-3">
             <ComingSoonButton label="Launch Cortex" />
@@ -291,7 +291,7 @@ export default function CortexPage() {
               className="flex h-11 items-center rounded-[var(--radius)] border px-6 text-sm font-medium"
               style={{ borderColor: "var(--border)", color: "var(--fg1)" }}
             >
-              Cortex docs
+              Cortex Docs
             </a>
           </div>
         </section>

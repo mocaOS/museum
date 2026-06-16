@@ -103,7 +103,7 @@ export default function SoulweaverPage() {
               className="flex h-11 items-center rounded-[var(--radius)] border px-6 text-sm font-medium"
               style={{ borderColor: "var(--border)", color: "var(--fg1)" }}
             >
-              Build with souls
+              Build with SOULs
             </a>
           </div>
         </section>

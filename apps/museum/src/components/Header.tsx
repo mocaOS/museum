@@ -10,7 +10,7 @@ import { getCachedConfig } from "@/lib/config";
 // `right: true` places an item in the right-hand group, next to "Library".
 const NAV = [
   { href: "/", label: "Home" },
-  { href: "/decc0s", label: "Art DeCC0s" },
+  { href: "/decc0s", label: "DeCC0s" },
   { href: "/soulweaver", label: "Soulweaver" },
   { href: "/cortex", label: "Cortex" },
   { href: "/rooms", label: "ROOMs" },
