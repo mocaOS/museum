@@ -26,8 +26,14 @@ export interface HyperfyArtwork {
   artist: string | null;
   /** Trusted aspect ratio (w/h); 1 when unknown — the media itself wins. */
   ratio: number;
-  /** Absolute, CORS-enabled still texture URL (null for video-only works). */
+  /** Absolute, CORS-enabled still texture URL, COMPRESSED to a small default
+   * (768w webp) — this is what gets uploaded into the world for a fast spawn. */
   imageUrl: string | null;
+  /** Absolute, CORS-enabled HIGH-res still URL (2048w) the in-world app fetches
+   * + caches on approach to display full resolution up close. NOT uploaded —
+   * streamed from the museum texture proxy (which sends CORS). Null for
+   * video-only works or old exports. */
+  imageUrlHi?: string | null;
   /** Absolute mp4 URL for motion works (null for stills). */
   videoUrl: string | null;
   override: SlotOverride | null;
@@ -159,7 +165,11 @@ export function buildHyperfyExhibition(opts: {
         scale: p.scale,
         artworks: Object.entries(opts.assignments[p.uid] || {}).map(
           ([ slotId, art ]: [string, NftView]) => {
-            const image = artworkTextureUrl(art, 1024);
+            // Upload a small 768w default (snappy spawn); the in-world app
+            // fetches the 2048w HQ variant on approach (both CORS-safe via the
+            // /api/museum/texture proxy). Video works fall back to the still.
+            const image = artworkTextureUrl(art, 768);
+            const imageHi = artworkTextureUrl(art, 2048);
             const video = artworkVideoUrl(art, 1024);
             return {
               slotId,
@@ -168,6 +178,7 @@ export function buildHyperfyExhibition(opts: {
               artist: art.artist_name ?? null,
               ratio: art.ratio || 1,
               imageUrl: image ? absolute(image) : null,
+              imageUrlHi: imageHi ? absolute(imageHi) : null,
               videoUrl: video || null,
               override: (opts.overrides[p.uid] || {})[slotId] ?? null,
             };

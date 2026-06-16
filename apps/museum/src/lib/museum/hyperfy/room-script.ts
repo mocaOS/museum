@@ -77,6 +77,7 @@ export function generateRoomScript({
     artist: a.artist ?? null,
     ratio: a.ratio > 0 ? a.ratio : 1,
     imageUrl: a.imageUrl ?? null,
+    imageUrlHi: a.imageUrlHi ?? null,
     videoUrl: a.videoUrl ?? null,
     override: a.override ?? null,
   }));
@@ -112,17 +113,28 @@ app.configure([
 // (NB: app.create('model', { collision }) is NOT a runtime node in this engine —
 // 'model' is a blueprint-level component only; the traversal below is the
 // supported in-script path.)
+// COLLECT FIRST, then create — never create colliders DURING the traverse.
+// app.traverse reads a node's children AFTER running the callback on it, and a
+// collider node's .geometry getter is always truthy, so adding a collider
+// inside the callback makes the traversal recurse into it and spawn
+// colliders-on-colliders until the safety cap is hit — on the FIRST mesh,
+// before any sibling meshes get one (which is why single-mesh un_MUSEUMs were
+// solid but multi-mesh rooms let you fall through). Gathering the real meshes
+// first (no colliders exist yet) and colliding them in a second pass makes
+// EVERY mesh solid — floors, walls and stairs all walkable.
 try {
+  const meshes = []
+  app.traverse((node) => { if (node && node.geometry) meshes.push(node) })
   let madeColliders = 0
-  app.traverse((node) => {
-    if (madeColliders >= 2000 || !node || !node.geometry) return
+  for (const node of meshes) {
+    if (madeColliders >= 4000) break
     try {
       const body = app.create('rigidbody', { type: 'static' })
       body.add(app.create('collider', { type: 'geometry', geometry: node.geometry, convex: false }))
       node.add(body)
       madeColliders++
     } catch (e) {}
-  })
+  }
   if (madeColliders) console.log('[moca] room solid \\u2014 ' + madeColliders + ' mesh collider(s)')
   else console.warn('[moca] room collider: no mesh geometry found to collide')
 } catch (e) {
@@ -163,6 +175,19 @@ function fit(ratio, fw, fh) {
   const r = ratio > 0 ? ratio : 1
   if (r >= fw / fh) return { w: fw, h: fw / r }
   return { w: fh * r, h: fh }
+}
+
+// Rotate a vector by the room entity's quaternion — used to map a work's baked
+// local anchor to its WORLD position for the LOD distance check below.
+function qRot(q, x, y, z) {
+  const tx = 2 * (q.y * z - q.z * y)
+  const ty = 2 * (q.z * x - q.x * z)
+  const tz = 2 * (q.x * y - q.y * x)
+  return {
+    x: x + q.w * tx + (q.y * tz - q.z * ty),
+    y: y + q.w * ty + (q.z * tx - q.x * tz),
+    z: z + q.w * tz + (q.x * ty - q.y * tx),
+  }
 }
 
 // Resolve where a work hangs: prefer the baked anchor (always present in
@@ -277,7 +302,14 @@ for (const art of ARTWORKS) {
           adj.add(placard)
           placard.position.set(dx, dy - height / 2 - 0.16 * M, (WALL_GAP + 0.01) * M)
         }
-        HUNG[art.slotId] = { adj, baked: anchor.baked, title: art.title, plac: placard, artH: height }
+        HUNG[art.slotId] = {
+          adj, baked: anchor.baked, title: art.title, plac: placard, artH: height,
+          // LOD: still-image works carry a low-res default (uploaded) + a remote
+          // HQ url the client swaps in up close. lp = baked local anchor pos.
+          node, srcLo: art.imageUrl || null,
+          srcHi: (!art.videoUrl && art.imageUrl) ? (art.imageUrlHi || null) : null,
+          lp: anchor.baked ? anchor.baked.p : [0, 0, 0], hi: false,
+        }
       } catch (e) {
         // Some GLB nodes can't parent — fall back to the anchor's local spot.
         app.add(node)
@@ -393,6 +425,43 @@ if (world.isServer) {
   })
 }
 
+// ---- artwork LOD: full-res up close, low-res far -------------------------
+// Each still work hangs at a small uploaded default (so spawns are fast); when
+// a visitor gets near, the client swaps to the remote HQ url and the engine
+// fetches + caches it (per client, deduped) so it stays instant afterwards.
+// Throttled with hysteresis so a wall of far works costs nothing and the
+// boundary never flickers. Old exports (no srcHi) just keep the default.
+if (world.isClient) {
+  const HQ_NEAR = 7  // meters: within this, show HQ
+  const HQ_FAR = 12  // meters: beyond this, drop back to the default
+  const S = 1 / M    // room entity scale (meters per GLB-local unit)
+  let lodT = 0
+  app.on('update', (dt) => {
+    lodT += dt
+    if (lodT < 0.4) return
+    lodT = 0
+    let me = null
+    try { me = world.getPlayer() } catch (e) {}
+    if (!me || !me.position) return
+    const px = me.position.x, pz = me.position.z
+    for (const slotId in HUNG) {
+      const h = HUNG[slotId]
+      if (!h || !h.srcHi || !h.node) continue
+      const r = qRot(app.quaternion, h.lp[0] * S, h.lp[1] * S, h.lp[2] * S)
+      const dx = px - (app.position.x + r.x)
+      const dz = pz - (app.position.z + r.z)
+      const d2 = dx * dx + dz * dz
+      if (!h.hi && d2 < HQ_NEAR * HQ_NEAR) {
+        h.hi = true
+        try { h.node.src = h.srcHi } catch (e) {}
+      } else if (h.hi && d2 > HQ_FAR * HQ_FAR) {
+        h.hi = false
+        try { h.node.src = h.srcLo } catch (e) {}
+      }
+    }
+  })
+}
+
 if (world.isClient) {
   // Late joiners get the persisted refinements via the entity snapshot.
   const initial = (app.state && app.state.adjust) || {}
@@ -407,9 +476,12 @@ if (world.isClient) {
   })
 
   // ---- the editor: hold E at a work, arrows nudge, scroll resizes ------
-  let me = null
-  try { me = world.getPlayer() } catch (e) {}
-  if (EDIT_SLOTS && me && me.admin) {
+  // Wired for any client when slot editing is enabled; the ADMIN check is
+  // deferred to build-mode entry (below), because the local player may not be
+  // ready — or admin may not be granted yet — when this room first loads.
+  // (The old code checked me.admin once at load and skipped the editor forever
+  // if you weren't admin yet, which is why it "stopped appearing".)
+  if (EDIT_SLOTS) {
     const live = {}
     for (const slotId in initial) live[slotId] = { ...initial[slotId] }
 
@@ -544,40 +616,53 @@ if (world.isClient) {
       live[d.slot] = d.reset ? { dx: 0, dy: 0, s: 1 } : { dx: num(d.dx, 0), dy: num(d.dy, 0), s: num(d.s, 1) }
     })
 
-    // The "Adjust artwork" action is a BUILD-MODE tool. We create the actions
-    // but only attach them while the admin is in build mode (Tab) — in normal
-    // play an admin behaves exactly like a regular visitor (no edit prompt). The
-    // engine emits 'build-mode' on every toggle; it starts off at load.
-    const editActions = []
-    for (const slotId in HUNG) {
-      try {
-        const h = HUNG[slotId]
-        const act = app.create('action')
-        act.label = 'Adjust artwork'
-        act.distance = 4
-        act.duration = 0.4
-        act.position.set(0, 0, (WALL_GAP + 0.1) * M)
-        act.onTrigger = () => {
-          if (editing && editing.slotId === slotId) endEdit(true)
-          else startEdit(slotId)
+    // The "Adjust artwork" action is a BUILD-MODE tool, admin-only. We build the
+    // actions LAZILY the first time an admin enters build mode (re-checking admin
+    // each time) — so it works even if the player wasn't ready / admin wasn't
+    // granted when the room loaded. In normal play an admin sees no edit prompt.
+    let editActions = null
+    function buildEditActions() {
+      editActions = []
+      for (const slotId in HUNG) {
+        try {
+          const h = HUNG[slotId]
+          const act = app.create('action')
+          act.label = 'Adjust artwork'
+          act.distance = 4
+          act.duration = 0.4
+          act.position.set(0, 0, (WALL_GAP + 0.1) * M)
+          act.onTrigger = () => {
+            if (editing && editing.slotId === slotId) endEdit(true)
+            else startEdit(slotId)
+          }
+          editActions.push({ act, adj: h.adj })
+        } catch (e) {
+          // action nodes unavailable — inspector fields still work
         }
-        editActions.push({ act, adj: h.adj })
-      } catch (e) {
-        // action nodes unavailable — inspector fields still work
       }
     }
     let inBuild = false
     function showEditActions(on) {
       on = !!on
       if (on === inBuild) return
+      // Re-check admin at the moment build mode is entered — the player object
+      // and its rank may have arrived after this room first loaded.
+      if (on) {
+        let me = null
+        try { me = world.getPlayer() } catch (e) {}
+        if (!me || !me.admin) return // not an admin (yet) — nothing to show
+        if (!editActions) buildEditActions()
+      }
       inBuild = on
-      for (const e of editActions) {
-        try { if (on) e.adj.add(e.act); else e.adj.remove(e.act) } catch (err) {}
+      if (editActions) {
+        for (const e of editActions) {
+          try { if (on) e.adj.add(e.act); else e.adj.remove(e.act) } catch (err) {}
+        }
       }
       if (!on) endEdit(false) // leaving build mode ends any active edit
     }
     try { world.on('build-mode', showEditActions) } catch (e) {}
-    // (starts hidden — build mode is off on load)
+    // (starts hidden — build mode is off on load; admin re-checked on entry)
   }
 }
 `;
