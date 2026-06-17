@@ -116,12 +116,17 @@ if (REGISTER) {
         placements: exhibition.placements.map((p) => ({
           uid: p.uid,
           room: { id: p.room.id, title: p.room.title },
-          // Floor-plane center + footprint radius (meters) at TILE_METERS/tile,
-          // matching the guide's baked spatial map below and the room spawn.
+          // Footprint center + half-extents + rotation (meters) at TILE_METERS/tile,
+          // matching the guide's baked spatial map below and the room spawn — so the
+          // API resolves room membership as a point-in-rotated-rectangle (the legacy
+          // `r` radius stays for the nearest-room fallback).
           location: {
             x: (TILE_METERS / BUILDER_TILE) * p.position[0],
             z: (TILE_METERS / BUILDER_TILE) * p.position[2],
             r: (TILE_METERS * (Number(p.scale) || 1)) / 2,
+            hx: (TILE_METERS * (Number(p.scale) || 1)) / 2,
+            hz: (TILE_METERS * (Number(p.scale) || 1)) / 2,
+            rot: p.rotationY || 0,
           },
           artworks: p.artworks.map((a) => ({ id: a.id, name: a.name, artist: a.artist })),
         })),

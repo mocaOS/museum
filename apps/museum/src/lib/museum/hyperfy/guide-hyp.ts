@@ -70,12 +70,17 @@ export async function registerGuideExhibition(
         placements: exhibition.placements.map(p => ({
           uid: p.uid,
           room: { id: p.room.id, title: p.room.title },
-          // World floor-plane center + footprint radius (meters): rooms sit on
-          // tiles, scaled so one tile spans tileMeters × the room's scale.
+          // World footprint: center (the tile the room is recentered onto) +
+          // half-extents + rotation, so the API resolves room membership as a
+          // point-in-rotated-rectangle (covers the corners; the legacy `r` radius
+          // is kept for the nearest-room fallback / older API builds).
           location: {
             x: k * p.position[0],
             z: k * p.position[2],
             r: (tileMeters * (Number(p.scale) || 1)) / 2,
+            hx: (tileMeters * (Number(p.scale) || 1)) / 2,
+            hz: (tileMeters * (Number(p.scale) || 1)) / 2,
+            rot: p.rotationY || 0,
           },
           artworks: p.artworks.map(a => ({ id: a.id, name: a.name, artist: a.artist })),
         })),

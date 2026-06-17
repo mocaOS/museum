@@ -45,8 +45,8 @@ function inline(value: unknown): string {
 const BUILDER_TILE = 8;
 
 export interface GuideSpatialMap {
-  rooms: { uid: string; title: string; x: number; z: number; r: number }[];
-  works: { uid: string; id: number | null; slot: string; title: string | null; artist: string | null; x: number; z: number }[];
+  rooms: { uid: string; title: string; x: number; z: number; r: number; hx: number; hz: number; rot: number }[];
+  works: { uid: string; id: number | null; slot: string; title: string | null; artist: string | null; x: number; z: number; y?: number }[];
 }
 
 /**
@@ -78,17 +78,29 @@ export function buildGuideSpatialMap(
     const go = p?.room?.groundOffset;
     let rootScale = 1;
     let ex = cx, ez = cz; // room ENTITY world origin (includes the ground recenter)
+    let ey = k * (p.position[1] || 0); // room entity world Y (floor baseline)
     if (fp && fp > 0 && Array.isArray(go)) {
       rootScale = (tileMeters / fp) * (p.scale || 1);
       const ox = rootScale * go[0], oz = rootScale * go[2];
       ex = cx + ox * cos + oz * sin;
       ez = cz - ox * sin + oz * cos;
+      ey = ey + rootScale * go[1];
     }
+    const half = (tileMeters * (p.scale || 1)) / 2;
     rooms.push({
       uid,
       title: String(p?.room?.title || ""),
+      // Footprint center = the tile center the room is recentered onto (cx/cz),
+      // NOT the entity origin ex/ez (that's the GLB local origin, offset by the
+      // ground recenter). Rooms are square tiles spanning tileMeters × scale,
+      // rotated by rotationY — store half-extents + rotation so membership is a
+      // point-in-rotated-rectangle test. The old inscribed-circle radius (r =
+      // side/2) missed the ~30% of the footprint in the corners, dropping a
+      // corner-standing visitor to the nearest-room fallback — which is how the
+      // guide ended up "still in the previous room".
       x: cx, z: cz,
-      r: (tileMeters * (p.scale || 1)) / 2,
+      hx: half, hz: half, rot: rotY,
+      r: half,
     });
     const slotMap: Record<string, any> = {};
     for (const s of (Array.isArray(p?.slots) ? p.slots : [])) if (s && s.id) slotMap[s.id] = s;
@@ -104,6 +116,7 @@ export function buildGuideSpatialMap(
         artist: a.artist != null ? a.artist : null,
         x: ex + sx * cos + sz * sin,
         z: ez - sx * sin + sz * cos,
+        y: ey + rootScale * (s.position[1] || 0),
       });
     }
   });
@@ -189,7 +202,11 @@ export function generateGuideScript({
             .map((r) => ({
               uid: String(r.uid || "").slice(0, 40),
               title: String(r.title || "").slice(0, 160),
-              x: r.x, z: r.z, r: typeof r.r === "number" && r.r > 0 ? r.r : 8,
+              x: r.x, z: r.z,
+              r: typeof r.r === "number" && r.r > 0 ? r.r : 8,
+              hx: typeof r.hx === "number" && r.hx > 0 ? r.hx : (typeof r.r === "number" && r.r > 0 ? r.r : 8),
+              hz: typeof r.hz === "number" && r.hz > 0 ? r.hz : (typeof r.r === "number" && r.r > 0 ? r.r : 8),
+              rot: typeof r.rot === "number" ? r.rot : 0,
             }))
         : [],
       works: Array.isArray(spatialMap?.works)
@@ -203,6 +220,7 @@ export function generateGuideScript({
               title: w.title ? String(w.title).slice(0, 160) : null,
               artist: w.artist ? String(w.artist).slice(0, 120) : null,
               x: w.x, z: w.z,
+              ...(typeof w.y === "number" ? { y: w.y } : {}),
             }))
         : [],
     },
@@ -333,10 +351,23 @@ function resolveRoom(px, pz) {
   let inside = null, bestIn = Infinity
   let near = null, bestNear = Infinity, nearR = 0
   for (const r of SPATIAL.rooms) {
-    const dx = r.x - px, dz = r.z - pz
+    const dx = px - r.x, dz = pz - r.z
     const d = Math.sqrt(dx * dx + dz * dz)
-    if (d <= r.r && d < bestIn) { bestIn = d; inside = r }
-    if (d < bestNear) { bestNear = d; near = r; nearR = r.r }
+    // Rooms are square tiles centered at r.x/r.z, rotated by r.rot. Test membership
+    // in the ROTATED RECTANGLE (rotate the point into the room's local frame — the
+    // inverse of the slot transform — then compare against the half-extents), so the
+    // whole footprint counts, corners included. An inscribed-circle test (d <= r/2)
+    // dropped corner-standers to the nearest-room fallback (the "previous room" bug).
+    const hx = typeof r.hx === 'number' ? r.hx : (r.r || 0)
+    const hz = typeof r.hz === 'number' ? r.hz : (r.r || 0)
+    const rot = r.rot || 0
+    const c = Math.cos(rot), s = Math.sin(rot)
+    const lx = c * dx - s * dz
+    const lz = s * dx + c * dz
+    const within = Math.abs(lx) <= hx + 0.05 && Math.abs(lz) <= hz + 0.05
+    if (within && d < bestIn) { bestIn = d; inside = r }
+    const rr = Math.max(hx, hz) || r.r || 0
+    if (d < bestNear) { bestNear = d; near = r; nearR = rr }
   }
   if (inside) return inside
   if (near) { const cap = Math.max(nearR * 3, nearR + 20); if (bestNear <= cap) return near }
@@ -345,12 +376,21 @@ function resolveRoom(px, pz) {
 // The single work the visitor is at: the piece they FACE, nearest first. Facing
 // (the visitor's real body heading) DOMINATES — a piece dead ahead beats a closer
 // one off to the side, and anything behind the visitor is excluded outright, so
-// "the piece in front of me" never resolves to one at their back. Distance is a
-// gentle tiebreaker; works in the current room get a small nudge.
-function resolveFocus(px, pz, roomUid, fwdx, fwdz) {
+// "the piece in front of me" never resolves to one at their back. When we know the
+// room, ONLY that room's works are candidates — you can't be looking at a piece in
+// another room (it's through a wall), which is what made the guide talk about an
+// unrelated work nearby. A work on a different floor (Y) is also discounted.
+// Distance is a gentle tiebreaker.
+function resolveFocus(px, pz, py, roomUid, fwdx, fwdz) {
   let best = null, bestScore = -Infinity
   const haveFwd = typeof fwdx === 'number' && typeof fwdz === 'number' && (fwdx || fwdz)
+  const haveY = typeof py === 'number' && py === py
+  // Scope to the current room — but only if that room actually has hung works,
+  // so we never end up with no candidates (then fall back to all works).
+  let scoped = false
+  if (roomUid) { for (const w of SPATIAL.works) { if (w.uid === roomUid) { scoped = true; break } } }
   for (const w of SPATIAL.works) {
+    if (scoped && w.uid !== roomUid) continue
     const dx = w.x - px, dz = w.z - pz
     const d = Math.sqrt(dx * dx + dz * dz)
     if (d > FOCUS_RANGE) continue
@@ -359,6 +399,10 @@ function resolveFocus(px, pz, roomUid, fwdx, fwdz) {
       const dot = (dx / d) * fwdx + (dz / d) * fwdz // +1 dead ahead, -1 behind
       if (dot < -0.15) continue // behind the visitor — not what's "in front"
       score += dot * (FOCUS_RANGE + 1) // facing dominates the distance term
+    }
+    if (haveY && typeof w.y === 'number') {
+      const ady = Math.abs(w.y - py)
+      if (ady > 3) score -= (ady - 3) * 0.6 // a work a floor up/down isn't "in front"
     }
     if (roomUid && w.uid === roomUid) score += 1.5 // prefer this room's works
     if (score > bestScore) { bestScore = score; best = w }
@@ -496,7 +540,7 @@ if (world.isServer) {
           const flen = Math.sqrt(fdx * fdx + fdz * fdz)
           if (flen > 0.3) { fwdx = fdx / flen; fwdz = fdz / flen }
         }
-        const work = resolveFocus(px, pz, roomUid, fwdx, fwdz)
+        const work = resolveFocus(px, pz, player.position.y, roomUid, fwdx, fwdz)
         if (work) focus = { artworkId: work.id || undefined, slotId: work.slot || undefined, title: work.title || undefined, artist: work.artist || undefined }
       }
       const res = await fetch(API + '/v1/guide/ask', {

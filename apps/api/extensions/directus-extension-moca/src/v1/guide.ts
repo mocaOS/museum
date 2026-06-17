@@ -106,9 +106,10 @@ interface RegisterArtwork {
 interface RegisterPlacement {
   uid?: string;
   room?: { id?: number; title?: string };
-  /** Room's world placement (meters): floor-plane center + footprint radius —
+  /** Room's world placement (meters): floor-plane center + footprint radius +
+   * (optionally) half-extents & rotation for a rotated-rectangle membership test —
    * lets the guide resolve which room a visitor is standing in. */
-  location?: { x?: number; z?: number; r?: number };
+  location?: { x?: number; z?: number; r?: number; hx?: number; hz?: number; rot?: number };
   artworks?: RegisterArtwork[];
 }
 
@@ -130,10 +131,12 @@ export interface GuideContextRoom {
   architect: string | null;
   description: string | null;
   series: string | null;
-  /** World placement (meters): floor-plane center + footprint radius. Lets the
-   * guide know which room a visitor stands in (spatial awareness). Null on old
-   * registrations that predate location reporting. */
-  location: { x: number; z: number; r: number } | null;
+  /** World placement (meters): floor-plane center + footprint radius, plus
+   * optional half-extents (`hx`/`hz`) and rotation (`rot`) for a rotated-rectangle
+   * membership test (the room is a square tile; the inscribed circle `r` misses the
+   * corners). Lets the guide know which room a visitor stands in (spatial
+   * awareness). Null on old registrations that predate location reporting. */
+  location: { x: number; z: number; r: number; hx?: number; hz?: number; rot?: number } | null;
   artworks: GuideContextArtwork[];
 }
 
@@ -417,10 +420,24 @@ function locateRoom(ctx: GuideContext, x: number, z: number): GuideContextRoom |
   let bestD = Infinity;
   for (const r of ctx.rooms) {
     if (!r.location) continue;
-    const dx = r.location.x - x;
-    const dz = r.location.z - z;
+    const dx = x - r.location.x;
+    const dz = z - r.location.z;
     const d = Math.sqrt(dx * dx + dz * dz);
-    if (d <= r.location.r && d < bestD) {
+    // Prefer a rotated-rectangle test (the room is a square tile) — rotate the
+    // point into the room's local frame and compare against the half-extents. The
+    // inscribed circle (d <= r) misses the corners. Fall back to the circle for
+    // older registrations that only carry `r`.
+    let within: boolean;
+    if (typeof r.location.hx === "number" && typeof r.location.hz === "number") {
+      const rot = r.location.rot || 0;
+      const c = Math.cos(rot), s = Math.sin(rot);
+      const lx = c * dx - s * dz;
+      const lz = s * dx + c * dz;
+      within = Math.abs(lx) <= r.location.hx + 0.05 && Math.abs(lz) <= r.location.hz + 0.05;
+    } else {
+      within = d <= r.location.r;
+    }
+    if (within && d < bestD) {
       bestD = d;
       inside = r;
     }
@@ -449,7 +466,8 @@ function nearestRoom(ctx: GuideContext, x: number, z: number): GuideContextRoom 
     if (d < bestD) {
       bestD = d;
       best = r;
-      bestR = r.location.r;
+      // Cap off the larger half-extent when present (else the legacy radius).
+      bestR = Math.max(r.location.hx ?? 0, r.location.hz ?? 0) || r.location.r;
     }
   }
   if (!best) return null;
@@ -1158,7 +1176,14 @@ export function registerGuideRoutes(
       const loc = p.location;
       const location
         = loc && typeof loc.x === "number" && loc.x === loc.x && typeof loc.z === "number" && loc.z === loc.z
-          ? { x: loc.x, z: loc.z, r: typeof loc.r === "number" && loc.r > 0 ? loc.r : 8 }
+          ? {
+              x: loc.x,
+              z: loc.z,
+              r: typeof loc.r === "number" && loc.r > 0 ? loc.r : 8,
+              ...(typeof loc.hx === "number" && loc.hx > 0 ? { hx: loc.hx } : {}),
+              ...(typeof loc.hz === "number" && loc.hz > 0 ? { hz: loc.hz } : {}),
+              ...(typeof loc.rot === "number" && loc.rot === loc.rot ? { rot: loc.rot } : {}),
+            }
           : null;
       return {
         uid: clampText(p.uid, 40) ?? `p${i}`,
