@@ -14,6 +14,8 @@ export type SidebarTab = "build" | "curate" | "exhibits";
 /** A placed room reduced to what the sidebar needs to render. */
 export interface PlacedSummary {
   uid: string;
+  /** Directus room id — links back to the room's detail page (/rooms/[id]). */
+  roomId: number;
   title: string;
   architect?: string | null;
   slotsTotal: number;
@@ -158,6 +160,13 @@ function IconGlobe({ size }: { size?: number }) {
     <circle cx="12" cy="12" r="9" />
     <path d="M3 12h18" />
     <path d="M12 3a15 15 0 0 1 0 18 15 15 0 0 1 0-18" />
+  </Icon>;
+}
+function IconExternal({ size }: { size?: number }) {
+  return <Icon size={size}>
+    <path d="M15 3h6v6" />
+    <path d="M10 14 21 3" />
+    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
   </Icon>;
 }
 
@@ -359,7 +368,7 @@ export default function BuilderSidebar({
   onCurate: (uid: string) => void;
   onClearWorld: () => void;
   // curate
-  curating: { uid: string; title: string } | null;
+  curating: { uid: string; title: string; roomId: number } | null;
   slots: SlotWorld[];
   curAssignments: Assignments;
   activeSlotId: string | null;
@@ -389,7 +398,7 @@ export default function BuilderSidebar({
   onSetGuide: () => void;
   onClearGuide: () => void;
   hasGuide: boolean;
-  onBrowserQuery: (q: { slugs: string | null; search: string }) => void;
+  onBrowserQuery: (q: { slugs: string | null; search: string; scopeLabel: string }) => void;
 }) {
   const TABS: { id: SidebarTab; label: string; icon: ReactNode }[] = [
     { id: "build", label: "Build", icon: <IconGrid /> },
@@ -404,6 +413,23 @@ export default function BuilderSidebar({
   // Where the curate browser pulls works from: the museum collections, or a
   // wallet's legacy MOCA curations (the Multipass importer).
   const [ curateSrc, setCurateSrc ] = useState<"moca" | "multipass">("moca");
+
+  // Mirror the collections browser's active filter so the Auto-fill control
+  // can show — and the curator can trust — exactly which basket it draws from.
+  const [ browserQuery, setBrowserQuery ] =
+    useState<{ slugs: string | null; search: string; scopeLabel: string }>({
+      slugs: null,
+      search: "",
+      scopeLabel: "all collections",
+    });
+  const handleBrowserQuery = (q: { slugs: string | null; search: string; scopeLabel: string }) => {
+    setBrowserQuery(q);
+    onBrowserQuery(q);
+  };
+  const autoFillFiltered = !!(browserQuery.slugs || browserQuery.search.trim());
+  const autoFillBasket = `${browserQuery.scopeLabel}${
+    browserQuery.search.trim() ? ` · “${browserQuery.search.trim()}”` : ""
+  }`;
 
   if (collapsed) {
     return (
@@ -527,8 +553,21 @@ export default function BuilderSidebar({
       >
         {selected && !curating && (
           <div className="border-b px-3 py-2.5" style={{ borderColor: "var(--border)" }}>
-            <div className="text-[10px] tracking-[0.08em] uppercase" style={{ color: "var(--fg3)" }}>
-              Selected room
+            <div className="flex items-center justify-between gap-2">
+              <div className="text-[10px] tracking-[0.08em] uppercase" style={{ color: "var(--fg3)" }}>
+                Selected room
+              </div>
+              <Link
+                href={`/rooms/${selected.roomId}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex shrink-0 items-center gap-1 text-[10px] transition-colors hover:opacity-80"
+                style={{ color: "var(--fg3)" }}
+                title="Open this room's detail page in a new tab"
+              >
+                View room
+                <IconExternal size={11} />
+              </Link>
             </div>
             <div className="mt-0.5 truncate text-sm" style={{ color: "var(--fg1)" }}>
               {selected.title}
@@ -680,8 +719,18 @@ export default function BuilderSidebar({
                 <div className="truncate text-sm" style={{ color: "var(--fg1)" }}>
                   {curating.title}
                 </div>
-                <div className="text-[11px]" style={{ color: "var(--fg3)" }}>
-                  {filledCount}/{slots.length} slots filled
+                <div className="flex items-center gap-2 text-[11px]" style={{ color: "var(--fg3)" }}>
+                  <span>{filledCount}/{slots.length} slots filled</span>
+                  <Link
+                    href={`/rooms/${curating.roomId}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-0.5 transition-colors hover:opacity-80"
+                    title="Open this room's detail page in a new tab"
+                  >
+                    View room
+                    <IconExternal size={10} />
+                  </Link>
                 </div>
               </div>
               <SmallBtn accent onClick={onExitCurate} title="Finish curating (Esc)">
@@ -708,11 +757,25 @@ export default function BuilderSidebar({
                     disabled:opacity-30
                   `}
                   style={{ color: "var(--accent)" }}
-                  title="Fill every empty slot with random works"
+                  title={
+                    autoFillFiltered
+                      ? `Fill every empty slot from your current filter (${autoFillBasket}). Narrow the collections browser below first, then curate at scale.`
+                      : "Fill every empty slot with a random spread across all collections. Narrow the collections browser below to curate from a specific collection or search."
+                  }
                 >
                   <IconSparkles size={12} />
-                  {autoBusy ? "Filling…" : "Auto-fill"}
+                  {autoBusy ? "Filling…" : autoFillFiltered ? "Auto-fill filtered" : "Auto-fill"}
                 </button>
+              </div>
+              <div
+                className="mb-1.5 truncate text-[10px]"
+                style={{ color: "var(--fg3)" }}
+                title={`Auto-fill draws from: ${autoFillBasket}`}
+              >
+                Auto-fill from{" "}
+                <span style={{ color: autoFillFiltered ? "var(--fg2)" : "var(--fg3)" }}>
+                  {autoFillBasket}
+                </span>
               </div>
               <div className="flex max-h-24 flex-wrap gap-1 overflow-y-auto">
                 {slots.map((s) => {
@@ -833,7 +896,7 @@ export default function BuilderSidebar({
               })}
             </div>
             {curateSrc === "moca" ? (
-              <ArtworkBrowser canPick onPick={onPickArt} onQuery={onBrowserQuery} />
+              <ArtworkBrowser canPick onPick={onPickArt} onQuery={handleBrowserQuery} />
             ) : (
               <MultipassImporter canPick onPick={onPickArt} />
             )}

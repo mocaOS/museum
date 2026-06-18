@@ -104,6 +104,20 @@ no accounts. Code lives in `src/components/museum/three/`:
   collections` | `Multipass`) swaps the embedded browser between the museum
   collections (`ArtworkBrowser`) and the **Multipass importer**
   (`MultipassImporter`); both hang through the same `onPickArt` path.
+  **Auto-fill is filter-driven**: it fills every empty slot from the collections
+  browser's *current* filter (collection scope + search), reported up via
+  `ArtworkBrowser`'s `onQuery` → `browserQueryRef` in `WorldBuilder`. The Curate
+  tab surfaces the active basket ("Auto-fill from <scope> · "<search>"") and the
+  button reads "Auto-fill filtered" when a filter is active — so a curator can
+  narrow the basket (e.g. one collection, or a search term across all
+  collections) then fill at scale. Unfiltered, it randomizes a spread across all
+  collections. The Build selected-room panel and the Curate header each link
+  **"View room ↗"** to that room's `/rooms/[id]` detail page (new tab).
+  **Deep-link in:** `/rooms/world?room=<id>` (the rooms catalogue's per-card
+  "Start exhibit" shortcut + the detail page's "Build with this room" CTA) makes
+  `WorldBuilder` place that room and land in curate on it. It reads the id from
+  the URL post-hydration and strips it immediately (refresh/StrictMode-safe), and
+  is **append-only** — never disturbs an existing saved layout.
 - **`ControlsHelp.tsx`** — bottom-right nav cluster (zoom in/out, reset view, help
   icon) plus the grouped controls reference that slides in on the right (H toggles).
 - **`ArtworkPlane.tsx`** — one hung work: textured plane + matte frame, sized to the

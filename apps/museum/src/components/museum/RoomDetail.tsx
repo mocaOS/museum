@@ -263,6 +263,26 @@ export default function RoomDetail({
               )}
             </div>
           )}
+          <Link
+            href={`/rooms/world?room=${room.id}`}
+            className="mt-3 flex h-10 w-full items-center justify-center gap-2 rounded-[var(--radius)] text-sm font-medium transition-transform active:scale-[0.98]"
+            style={{ background: "var(--accent)", color: "var(--accent-fg)" }}
+            title={`Start an exhibit with ${room.title} in the world builder`}
+          >
+            <svg
+              className="h-4 w-4"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden
+            >
+              <path d="M12 5v14M5 12h14" />
+            </svg>
+            Build with this room
+          </Link>
           {room.description && (
             <div className="mt-3">
               <p

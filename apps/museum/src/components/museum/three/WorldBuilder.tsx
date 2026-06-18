@@ -1097,6 +1097,43 @@ export default function WorldBuilder({ rooms }: { rooms: WorldRoom[] }) {
     syncCurrentExhibit(layout);
   }, [ hydrated, buildLayout ]);
 
+  // Deep-link from the rooms catalogue: /rooms/world?room=<id> drops you
+  // straight into the builder with that room placed and ready to curate. We
+  // read the id from the URL (not a prop) and strip it immediately, so a
+  // refresh or StrictMode remount never re-places the room. Append-only —
+  // never disturbs an existing saved layout.
+  const deepLinkConsumed = useRef(false);
+  useEffect(() => {
+    if (!hydrated || deepLinkConsumed.current) return;
+    deepLinkConsumed.current = true;
+    const params = new URLSearchParams(window.location.search);
+    const raw = params.get("room");
+    if (!raw) return;
+    params.delete("room");
+    const qs = params.toString();
+    window.history.replaceState(null, "", `/rooms/world${qs ? `?${qs}` : ""}`);
+    const id = Number(raw);
+    if (!Number.isInteger(id)) return;
+    const room = roomById.get(id);
+    if (!room?.modelUrl) return;
+    const uid = `p${counter.current++}`;
+    // Place clear of any existing rooms (right of the rightmost), so a
+    // deep-link into a populated world doesn't drop on top of another room.
+    const xs = placedRef.current.map(p => p.position[0]);
+    const x = xs.length ? snap(Math.max(...xs) + 24) : 0;
+    const next: Placed = { uid, room, position: [ x, 0, 0 ], rotationY: 0, scale: DEFAULT_ROOM_SCALE };
+    placedRef.current = [ ...placedRef.current, next ];
+    setPlaced(p => [ ...p, next ]);
+    // Land in curate mode on the new room — "start an exhibit with this room".
+    setPlacing(null);
+    setSelected(uid);
+    setCuratingUid(uid);
+    setActiveSlotId(null);
+    setCollapsed(false);
+    setTab("curate");
+    requestAnimationFrame(() => camApi.current?.frameRoom(uid));
+  }, [ hydrated, roomById ]);
+
   // Keep the camera director's placement mirror current on every commit.
   placedRef.current = placed;
 
@@ -1398,6 +1435,7 @@ export default function WorldBuilder({ rooms }: { rooms: WorldRoom[] }) {
   // Placed rooms reduced to what the sidebar renders (titles + fill counts).
   const placedSummaries: PlacedSummary[] = placed.map(p => ({
     uid: p.uid,
+    roomId: p.room.id,
     title: p.room.title,
     architect: p.room.architect,
     slotsTotal: (roomSlots[p.uid] || []).length,
@@ -1738,7 +1776,7 @@ export default function WorldBuilder({ rooms }: { rooms: WorldRoom[] }) {
         onRemoveRoom={removeRoom}
         onCurate={enterCurate}
         onClearWorld={clearWorld}
-        curating={curatingRoom ? { uid: curatingRoom.uid, title: curatingRoom.room.title } : null}
+        curating={curatingRoom ? { uid: curatingRoom.uid, title: curatingRoom.room.title, roomId: curatingRoom.room.id } : null}
         slots={curatingSlots}
         curAssignments={curatingUid ? assignments[curatingUid] || {} : {}}
         activeSlotId={activeSlotId}

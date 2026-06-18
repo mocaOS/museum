@@ -127,8 +127,9 @@ export default function ArtworkBrowser({
   /** Whether a wall slot is active — cards are disabled until one is. */
   canPick: boolean;
   onPick: (art: NftView) => void;
-  /** Reports the active filter (collection scope + search) — auto-fill draws from it. */
-  onQuery?: (q: { slugs: string | null; search: string }) => void;
+  /** Reports the active filter (collection scope + search) — auto-fill draws
+   *  from it. `scopeLabel` is the human-readable basket name for the UI. */
+  onQuery?: (q: { slugs: string | null; search: string; scopeLabel: string }) => void;
 }) {
   const [ collections, setCollections ] = useState<CollectionOption[]>([]);
   const [ scope, setScope ] = useState<string>("all"); // collection slug or "all"
@@ -164,11 +165,15 @@ export default function ArtworkBrowser({
     const ctrl = new AbortController();
     setLoading(true);
     const params = new URLSearchParams();
+    let scopeName = "all collections";
     if (scope !== "all") {
       const opt = collections.find(c => c.slug === scope);
-      if (opt) params.set("slugs", opt.slugs.join(","));
+      if (opt) {
+        params.set("slugs", opt.slugs.join(","));
+        scopeName = opt.name;
+      }
     }
-    onQuery?.({ slugs: params.get("slugs"), search: search.trim() });
+    onQuery?.({ slugs: params.get("slugs"), search: search.trim(), scopeLabel: scopeName });
     if (search.trim()) params.set("search", search.trim());
     params.set("page", String(page));
     fetch(`/api/museum/artworks?${params.toString()}`, { signal: ctrl.signal })

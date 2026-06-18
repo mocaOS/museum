@@ -133,12 +133,38 @@ export default function RoomsBrowser({ rooms }: { rooms: RoomView[] }) {
       {filtered.length ? (
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {filtered.map((room) => (
-            <Link
+            <div
               key={room.id}
-              href={`/rooms/${room.id}`}
-              className="group overflow-hidden rounded-[var(--radius-xl)] border text-left transition-transform duration-200 hover:-translate-y-1"
+              className="group relative overflow-hidden rounded-[var(--radius-xl)] border transition-transform duration-200 hover:-translate-y-1"
               style={{ borderColor: "var(--border)", background: "var(--card)" }}
             >
+              {/* Start-an-exhibit shortcut: drop straight into the world builder
+                  with this room placed and ready to curate. Sibling of the
+                  detail link (no nested anchors). */}
+              <Link
+                href={`/rooms/world?room=${room.id}`}
+                className="absolute right-3 top-3 z-10 flex h-8 items-center gap-1.5 rounded-full px-3 text-[11px] font-medium opacity-0 shadow-lg transition-opacity duration-200 group-hover:opacity-100 focus-visible:opacity-100 active:scale-[0.98]"
+                style={{ background: "var(--accent)", color: "var(--accent-fg)" }}
+                title={`Build an exhibit with ${room.title}`}
+              >
+                <svg
+                  className="h-3.5 w-3.5"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden
+                >
+                  <path d="M12 5v14M5 12h14" />
+                </svg>
+                Start exhibit
+              </Link>
+              <Link
+                href={`/rooms/${room.id}`}
+                className="block text-left"
+              >
               <div className="aspect-[4/3] overflow-hidden" style={{ background: "var(--muted)" }}>
                 {room.imageUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
@@ -193,7 +219,8 @@ export default function RoomsBrowser({ rooms }: { rooms: RoomView[] }) {
                   </p>
                 )}
               </div>
-            </Link>
+              </Link>
+            </div>
           ))}
         </div>
       ) : (
