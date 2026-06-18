@@ -383,10 +383,14 @@ if (exhibition.spawn && Array.isArray(exhibition.spawn.position)) {
     // Send the exact packet PlayerLocal.teleport sends, else the player's
     // server-side position never moves and `/spawn set` stores our default
     // position (visitors then enter at the wrong place).
+    // `/spawn set` stores our avatar's quaternion verbatim and applies it to
+    // every joining player. The builder's spawn marker is +Z-forward (rotationY =
+    // atan2(dx,dz)) but Hyperfy avatars face -Z, so we add π — same compensation
+    // the guide spawn uses — else visitors enter facing 180° from the builder.
     session.send("entityModified", {
       id: session.selfId,
       p: pos,
-      q: yawToQuaternion(sp.rotationY || 0),
+      q: yawToQuaternion((sp.rotationY || 0) + Math.PI),
       t: true,
     });
     await new Promise((r) => setTimeout(r, 400));

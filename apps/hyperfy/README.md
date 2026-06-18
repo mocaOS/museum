@@ -257,6 +257,24 @@ them in sync) behind the builder's Spawn dialog.
 - **Many worlds:** `docker-compose.worlds.yml` — one isolated service per
   exhibition/curator (own SQLite, assets, admin code) behind your proxy.
 
+## Tests
+
+```bash
+node test/spatial-awareness.test.mjs
+```
+
+The guide's spatial awareness — which **room** a visitor stands in and which
+**work** they're looking at — is pure in-world JS that runs before any API
+call, so it's fully coverable offline. This harness exercises the *real*
+shipped code: the exported `buildGuideSpatialMap` plus `resolveRoom` /
+`resolveFocus` sliced straight out of the generated guide script. It pins the
+regressions that bit us — the big-room-corner "previous room" bug
+(point-in-rotated-rectangle, not inscribed circle), through-wall focus
+(room-scoped candidates), the behind-the-visitor cutoff, rotated footprints,
+and the different-floor penalty. Keep the `apps/hyperfy/lib/guide-script.mjs`
+↔ `apps/museum/src/lib/museum/hyperfy/guide-script.ts` twins in sync; the
+harness pins the `.mjs` one.
+
 ## Teach the agents Hyperfy
 
 ```bash

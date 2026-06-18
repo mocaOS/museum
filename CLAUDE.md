@@ -82,7 +82,7 @@ cd apps/scripts
 bun run <script-name>.ts
 ```
 
-No unified test runner exists at the root. The moca-agent app has its own test setup (Bun test).
+No unified test runner exists at the root. The moca-agent app has its own test setup (Bun test). The Hyperfy guide's spatial awareness has a standalone harness: `node apps/hyperfy/test/spatial-awareness.test.mjs` (see `apps/hyperfy/README.md` → Tests).
 
 ## Architecture
 
