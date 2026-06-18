@@ -19,6 +19,7 @@ export interface CortexAskBody {
   top_k?: number;
   use_agentic?: boolean;
   use_graph?: boolean;
+  use_reranking?: boolean;
   conversation_history?: { role: string; content: string }[];
 }
 
@@ -54,6 +55,7 @@ export function createCortexClient(env: Record<string, any>) {
       top_k: Math.max(1, Math.min(20, Number(body.top_k) || 5)),
       use_graph: body.use_graph !== false,
       use_agentic: body.use_agentic === true,
+      ...(body.use_reranking !== undefined ? { use_reranking: body.use_reranking !== false } : {}),
       ...(body.collection_id ? { collection_id: String(body.collection_id) } : {}),
       ...(history?.length ? { conversation_history: history } : {}),
     };

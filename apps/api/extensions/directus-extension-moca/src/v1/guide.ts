@@ -1564,10 +1564,37 @@ export function registerGuideRoutes(
     }
   }
 
+  // The guide must not collide with ITSELF on Cortex: the blocking upstream
+  // reliably 500s even TWO concurrent /api/ask requests (verified — a live mine
+  // and a single background pre-warm query knocked each other out at ~30s). So
+  // we track visitor-facing Cortex work in flight and have the background
+  // spawn-time pre-warm yield to it — live questions stay fully parallel-capable,
+  // but the pre-warm burst only fills idle time and never 500s a real visitor.
+  let liveCortexInFlight = 0;
+  async function runLiveCortex<T>(fn: () => Promise<T>): Promise<T> {
+    liveCortexInFlight++;
+    try {
+      return await fn();
+    } finally {
+      liveCortexInFlight--;
+    }
+  }
+
   /**
-   * One Cortex DEEP retrieval (graph traversal — affordable now the reply path
-   * is fast) about `question`, returned as a normalized insight. Session-free,
-   * so both per-visitor mining and registration pre-warm reuse it.
+   * One Cortex retrieval about `question`, returned as a normalized insight.
+   * Session-free, so both per-visitor mining and registration pre-warm reuse it.
+   *
+   * Graph traversal (`use_graph: true`) gives the richest multi-hop answer, but
+   * it's the heavy Cortex path (~20-30s) and is the FIRST thing to 500 when
+   * Cortex is under concurrent load. A failed mine on a library-routed turn
+   * dead-ends the visitor ("my deeper records came up short") even for a
+   * well-documented subject like an exhibited artist — the bug behind the
+   * "tell me more about Pindar" reports. So we go graph-first but, when the
+   * graph ask fails or comes back empty, retry ONCE on the lean non-graph
+   * (vector) path — faster and far more robust under load (it's the same path
+   * the synchronous reply uses, and the one that proved 5/5 reliable under
+   * concurrency where graph dropped requests). Healthy Cortex → graph richness;
+   * overloaded Cortex → a real answer instead of a dead-end.
    */
   async function cortexMine(
     ctx: GuideContext,
@@ -1575,41 +1602,77 @@ export function registerGuideRoutes(
     question: string,
     here: GuideContextRoom | null,
     summary?: string,
+    /** Lead with graph traversal (richest, heaviest). The background spawn-time
+     * pre-warm passes `false` to stay on the lean path — it must NOT pile heavy
+     * graph queries onto Cortex right when the first visitors are asking (that
+     * self-inflicted contention is what 500s a live visitor's mine). */
+    deep = true,
   ): Promise<GuideInsight | null> {
     const topic = question.replace(/\s+/g, " ").trim().slice(0, 120);
     if (!topic || !cortex.configured) return null;
     const loc = locationLine(here);
-    const t0 = Date.now();
-    const { status, body } = await askCortexResilient({
-      question,
-      top_k: 8,
-      use_graph: true,
-      use_agentic: false,
-      conversation_history: [
-        { role: "user", content: contextBlock(ctx, persona) },
-        { role: "assistant", content: `Understood — I am ${persona.name}, guiding visitors through “${ctx.name}”.` },
-        // Bias retrieval toward where the visitor is (a soft hint to the RAG
-        // LLM, not a hard collection filter).
-        ...(loc ? [{ role: "user", content: loc }] : []),
-        ...(summary ? [{ role: "user", content: `Conversation so far: ${summary}` }] : []),
-      ],
-    });
-    const srcTitles = Array.isArray(body?.sources)
-      ? (body.sources as any[]).map((s) => s?.metadata?.document_title || s?.document_title).filter((t) => typeof t === "string")
-      : [];
-    logCortex("mine", topic, status, Date.now() - t0, srcTitles);
-    if (status !== 200 || typeof body?.answer !== "string" || !body.answer.trim()) return null;
-    const text = String(body.answer).replace(/\s*\[src_[^\]]*\]/g, "").replace(/\s+/g, " ").trim().slice(0, INSIGHT_TEXT_MAX);
-    if (!text) return null;
-    const sources: string[] = [];
-    if (Array.isArray(body.sources)) {
-      for (const s of body.sources as any[]) {
-        const t = s?.metadata?.document_title || s?.document_title;
-        if (typeof t === "string" && t && !sources.includes(t)) sources.push(t);
-        if (sources.length >= 3) break;
+    const conversation_history = [
+      { role: "user", content: contextBlock(ctx, persona) },
+      { role: "assistant", content: `Understood — I am ${persona.name}, guiding visitors through “${ctx.name}”.` },
+      // Bias retrieval toward where the visitor is (a soft hint to the RAG
+      // LLM, not a hard collection filter).
+      ...(loc ? [{ role: "user", content: loc }] : []),
+      ...(summary ? [{ role: "user", content: `Conversation so far: ${summary}` }] : []),
+    ];
+
+    // The DEEP path uses Cortex's REGULAR chat mode WITH graph
+    // (use_agentic:false, use_graph:true, use_reranking:true) — the SAME mode the
+    // museum Library's "Chat" uses: a single ~15-25s call that fits the in-world
+    // follow-up window. Deep research (use_agentic:true) is deliberately NOT used
+    // — it only runs over the streaming endpoint and takes ~90s, far too slow for
+    // a live in-world reply. The graph ask is the first thing Cortex drops under
+    // load, so on failure/empty we fall back ONCE to the lean non-graph ask
+    // (faster, far more robust) — never in parallel — so a visitor never
+    // dead-ends. The lean (non-deep) pre-warm uses only that non-graph ask.
+    const attempts: { top_k: number; use_graph: boolean }[] = deep
+      ? [
+          { top_k: 8, use_graph: true },
+          { top_k: 6, use_graph: false },
+        ]
+      : [{ top_k: 6, use_graph: false }];
+    for (let i = 0; i < attempts.length; i++) {
+      const a = attempts[i]!;
+      const t0 = Date.now();
+      const { status, body } = await askCortexResilient({
+        question,
+        top_k: a.top_k,
+        use_graph: a.use_graph,
+        use_agentic: false,
+        use_reranking: true,
+        conversation_history,
+      });
+      const srcTitles = Array.isArray(body?.sources)
+        ? (body.sources as any[]).map((s) => s?.metadata?.document_title || s?.document_title).filter((t) => typeof t === "string")
+        : [];
+      logCortex(a.use_graph ? "mine" : "mine(vector)", topic, status, Date.now() - t0, srcTitles);
+      const ok = status === 200 && typeof body?.answer === "string" && body.answer.trim();
+      if (!ok) {
+        if (i === 0 && attempts.length > 1) {
+          warnUpstream(
+            `Cortex graph mine failed (status ${status || "threw"}) for “${topic.slice(0, 60)}” — ` +
+              "falling back to the lean non-graph ask so the visitor still gets an answer.",
+          );
+        }
+        continue;
       }
+      const text = String(body.answer).replace(/\s*\[src_[^\]]*\]/g, "").replace(/\s+/g, " ").trim().slice(0, INSIGHT_TEXT_MAX);
+      if (!text) continue;
+      const sources: string[] = [];
+      if (Array.isArray(body.sources)) {
+        for (const s of body.sources as any[]) {
+          const t = s?.metadata?.document_title || s?.document_title;
+          if (typeof t === "string" && t && !sources.includes(t)) sources.push(t);
+          if (sources.length >= 3) break;
+        }
+      }
+      return { at: Date.now(), topic, text, sources };
     }
-    return { at: Date.now(), topic, text, sources };
+    return null;
   }
 
   /**
@@ -1737,7 +1800,7 @@ export function registerGuideRoutes(
         if (insight) addSessionInsight(session, insight);
       }
       if (!insight) {
-        insight = await cortexMine(ctx, persona, question, here, session.summary);
+        insight = await runLiveCortex(() => cortexMine(ctx, persona, question, here, session.summary));
         if (insight) {
           addSessionInsight(session, insight);
           await putSharedInsight(ctx.id, norm, insight);
@@ -1747,8 +1810,16 @@ export function registerGuideRoutes(
       if (insight) {
         await composeFollowup(session, persona, insight, voice, speak, question, priorReply, priorWasAck);
       } else if (priorWasAck) {
-        // We promised an answer but Cortex came up empty — don't leave them hanging.
-        const miss = "Hm — my deeper records came up short on that one. Ask me about any of the works or artists here and I'll dig right in.";
+        // We promised an answer but the mine still came up empty. With the
+        // non-graph fallback in place this is almost always a transient Cortex
+        // overload (BOTH paths down for that moment), NOT a real absence of
+        // records — so don't tell the visitor "my records came up short" (the
+        // original bug: a well-documented artist like Pindar getting a flat
+        // dead-end). Ground the reply in the authoritative exhibition context
+        // when they named something on show (fallbackAnswer matches partial
+        // artist names), and invite them to ask again for the deeper dig.
+        const grounded = fallbackAnswer(ctx, question);
+        const miss = `${grounded} Ask me again in a moment and I'll dig deeper.`;
         const { urls: missAudio, chunks: missChunks } = speak ? prepareVoice(miss, voice, true) : { urls: [], chunks: [] };
         session.pendingFollowup = { text: miss, audioUrl: missAudio[0] ?? null, audioUrls: missAudio, audioChunks: missChunks, at: Date.now() };
       }
@@ -1845,7 +1916,16 @@ export function registerGuideRoutes(
         for (const job of jobs) {
           if (mined >= PREWARM_MAX_TOPICS) break;
           if (bucket.has(job.key)) continue;
-          const insight = await cortexMine(ctx, persona, job.question, job.here);
+          // Yield to any in-flight visitor question — pre-warm only uses idle
+          // time, so its burst never collides with (and 500s) a live mine.
+          for (let waited = 0; liveCortexInFlight > 0 && waited < 60_000; waited += 1000) {
+            await new Promise((r) => setTimeout(r, 1000));
+          }
+          // Lean (non-graph) pre-warm: it runs in a burst at spawn, so keeping
+          // it off the heavy graph queue stops it from 500ing the live visitor
+          // mines that arrive in the same window. A live ask that hits this
+          // cached topic still upgrades to a deep graph mine on demand.
+          const insight = await cortexMine(ctx, persona, job.question, job.here, undefined, false);
           if (insight) {
             await putSharedInsight(ctx.id, job.key, insight);
             mined++;
@@ -1858,6 +1938,24 @@ export function registerGuideRoutes(
         prewarming.delete(ctx.id);
       }
     })();
+  }
+
+  /**
+   * Does the question name this artist? Matches the full name, but ALSO a
+   * distinctive name part (≥4 letters) so "tell me more about pindar" resolves
+   * to "Pindar Van Arman" — visitors rarely type an artist's full name. The
+   * ≥4-letter floor + word boundary keeps it from matching on short/common
+   * tokens.
+   */
+  function mentionsArtist(qPadded: string, artist: string): boolean {
+    const name = artist.toLowerCase();
+    if (qPadded.includes(name)) return true;
+    for (const part of name.split(/\s+/)) {
+      const tok = part.replace(/[^\p{L}\p{N}]/gu, "");
+      if (tok.length < 4) continue;
+      if (new RegExp(`(^|[^\\p{L}\\p{N}])${tok}([^\\p{L}\\p{N}]|$)`, "u").test(qPadded)) return true;
+    }
+    return false;
   }
 
   /** Offline answer straight from the context — keeps the guide alive without Cortex. */
@@ -1888,8 +1986,9 @@ export function registerGuideRoutes(
           .join(" ");
       }
     }
+    const qPadded = ` ${q} `;
     for (const artist of ctx.artists) {
-      if (q.includes(artist.toLowerCase())) {
+      if (mentionsArtist(qPadded, artist)) {
         const works = ctx.rooms
           .flatMap((r) => r.artworks)
           .filter((a) => a.artist === artist && a.title)
@@ -1916,6 +2015,11 @@ export function registerGuideRoutes(
           question:
             "Suggest 8 short, curious questions a first-time visitor might ask you about this exhibition — its works, artists, rooms, architects, or the ideas connecting them. One question per line, no numbering, no commentary.",
           top_k: 5,
+          // Generating question starters needs no multi-hop graph traversal —
+          // use the lean path so spawn-time starters don't pile onto the heavy
+          // graph queue (which is the first to 500 under load) right when the
+          // pre-warm + first visitors are also hitting Cortex.
+          use_graph: false,
           conversation_history: [{ role: "user", content: contextBlock(ctx, persona) }],
         });
         logCortex("starters", ctx.name, status, Date.now() - t0);
@@ -2234,7 +2338,7 @@ export function registerGuideRoutes(
           ...history,
         ],
       };
-      const { status, body: upstream } = await askCortexResilient(ask);
+      const { status, body: upstream } = await runLiveCortex(() => askCortexResilient(ask));
       if (status !== 200 || !upstream?.answer) {
         warnUpstream(
           `Cortex ask returned ${status}${upstream?.answer ? "" : " with no answer"} (after retry) — ` +
