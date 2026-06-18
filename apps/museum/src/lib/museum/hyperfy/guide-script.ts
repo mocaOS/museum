@@ -157,8 +157,11 @@ export interface GuideScriptOptions {
    * they're standing in front of, and follows them as they move between rooms.
    */
   spatialMap?: {
-    rooms?: { uid: string; title?: string; x: number; z: number; r: number }[];
-    works?: { uid: string; id?: number | null; slot?: string; title?: string | null; artist?: string | null; x: number; z: number }[];
+    // Rooms carry footprint half-extents + rotation (point-in-rotated-rectangle
+    // membership); `r` is the legacy inscribed-circle radius, kept as a fallback.
+    rooms?: { uid: string; title?: string; x: number; z: number; r: number; hx?: number; hz?: number; rot?: number }[];
+    // Works carry a world `y` so a piece a floor up/down isn't resolved as "in front".
+    works?: { uid: string; id?: number | null; slot?: string; title?: string | null; artist?: string | null; x: number; z: number; y?: number }[];
   } | null;
 }
 

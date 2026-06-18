@@ -378,10 +378,16 @@ if (exhibition.spawn && Array.isArray(exhibition.spawn.position)) {
     const k = TILE_METERS / BUILDER_TILE;
     const sp = exhibition.spawn;
     const pos = [k * sp.position[0], k * (sp.position[1] || 0) + 0.2, k * sp.position[2]];
+    // CRITICAL: the server's PlayerRemote.modify reads the COMPACT player keys
+    // (p/q/t) — NOT position/quaternion (those are App keys, for rooms/guide).
+    // Send the exact packet PlayerLocal.teleport sends, else the player's
+    // server-side position never moves and `/spawn set` stores our default
+    // position (visitors then enter at the wrong place).
     session.send("entityModified", {
       id: session.selfId,
-      position: pos,
-      quaternion: yawToQuaternion(sp.rotationY || 0),
+      p: pos,
+      q: yawToQuaternion(sp.rotationY || 0),
+      t: true,
     });
     await new Promise((r) => setTimeout(r, 400));
     session.send("command", { args: ["spawn", "set"] });

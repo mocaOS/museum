@@ -395,10 +395,17 @@ export async function spawnExhibition(
         const k = tileMeters / BUILDER_TILE;
         const sp = exhibition.spawn;
         const pos = [ k * sp.position[0], k * (sp.position[1] || 0) + 0.2, k * sp.position[2] ];
+        // Move our own avatar, then `/spawn set` captures its transform. CRITICAL:
+        // the server's PlayerRemote.modify reads the COMPACT player keys (p/q/t) —
+        // NOT position/quaternion (those are App keys, used for rooms/guide). Send
+        // the exact packet PlayerLocal.teleport sends. With the wrong keys the
+        // player's server-side data.position never moves, so `/spawn set` stores
+        // our default position and visitors enter at the wrong place.
         session.send("entityModified", {
           id: session.selfId,
-          position: pos,
-          quaternion: yawToQuaternion(sp.rotationY || 0),
+          p: pos,
+          q: yawToQuaternion(sp.rotationY || 0),
+          t: true,
         });
         await new Promise(resolve => setTimeout(resolve, 400));
         session.send("command", { args: [ "spawn", "set" ] });
