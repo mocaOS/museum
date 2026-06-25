@@ -51,6 +51,10 @@ const translations = {
     errorPrefix: "Error",
     requestCancelled: "Request was cancelled.",
     unknownError: "Unknown error",
+    rateLimited:
+      "The system is handling a lot of requests right now. Please wait about {seconds} seconds and try again.",
+    rateLimitedNoTime:
+      "The system is handling a lot of requests right now. Please wait a moment and try again.",
 
     // Auth / login
     email: "Email",
@@ -421,6 +425,10 @@ const translations = {
     errorPrefix: "Fehler",
     requestCancelled: "Anfrage wurde abgebrochen.",
     unknownError: "Unbekannter Fehler",
+    rateLimited:
+      "Das System verarbeitet gerade viele Anfragen. Bitte warte etwa {seconds} Sekunden und versuch es dann erneut.",
+    rateLimitedNoTime:
+      "Das System verarbeitet gerade viele Anfragen. Bitte warte einen Moment und versuch es dann erneut.",
 
     // Auth / login
     email: "E-Mail",

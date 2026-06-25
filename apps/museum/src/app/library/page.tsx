@@ -6,6 +6,7 @@ import {
   askQuestion,
   askQuestionStream,
   fetchCollections,
+  RateLimitError,
 } from "@/lib/api";
 import {
   listChats,
@@ -23,6 +24,34 @@ function uid(): string {
     return crypto.randomUUID();
   }
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
+}
+
+// The backend emits one `status` event per pipeline step, and in multi-search
+// modes (Deep Research / agentic) several steps share a stage and each carry a
+// per-step count, e.g. "Found 8 sources" then "Found 7 sources". Shown verbatim
+// these read as a regression (8 → 7), making the system look stuck. Accumulate
+// the count per stage and substitute the running total back into the backend's
+// own message so the wording (and i18n) is preserved: "Found 8" → "Found 15".
+//
+// `counts` is scoped to a single stream so it resets every turn. We key by
+// `stage` so an unrelated later stage that happens to contain a number (e.g.
+// reranking) keeps its own counter rather than folding into the search total.
+// Digit-based, so it works regardless of UI language; only the first number in
+// the message is rewritten, matching the "Found N sources" shape.
+function aggregateStatusCount(
+  status: { stage: string; message: string },
+  counts: Record<string, number>
+): { stage: string; message: string } {
+  const match = status.message.match(/\d+/);
+  if (!match) return status;
+  const n = Number(match[0]);
+  if (!Number.isFinite(n)) return status;
+  const total = (counts[status.stage] ?? 0) + n;
+  counts[status.stage] = total;
+  // First event for this stage — the per-step number is already the total, so
+  // leave the message untouched (also keeps single-search Chat mode identical).
+  if (total === n) return status;
+  return { ...status, message: status.message.replace(/\d+/, String(total)) };
 }
 
 import { getConfig, getCachedConfig } from "@/lib/config";
@@ -203,6 +232,10 @@ export default function LibraryPage() {
         }
       };
 
+      // Per-stage running source counts for the live status label, scoped to
+      // this turn so it resets on every send. See aggregateStatusCount.
+      const statusCounts: Record<string, number> = {};
+
       if (settings.streaming) {
         const controller = new AbortController();
         abortRef.current = controller;
@@ -264,9 +297,10 @@ export default function LibraryPage() {
               );
             },
             onStatus: (status) => {
+              const aggregated = aggregateStatusCount(status, statusCounts);
               setMessages((prev) =>
                 prev.map((m) =>
-                  m.id === assistantId ? { ...m, status } : m
+                  m.id === assistantId ? { ...m, status: aggregated } : m
                 )
               );
             },
@@ -300,6 +334,47 @@ export default function LibraryPage() {
                 return updated;
               });
               setIsLoading(false);
+            },
+            onRateLimited: (retryAfterSeconds) => {
+              setMessages((prev) => {
+                const updated = prev.map((m) =>
+                  m.id === assistantId
+                    ? {
+                        ...m,
+                        content:
+                          retryAfterSeconds != null
+                            ? t("rateLimited", { seconds: retryAfterSeconds })
+                            : t("rateLimitedNoTime"),
+                        isStreaming: false,
+                      }
+                    : m
+                );
+                finalize(updated);
+                return updated;
+              });
+              setIsLoading(false);
+            },
+            onReconnect: () => {
+              // Server is restarting and the request is being resubmitted —
+              // clear the partial answer so the regenerated one streams clean.
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id === assistantId
+                    ? {
+                        ...m,
+                        content: "",
+                        sources: [],
+                        thinking: [],
+                        subQuestions: [],
+                        retrieval: [],
+                        retrievalStats: undefined,
+                        graphContext: undefined,
+                        status: undefined,
+                        isStreaming: true,
+                      }
+                    : m
+                )
+              );
             },
           },
           controller.signal
@@ -338,12 +413,18 @@ export default function LibraryPage() {
             return updated;
           });
         } catch (err) {
+          const content =
+            err instanceof RateLimitError
+              ? err.retryAfterSeconds != null
+                ? t("rateLimited", { seconds: err.retryAfterSeconds })
+                : t("rateLimitedNoTime")
+              : `${t("errorPrefix")}: ${err instanceof Error ? err.message : t("unknownError")}`;
           setMessages((prev) => {
             const updated = prev.map((m) =>
               m.id === assistantId
                 ? {
                     ...m,
-                    content: `${t("errorPrefix")}: ${err instanceof Error ? err.message : t("unknownError")}`,
+                    content,
                     isStreaming: false,
                   }
                 : m
