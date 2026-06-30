@@ -284,7 +284,10 @@ export async function askQuestionStream(
           if (data.content !== undefined) {
             callbacks.onContent(data.content);
           }
-          if (data.sources) {
+          // Ignore an empty `sources` frame: the backend can emit a populated
+          // sources event mid-stream and a trailing `sources: []` afterwards,
+          // which would otherwise clobber the real sources we already have.
+          if (data.sources && data.sources.length) {
             callbacks.onSources(data.sources);
           }
           if (data.graph_context) {

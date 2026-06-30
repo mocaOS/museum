@@ -49,6 +49,15 @@ const CITE_PREFIX = "\u200Bcite:";
 const CITE_REGEX = /\u200Bcite:(\d+)\u200B/g;
 const CITE_SPLIT = /(\u200Bcite:\d+\u200B)/g;
 
+// Citation patterns. The writer is instructed to cite as [src_1], [src_2], but
+// models (especially the smaller chat model) frequently group sources inside a
+// single bracket: [src_1, src_3, src_6] or [src_1, 3, 6]. Match the whole
+// bracketed group \u2014 capturing any leading space \u2014 so grouped citations don't
+// fall through as raw text, then pull every number out of it.
+const CITATION_GROUP_REGEX =
+  /(\s?)(\[\s*src_\d+(?:\s*[,;]\s*(?:src_)?\d+)*\s*\])/g;
+const CITATION_NUM_REGEX = /\d+/g;
+
 export default function MessageBubble({
   message,
   onSourceClick,
@@ -122,18 +131,33 @@ export default function MessageBubble({
     const map: CitationMap = new Map();
     const cited: Source[] = [];
     let m: RegExpExecArray | null;
-    const scan = /\[src_(\d+)\]/g;
+    const scan = new RegExp(CITATION_GROUP_REGEX.source, "g");
     while ((m = scan.exec(content)) !== null) {
-      const sid = m[1];
-      if (map.has(sid)) continue;
-      const source = resolve(sid);
-      if (source) map.set(sid, { displayIndex: cited.push(source), source });
+      // Resolve every source number in the bracket group so
+      // [src_1, src_3, src_6] registers all three, in citation order.
+      const nums = m[2].match(CITATION_NUM_REGEX) ?? [];
+      for (const sid of nums) {
+        if (map.has(sid)) continue;
+        const source = resolve(sid);
+        if (source) map.set(sid, { displayIndex: cited.push(source), source });
+      }
     }
 
-    // Only markers we can actually resolve become citation badges; anything
-    // unresolvable is left as literal text rather than silently dropped.
-    const processed = content.replace(/\[src_(\d+)\]/g, (full, sid) =>
-      map.has(sid) ? `${CITE_PREFIX}${sid}\u200B` : full
+    // Only markers we can actually resolve become citation badges, one per
+    // resolved source (so a grouped [src_1, src_3] renders two badges). A group
+    // whose numbers all resolve to nothing (the backend can stream citation
+    // markers without ever emitting a matching source) is stripped \u2014 along with
+    // any space in front of it \u2014 so it never renders as literal "[src_1]" text.
+    const processed = content.replace(
+      CITATION_GROUP_REGEX,
+      (full, ws, group) => {
+        const nums: string[] = group.match(CITATION_NUM_REGEX) ?? [];
+        const markers = nums
+          .filter((sid) => map.has(sid))
+          .map((sid) => `${CITE_PREFIX}${sid}\u200B`)
+          .join("");
+        return markers ? `${ws}${markers}` : "";
+      }
     );
 
     return { processedContent: processed, citedSources: cited, citationMap: map };
