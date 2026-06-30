@@ -202,7 +202,21 @@ source of truth.
   `https://api.decc0s.com`), `CORTEX_API_URL` + `CORTEX_API_KEY` (read-only;
   unset → `/v1/library/*` answers 503 **and** the museum guide answers from
   exhibition context only, `fallback: true`, with a `[moca-guide]` boot
-  warning), `VENICE_API_KEY` (+ optional `VENICE_API_URL`, `VENICE_TTS_MODEL`
+  warning). **Guide↔Cortex latency:** non-streaming `/api/ask` is one retrieval +
+  one generation (no agent loop), so the answer-LLM's prefill dominates. The
+  guide therefore sends Cortex a SLIM `cortexGroundingBlock` (persona name +
+  rooms/artists/works by name, ≤3.5k chars) — NOT the full `contextBlock`
+  (persona SOUL + every artwork description, up to ~62k), which is reserved for
+  the LOCAL fast model (`buildSystemContext`). Feeding the full block to Cortex
+  was the cause of the 52s `[moca-guide] cortex mine(vector)` lines (≈15k input
+  tokens of prefill on gemma4) that blew the in-world ~50s follow-up window. The
+  proxy (`cortex.ts`) also forwards cortex-app's latest RAGRequest fields
+  (`conversation_memory`, `use_fast_search`, `max_hops`) for `/v1/library/*`
+  integrators, and the guide uses the lean vector path (no rerank) on its fast
+  attempts. The Cortex deployment should still run cortex-app's June-2026
+  recommended stack (`OPENAI_MODEL=google-gemma-4-26b-a4b-it`,
+  `OPENAI_MAX_CONTEXT=256000`, reasoning off — `.env.recommended`). Also
+  `VENICE_API_KEY` (+ optional `VENICE_API_URL`, `VENICE_TTS_MODEL` `VENICE_API_KEY` (+ optional `VENICE_API_URL`, `VENICE_TTS_MODEL`
   default `tts-kokoro`, `VENICE_TTS_VOICE` model-aware default — `af_heart` for
   kokoro, `Serena` for qwen — set only when unset) — the guide's
   voice; unset → guide stays text-only, `MUSEUMAGENT_BASEURL` +

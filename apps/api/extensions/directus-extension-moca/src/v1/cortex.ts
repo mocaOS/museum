@@ -20,8 +20,22 @@ export interface CortexAskBody {
   use_agentic?: boolean;
   use_graph?: boolean;
   use_reranking?: boolean;
+  /** Simple vector-only path (disables hybrid/reranking) — cortex-app's fast
+   * answer mode. Only honored on the STREAMING endpoint upstream; ignored by
+   * non-streaming /api/ask. */
+  use_fast_search?: boolean;
+  /** Graph traversal depth (1-3) when use_graph is on. */
+  max_hops?: number;
   conversation_history?: { role: string; content: string }[];
+  /** Opaque, client-carried conversation-memory blob (cortex-app's multi-bucket
+   * context curator). Sent verbatim; the upstream returns an updated blob via a
+   * `memory_update` SSE event. We never construct or mutate it — pure passthrough. */
+  conversation_memory?: unknown;
 }
+
+// Bound the opaque memory blob so the proxy can't be used to push arbitrarily
+// large payloads upstream; a real curated blob is a few KB.
+const MAX_MEMORY_BYTES = 256_000;
 
 export function createCortexClient(env: Record<string, any>) {
   const base = String(env.CORTEX_API_URL || "").replace(/\/$/, "");
@@ -50,14 +64,32 @@ export function createCortexClient(env: Record<string, any>) {
           .slice(-20)
           .map((m) => ({ role: m.role, content: m.content.slice(0, 8000) }))
       : undefined;
+    // Pass the opaque conversation-memory blob through verbatim when it's a
+    // plain object within the size bound — never reshape it (it's cortex-app's
+    // to own; the museum app stores and replays exactly what came back).
+    let memory: unknown;
+    if (body.conversation_memory && typeof body.conversation_memory === "object") {
+      try {
+        if (JSON.stringify(body.conversation_memory).length <= MAX_MEMORY_BYTES) {
+          memory = body.conversation_memory;
+        }
+      } catch {
+        /* non-serializable blob — drop it rather than fail the request */
+      }
+    }
     return {
       question: String(body.question || "").slice(0, 8000),
       top_k: Math.max(1, Math.min(20, Number(body.top_k) || 5)),
       use_graph: body.use_graph !== false,
       use_agentic: body.use_agentic === true,
       ...(body.use_reranking !== undefined ? { use_reranking: body.use_reranking !== false } : {}),
+      ...(body.use_fast_search === true ? { use_fast_search: true } : {}),
+      ...(Number.isFinite(Number(body.max_hops))
+        ? { max_hops: Math.max(1, Math.min(3, Math.trunc(Number(body.max_hops)))) }
+        : {}),
       ...(body.collection_id ? { collection_id: String(body.collection_id) } : {}),
       ...(history?.length ? { conversation_history: history } : {}),
+      ...(memory !== undefined ? { conversation_memory: memory } : {}),
     };
   }
 

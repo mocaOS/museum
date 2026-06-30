@@ -1433,6 +1433,40 @@ export function registerGuideRoutes(
     return lines.join("\n");
   }
 
+  /**
+   * A SLIM grounding block for CORTEX calls — persona identity + the
+   * exhibition's rooms / artists / works by NAME only (no SOUL, no
+   * descriptions). The full `contextBlock` (persona SOUL up to ~12k chars +
+   * every artwork description, up to EXHIBITION_FACTS_MAX ~50k) is the right
+   * system prompt for the LOCAL fast model — but feeding it to Cortex on every
+   * retrieval just bloats the prompt: gemma4's prefill over ~15k input tokens is
+   * what makes a "fast" model take ~50s to answer (the 52s `mine(vector)` in the
+   * logs). Cortex only needs to know who's asking and what's on show to ground
+   * retrieval — the authoritative descriptions already live in the data it
+   * retrieves. Hard-capped an order of magnitude below the full block.
+   */
+  const CORTEX_GROUNDING_MAX = 3500;
+  function cortexGroundingBlock(ctx: GuideContext, persona: Persona): string {
+    const lines: string[] = [
+      `You are ${persona.name}, the resident guide of the Museum of Crypto Art (MOCA), ` +
+        `helping a visitor inside the walkable exhibition “${ctx.name}” ` +
+        `(${ctx.counts.rooms} room(s), ${ctx.counts.artworks} work(s), ${ctx.counts.artists} artist(s)).`,
+    ];
+    if (ctx.artists.length) lines.push(`Artists on show: ${ctx.artists.slice(0, 60).join(", ")}.`);
+    const roomTitles = ctx.rooms.map((r) => r.title).filter(Boolean) as string[];
+    if (roomTitles.length) lines.push(`Rooms: ${roomTitles.slice(0, 40).join(", ")}.`);
+    const workTitles = ctx.rooms
+      .flatMap((r) => r.artworks.map((a) => a.title))
+      .filter(Boolean) as string[];
+    if (workTitles.length) lines.push(`Works on show: ${workTitles.slice(0, 60).join(", ")}.`);
+    lines.push(
+      `Answer in a warm, knowledgeable voice with specific, accurate detail about these ` +
+        `works/artists, cryptoart, or MOCA. Never invent artworks, attributions, or dates.`,
+    );
+    const block = lines.join("\n");
+    return block.length > CORTEX_GROUNDING_MAX ? `${block.slice(0, CORTEX_GROUNDING_MAX - 1)}…` : block;
+  }
+
   // ---- hybrid fast path: dynamic context + async memory/insight mining -----
 
   /**
@@ -1612,7 +1646,7 @@ export function registerGuideRoutes(
     if (!topic || !cortex.configured) return null;
     const loc = locationLine(here);
     const conversation_history = [
-      { role: "user", content: contextBlock(ctx, persona) },
+      { role: "user", content: cortexGroundingBlock(ctx, persona) },
       { role: "assistant", content: `Understood — I am ${persona.name}, guiding visitors through “${ctx.name}”.` },
       // Bias retrieval toward where the visitor is (a soft hint to the RAG
       // LLM, not a hard collection filter).
@@ -1629,12 +1663,17 @@ export function registerGuideRoutes(
     // load, so on failure/empty we fall back ONCE to the lean non-graph ask
     // (faster, far more robust) — never in parallel — so a visitor never
     // dead-ends. The lean (non-deep) pre-warm uses only that non-graph ask.
-    const attempts: { top_k: number; use_graph: boolean }[] = deep
+    // The graph attempt keeps cross-encoder reranking (richness); the lean
+    // vector fallback drops it — it's the "fast + robust under load" path, and
+    // skipping the reranker shaves a retrieval stage when Cortex is already the
+    // thing that's struggling. (The dominant latency is still Cortex's answer
+    // LLM, which the guide can't cut from here — see apps/api/CLAUDE.md.)
+    const attempts: { top_k: number; use_graph: boolean; use_reranking: boolean }[] = deep
       ? [
-          { top_k: 8, use_graph: true },
-          { top_k: 6, use_graph: false },
+          { top_k: 8, use_graph: true, use_reranking: true },
+          { top_k: 6, use_graph: false, use_reranking: false },
         ]
-      : [{ top_k: 6, use_graph: false }];
+      : [{ top_k: 6, use_graph: false, use_reranking: false }];
     for (let i = 0; i < attempts.length; i++) {
       const a = attempts[i]!;
       const t0 = Date.now();
@@ -1643,7 +1682,7 @@ export function registerGuideRoutes(
         top_k: a.top_k,
         use_graph: a.use_graph,
         use_agentic: false,
-        use_reranking: true,
+        use_reranking: a.use_reranking,
         conversation_history,
       });
       const srcTitles = Array.isArray(body?.sources)
@@ -2020,7 +2059,8 @@ export function registerGuideRoutes(
           // graph queue (which is the first to 500 under load) right when the
           // pre-warm + first visitors are also hitting Cortex.
           use_graph: false,
-          conversation_history: [{ role: "user", content: contextBlock(ctx, persona) }],
+          use_reranking: false,
+          conversation_history: [{ role: "user", content: cortexGroundingBlock(ctx, persona) }],
         });
         logCortex("starters", ctx.name, status, Date.now() - t0);
         if (status !== 200 || typeof body?.answer !== "string") return;
@@ -2330,8 +2370,11 @@ export function registerGuideRoutes(
         top_k: 4,
         use_graph: false,
         use_agentic: false,
+        // Visitor-facing reply on the legacy path: skip reranking too — one
+        // vector retrieval + one generation is the fastest /api/ask can answer.
+        use_reranking: false,
         conversation_history: [
-          { role: "user", content: contextBlock(ctx, persona) },
+          { role: "user", content: cortexGroundingBlock(ctx, persona) },
           { role: "assistant", content: `Understood — I am ${persona.name}, guiding visitors through “${ctx.name}”.` },
           ...(locationLine(here) ? [{ role: "user", content: locationLine(here) as string }] : []),
           ...(focusLine(focus) ? [{ role: "user", content: focusLine(focus) as string }] : []),
