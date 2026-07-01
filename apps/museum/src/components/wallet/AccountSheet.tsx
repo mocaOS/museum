@@ -5,6 +5,8 @@ import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
 import { useDisconnect } from "@reown/appkit/react";
 import { truncateAddress, formatTokenAmount } from "@/lib/web3/format";
+import { useEnsNames } from "@/hooks/useEnsNames";
+import { useAuthSession } from "@/hooks/useAuthSession";
 import type { Holdings, CollectionHoldings } from "@/lib/web3/types";
 
 const MONO = "'JetBrains Mono', ui-monospace, SFMono-Regular, monospace";
@@ -73,6 +75,9 @@ export function AccountSheet({
   onClose: () => void;
 }) {
   const { disconnect } = useDisconnect();
+  const { signOut } = useAuthSession();
+  const ens = useEnsNames([address]);
+  const ensName = ens[address.toLowerCase()];
   const [copied, setCopied] = useState(false);
   const [mounted, setMounted] = useState(false);
 
@@ -109,6 +114,8 @@ export function AccountSheet({
   };
 
   const handleDisconnect = async () => {
+    // Drop the SIWE session too, so disconnecting fully signs out.
+    await signOut().catch(() => {});
     await disconnect();
     onClose();
   };
@@ -175,9 +182,19 @@ export function AccountSheet({
           className="mb-4 flex items-center justify-between gap-2 rounded-[var(--radius)] border px-3 py-2.5"
           style={{ borderColor: "var(--border)", background: "var(--card)" }}
         >
-          <span style={{ fontFamily: MONO, color: "var(--fg1)" }} className="text-sm">
-            {truncateAddress(address, 10, 8)}
-          </span>
+          <div className="flex min-w-0 flex-col">
+            {ensName && (
+              <span className="truncate text-sm" style={{ color: "var(--fg1)" }}>
+                {ensName}
+              </span>
+            )}
+            <span
+              style={{ fontFamily: MONO, color: ensName ? "var(--fg2)" : "var(--fg1)" }}
+              className={ensName ? "text-[11px]" : "text-sm"}
+            >
+              {truncateAddress(address, 10, 8)}
+            </span>
+          </div>
           <button
             type="button"
             onClick={copyAddress}

@@ -245,7 +245,7 @@ Admin-only raw SQL tool. `GET /raw-query/schema` (tables/columns for autocomplet
 Version-controlled snapshot of the instance:
 
 - `snapshot/collections/` — `applications`, `contracts`, `nfts`, `collections`,
-  `rooms`, `settings`.
+  `rooms`, `settings`, `library_submissions` (see below).
 - `snapshot/fields/` — field defs (incl. NFT `r2r_id` / `r2r_ingestion_status` /
   `r2r_extraction_status` / `retry` — legacy R2R tracking).
 - `snapshot/relations/` — FK/M2M relations.
@@ -256,6 +256,27 @@ Version-controlled snapshot of the instance:
 **Workflow:** edit in the Directus UI → `directus-sync pull` to capture → commit →
 `directus-sync push` on deploy. Use `migrations/` (e.g. the custom `nfts.identifier`
 index) only for raw DB changes outside Directus' schema model.
+
+## `library_submissions` — the Cortex Library submission queue
+
+Directus is the store for the museum app's **community document submission + review**
+feature (`apps/museum` → see its CLAUDE.md). No Directus extension is involved — the
+museum app is the only reader/writer, via a scoped static token.
+
+- **Collection `library_submissions`** — fields: `title`, `file` (M2O →
+  `directus_files`), `filename`, `file_type`, `file_size` (int), `submitted_by`
+  (lowercased ETH address, SIWE-verified by the museum app), `status`
+  (`pending`/`approved`/`rejected`, default `pending`), `rejected_reason`,
+  `cortex_document_id`, `cortex_synced` (bool), `reviewed_by`, `reviewed_at`.
+- **Access** — create a dedicated role/policy with CRUD on `library_submissions` +
+  file create/read only; generate a **static token** → the museum app's
+  `DIRECTUS_SUBMISSIONS_TOKEN`. Do **not** grant this collection a public read policy
+  (submissions are private until approved). Authorization (submitter vs. admin) is
+  enforced in the museum app's API routes via its SIWE session, not Directus RBAC.
+- **Workflow** — create in the Directus UI → `npx directus-sync pull` → commit; then
+  `npx directus-sync push` on deploy. On approval the museum app pushes the file into
+  Cortex's "Collective" collection with a `cortex_rw_` management key and records the
+  returned document id here.
 
 ## R2R status (legacy)
 

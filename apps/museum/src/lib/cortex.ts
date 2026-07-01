@@ -15,3 +15,11 @@ export function getCortexUrl(): string {
 export function getCortexKey(): string | null {
   return process.env.CORTEX_API_KEY || null;
 }
+
+// A separate management (write-capable, `cortex_rw_`) key used ONLY server-side
+// to ingest approved community submissions into the "Collective" collection.
+// Kept distinct from the read-only chat key so a leak of one can't do the
+// other's job. Returns null when unset — approvals then report "not configured".
+export function getCortexManagementKey(): string | null {
+  return process.env.CORTEX_MANAGEMENT_API_KEY || null;
+}

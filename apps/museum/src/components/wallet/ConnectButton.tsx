@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useAppKit } from "@reown/appkit/react";
 import { useWallet } from "@/hooks/useWallet";
+import { useEnsNames } from "@/hooks/useEnsNames";
 import { truncateAddress } from "@/lib/web3/format";
 import { AccountSheet } from "./AccountSheet";
 
@@ -31,6 +32,8 @@ const WalletIcon = () => (
 export function ConnectButton() {
   const { open } = useAppKit();
   const { address, isConnected, isLoading } = useWallet();
+  const ens = useEnsNames(address ? [address] : []);
+  const ensName = address ? ens[address] : null;
   const [sheetOpen, setSheetOpen] = useState(false);
 
   const base =
@@ -42,7 +45,7 @@ export function ConnectButton() {
         <button
           type="button"
           onClick={() => setSheetOpen(true)}
-          className={`${base} font-mono`}
+          className={`${base}${ensName ? "" : " font-mono"}`}
           style={{ borderColor: "var(--border)", color: "var(--fg1)" }}
           title={address}
         >
@@ -51,7 +54,7 @@ export function ConnectButton() {
             style={{ background: "var(--success)" }}
             aria-hidden="true"
           />
-          {truncateAddress(address)}
+          {ensName || truncateAddress(address)}
         </button>
         <AccountSheet
           address={address}

@@ -8,9 +8,16 @@ MOCA Library — a Next.js 16 app serving the Museum of Crypto Art galleries plu
 
 This app was forked from `cortex-chat`, a multi-tenant suite. The multi-user layer
 (accounts, superadmin, user groups, minted per-group/per-user keys, encrypted key
-storage, admin console, document upload, server-side history) has been **stripped
-out** — the Library is now a single-key, anonymous experience. If you see references
-to auth/users/groups/admin anywhere, they are stale; there is no database.
+storage, admin console, server-side history) has been **stripped out** — the Library
+chat is a single-key, anonymous experience. If you see references to
+auth/users/groups/admin anywhere, they are stale; there is no app-local database.
+
+**Exception — community document submissions (see "Community submissions & review"
+below).** There is now ONE narrowly-scoped authenticated surface: web3 users can
+submit documents for review, and whitelisted admins approve them into Cortex. It uses
+a **SIWE session** (not the old account system) and stores the review queue in the
+monorepo's **Directus** (not an app-local DB). The anonymous read-only chat is
+unchanged.
 
 **Key features:**
 - Anonymous public Library — no login, no accounts
@@ -36,6 +43,61 @@ unset, those routes return 503 ("Library not configured") and the galleries stil
 
 There is no key minting, no encryption-at-rest, no per-user/per-group scoping. The
 Cortex backend filters reads by whatever the key can access.
+
+## Community submissions & review (web3)
+
+Web3-authenticated visitors can **submit documents** into the museum's Cortex
+knowledge base, gated by an admin **review** step. Modeled on soulweaver's
+lore-review flow, adapted to this app's DB-less-app + Directus-data-layer split.
+
+**Auth — SIWE (Sign-In With Ethereum).** The wallet connection (Reown/wagmi) is
+client-side and unauthenticated, so it can't be trusted for writes. `signIn()`
+(`hooks/useAuthSession.ts`) runs a nonce → sign → verify handshake; the server
+verifies the signature (`lib/web3/siwe.ts`, viem — ERC-1271/6492 aware with an EOA
+recover fallback) and mints a short-lived **HMAC-signed httpOnly session cookie**
+(`lib/web3/session.ts`, `SESSION_SECRET`). Routes: `POST /api/auth/nonce`,
+`POST /api/auth/verify`, `GET /api/auth/session`, `POST /api/auth/logout`. Every
+privileged route re-derives the acting address from the **session**, never from
+client input. Admin whitelist is `LIBRARY_ADMIN_ADDRESSES` (comma-sep env,
+`lib/web3/admins.ts`).
+
+**Queue — Directus (`library_submissions`).** The museum app writes the queue via a
+single scoped static token (`DIRECTUS_SUBMISSIONS_TOKEN`); the API routes are the
+policy layer (submitter vs. admin), not Directus RBAC (`lib/library/submissions.ts`).
+`POST /api/library/submissions` (session-gated, multipart) uploads the file to
+Directus and creates a `pending` row with the verified `submitted_by` — it does **not**
+touch Cortex. `GET` (admin) lists for the review table; `[id]/file` streams a file for
+preview (admin, keeps the token server-side).
+
+**Approve → Cortex.** `POST /api/library/submissions/approve` (admin) pushes each
+file into the Cortex **Collective** collection via the **management key**
+(`CORTEX_MANAGEMENT_API_KEY`, a `cortex_rw_` key — distinct from the read-only chat
+key) using `POST /api/upload` (serialized ~1.1 s apart for Cortex's ~1 rps;
+`lib/library/cortex-management.ts` resolves-or-creates the collection like
+`apps/hyperfy/harvest-hyperfy-docs.mjs`), then flips the row to `approved` with the
+returned `cortex_document_id`. A per-item failure leaves the row `pending` for retry.
+`POST .../reject` marks `rejected` (kept for audit). Rejected/pending content is never
+ingested.
+
+**UI.** Header shows a **Submit** button (any connected wallet) and a **Review** link
+(admins) via `components/library/LibraryContribute.tsx`; the submit modal is
+`SubmitDocumentDialog.tsx`. The moderation table is `/library/review`
+(`components/library/ReviewTable.tsx`): status tabs, a **Submitted-by** column that
+**ENS-resolves** addresses (`hooks/useEnsNames.ts` + `components/wallet/AddressLabel.tsx`,
+reused by the account label) and is filterable by address or ENS, multi-select
+Approve/Reject on the pending view. Allowed types mirror Cortex: `.pdf .txt .md .docx
+.xlsx`, ≤50 MB.
+
+**Directus setup (operator, one-time).** Create a `library_submissions` collection with
+fields: `title` (string), `file` (M2O → `directus_files`), `filename`, `file_type`
+(string), `file_size` (integer), `submitted_by` (string), `status` (string:
+pending/approved/rejected, default pending), `rejected_reason` (string, nullable),
+`cortex_document_id` (string, nullable), `cortex_synced` (boolean, default false),
+`reviewed_by` (string, nullable), `reviewed_at` (timestamp, nullable). Then create a
+dedicated role/policy with CRUD on `library_submissions` + file create/read, generate a
+static token → `DIRECTUS_SUBMISSIONS_TOKEN`. Capture the collection via
+`npx directus-sync pull` and commit. Do **not** give this collection a public read
+policy. See `apps/api/CLAUDE.md`.
 
 ## Chat history (client-side)
 
@@ -385,6 +447,12 @@ database. See `.env.example`.
 - **Cortex:** `CORTEX_API_URL` + `CORTEX_API_KEY` (single read-only key). Deprecated
   aliases `NEXT_PUBLIC_API_URL` and `LIBRARY_API_URL` are mirrored onto `CORTEX_API_URL`
   at boot in `src/instrumentation.ts` with a console warning.
+- **Community submissions (optional — feature is disabled if unset):** `SESSION_SECRET`
+  (SIWE cookie HMAC), `LIBRARY_ADMIN_ADDRESSES` (reviewer whitelist, comma-sep),
+  `DIRECTUS_SUBMISSIONS_TOKEN` (Directus write token for `library_submissions`),
+  `CORTEX_MANAGEMENT_API_KEY` (`cortex_rw_` write key), `CORTEX_COLLECTIVE_COLLECTION`
+  (target collection name, default `Collective`). Uses the existing `DIRECTUS_URL` +
+  mainnet RPC (for ENS). See "Community submissions & review" above.
 - **Branding/analytics (optional, with defaults in `src/lib/settings.ts`):** `APP_TITLE`,
   `APP_DESCRIPTION`, `ACCENT_COLOR`, `LOCALE` (`en`/`de`), `LOGO_URL`, `SUPPORT_URL`,
   `SUPPORT_LABEL`, `CORTEX_ANALYTICS_TEMPLATE`. Surfaced to the client via `/api/config`.
