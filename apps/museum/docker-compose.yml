@@ -11,6 +11,18 @@ services:
       DIRECTUS_URL: ${DIRECTUS_URL:-https://api.moca.qwellco.de}
       MEDIA_BASE_URL: ${MEDIA_BASE_URL:-https://media.qwellcode.de/api}
       IPFS_GATEWAY: ${IPFS_GATEWAY:-https://ipfs.qwellcode.de/ipfs/}
+      # Web3 holdings (account view + submission eligibility gate). MORALIS lists
+      # ROOM/DeCC0 NFTs; RPC reads $MOCA balances (public fallback if unset).
+      MORALIS_API_KEY: ${MORALIS_API_KEY}
+      ETH_RPC_URL: ${ETH_RPC_URL:-https://ethereum-rpc.publicnode.com}
+      POLYGON_RPC_URL: ${POLYGON_RPC_URL:-https://polygon-rpc.com}
+      # Community document submissions + admin review (web3). All server-only,
+      # read at runtime; feature stays disabled if any are unset.
+      SESSION_SECRET: ${SESSION_SECRET}
+      LIBRARY_ADMIN_ADDRESSES: ${LIBRARY_ADMIN_ADDRESSES}
+      DIRECTUS_SUBMISSIONS_TOKEN: ${DIRECTUS_SUBMISSIONS_TOKEN}
+      CORTEX_MANAGEMENT_API_KEY: ${CORTEX_MANAGEMENT_API_KEY}
+      CORTEX_COLLECTIVE_COLLECTION: ${CORTEX_COLLECTIVE_COLLECTION:-Collective}
     ports:
       - "${PORT:-3331}:3331"
     restart: unless-stopped
