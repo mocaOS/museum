@@ -125,10 +125,11 @@ const DECC0S_CONTRACT = (
 interface CodexItem {
   id: number;
   name?: string | string[] | null;
-  /** Full art with the background (preferred). */
-  thumbnail_background?: string | null;
-  /** Character cutout only (fallback if a background render is missing). */
+  /** Default composed image (character on background) — what we want. */
+  thumbnail?: string | null;
+  /** Layer-only variants — used only as defensive fallbacks. */
   thumbnail_character?: string | null;
+  thumbnail_background?: string | null;
 }
 
 /**
@@ -141,7 +142,7 @@ async function fetchDecc0sFromCodex(owner: string): Promise<NftItem[]> {
   try {
     const params = new URLSearchParams({
       "filter[owner][_eq]": owner.toLowerCase(),
-      fields: "id,name,thumbnail_background,thumbnail_character",
+      fields: "id,name,thumbnail,thumbnail_character,thumbnail_background",
       limit: "-1",
     });
     const res = await fetch(`${DECC0S_API}/items/codex?${params.toString()}`, {
@@ -150,8 +151,9 @@ async function fetchDecc0sFromCodex(owner: string): Promise<NftItem[]> {
     if (!res.ok) return [];
     const json = (await res.json()) as { data?: CodexItem[] };
     return (json.data ?? []).map((d) => {
-      // Prefer the full render with background; fall back to the cutout.
-      const thumb = d.thumbnail_background ?? d.thumbnail_character;
+      // The default composed thumbnail (not a single character/background layer).
+      const thumb =
+        d.thumbnail ?? d.thumbnail_character ?? d.thumbnail_background;
       return {
         chainId: MAINNET,
         contract: DECC0S_CONTRACT,

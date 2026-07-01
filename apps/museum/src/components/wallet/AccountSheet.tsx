@@ -40,6 +40,23 @@ const CopyIcon = () => (
   </svg>
 );
 
+const LogoutIcon = () => (
+  <svg
+    className="h-4 w-4"
+    fill="none"
+    viewBox="0 0 24 24"
+    stroke="currentColor"
+    strokeWidth={2}
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden="true"
+  >
+    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+    <polyline points="16 17 21 12 16 7" />
+    <line x1="21" x2="9" y1="12" y2="12" />
+  </svg>
+);
+
 async function fetchHoldings(address: string): Promise<Holdings> {
   const res = await fetch(`/api/holdings?address=${address}`);
   if (!res.ok) throw new Error("Failed to read holdings");
@@ -125,12 +142,23 @@ export function AccountSheet({
         }}
       >
         <div className="mb-5 flex items-center justify-between">
-          <span
-            className="text-[11px] uppercase tracking-[0.08em]"
-            style={{ color: "var(--fg2)" }}
-          >
-            Account
-          </span>
+          <div className="flex items-center gap-2.5">
+            <span
+              className="text-[11px] uppercase tracking-[0.08em]"
+              style={{ color: "var(--fg2)" }}
+            >
+              Account
+            </span>
+            <button
+              type="button"
+              onClick={handleDisconnect}
+              className="flex h-7 items-center gap-1.5 rounded-[var(--radius)] border px-2.5 text-xs font-medium transition-colors hover:bg-[var(--muted)]"
+              style={{ borderColor: "var(--border)", color: "var(--fg1)" }}
+            >
+              <LogoutIcon />
+              Log out
+            </button>
+          </div>
           <button
             type="button"
             onClick={onClose}
@@ -191,16 +219,6 @@ export function AccountSheet({
           </div>
         )}
 
-        <div className="mt-auto pt-6">
-          <button
-            type="button"
-            onClick={handleDisconnect}
-            className="w-full rounded-[var(--radius)] border py-2.5 text-sm font-medium transition-colors hover:bg-[var(--muted)]"
-            style={{ borderColor: "var(--border)", color: "var(--fg1)" }}
-          >
-            Disconnect
-          </button>
-        </div>
       </aside>
     </div>,
     document.body,

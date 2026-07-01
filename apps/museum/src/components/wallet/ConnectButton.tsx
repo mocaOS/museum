@@ -71,7 +71,7 @@ export function ConnectButton() {
       style={{ borderColor: "var(--border)", color: "var(--fg1)" }}
     >
       <WalletIcon />
-      {isLoading ? "Connecting…" : "Connect wallet"}
+      {isLoading ? "Connecting…" : "Login"}
     </button>
   );
 }
