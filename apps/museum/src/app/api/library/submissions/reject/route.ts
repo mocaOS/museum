@@ -11,8 +11,13 @@ import {
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
+// Ids may be UUID strings or numeric (integer PK) — accept both, coerce to string.
 const bodySchema = z.object({
-  ids: z.array(z.string().min(1)).min(1).max(100),
+  ids: z
+    .array(z.union([z.string().min(1), z.number().int()]))
+    .min(1)
+    .max(100)
+    .transform((arr) => arr.map(String)),
   reason: z.string().max(500).optional(),
 });
 

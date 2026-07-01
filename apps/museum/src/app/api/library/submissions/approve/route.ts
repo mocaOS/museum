@@ -16,8 +16,15 @@ import {
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
+// Directus primary keys may be UUIDs (string) or auto-increment (number),
+// depending on how the collection was created — accept either, normalize to
+// string for the Directus SDK (which resolves both).
 const bodySchema = z.object({
-  ids: z.array(z.string().min(1)).min(1).max(100),
+  ids: z
+    .array(z.union([z.string().min(1), z.number().int()]))
+    .min(1)
+    .max(100)
+    .transform((arr) => arr.map(String)),
 });
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
