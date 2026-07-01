@@ -63,6 +63,18 @@ export default defineEndpoint({
     const assetUrl = (id: string | null | undefined): string | null =>
       id ? `${publicUrl}/assets/${id}` : null;
 
+    // A lightweight, cache-friendly WebP thumbnail of an image asset (rooms are
+    // multi-MB source JPEGs — a sized WebP cuts the payload ~100x). Directus
+    // caches each transform variant at the origin, so the first request warms
+    // every later one. Default width suits gallery cards / the account sidebar.
+    const thumbUrl = (
+      id: string | null | undefined,
+      width = 512,
+    ): string | null =>
+      id
+        ? `${publicUrl}/assets/${id}?width=${width}&quality=80&format=webp`
+        : null;
+
     // ---- Public index (no key required) -----------------------------------
     router.get("/", (_req, res) => {
       res.json({
@@ -321,6 +333,9 @@ export default defineEndpoint({
             slots: r.slots ?? null,
             token_id: r.token_id ?? null,
             image_url: assetUrl(r.image),
+            // Sized WebP for cards / the wallet account sidebar (full-res
+            // original stays at image_url).
+            thumbnail_url: thumbUrl(r.image),
             model_url: assetUrl(r.model),
             model_optimized_url: assetUrl(r.model_optimized),
             // Pointer instead of the inline JSON — slot_data runs to a few KB

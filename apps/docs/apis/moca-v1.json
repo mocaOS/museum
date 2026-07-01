@@ -2076,7 +2076,14 @@
               "string",
               "null"
             ],
-            "description": "Preview image (Directus asset URL, supports ?width=&format= transforms)"
+            "description": "Full-resolution preview image (Directus asset URL, supports ?width=&format= transforms)"
+          },
+          "thumbnail_url": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Lightweight preview: a 512px-wide WebP variant of image_url (quality 80), ready to drop into cards or wallet/gallery grids without transforming the multi-MB original yourself."
           },
           "model_url": {
             "type": [

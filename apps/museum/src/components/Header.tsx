@@ -4,6 +4,7 @@ import Link from "next/link";
 import { t } from "@/lib/i18n";
 import { useLocale } from "@/lib/i18n-client";
 import { getCachedConfig } from "@/lib/config";
+import { ConnectButton } from "@/components/wallet/ConnectButton";
 
 // Keep in sync with the museum nav in components/site/SiteHeader.tsx
 // (plus "Home", since the Library has no other way back to the site).
@@ -93,6 +94,7 @@ export default function Header({
             Library
           </span>
         </nav>
+        <ConnectButton />
         {supportUrl ? (
           <a
             href={supportUrl}

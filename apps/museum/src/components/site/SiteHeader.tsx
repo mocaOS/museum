@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
+import { ConnectButton } from "@/components/wallet/ConnectButton";
 
 // `right: true` places an item in the right-hand group, just left of the
 // "Enter the Library" CTA. Vibe Studio lives in the footer (and on /decc0s).
@@ -65,7 +66,7 @@ export default function SiteHeader({ logoUrl = "/logo.svg" }: { logoUrl?: string
           </nav>
         </div>
 
-        {/* Right: secondary pages + Library CTA */}
+        {/* Right: secondary pages + Library CTA + wallet */}
         <nav className="hidden items-center gap-1 sm:flex">
           {rightNav.map(renderDesktopItem)}
           <Link
@@ -75,6 +76,9 @@ export default function SiteHeader({ logoUrl = "/logo.svg" }: { logoUrl?: string
           >
             Enter the Library
           </Link>
+          <span className="ml-1">
+            <ConnectButton />
+          </span>
         </nav>
 
         {/* Mobile toggle */}
@@ -107,6 +111,9 @@ export default function SiteHeader({ logoUrl = "/logo.svg" }: { logoUrl?: string
               {item.label}
             </Link>
           ))}
+          <div className="px-3 pt-2">
+            <ConnectButton />
+          </div>
         </nav>
       )}
     </header>

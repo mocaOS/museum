@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import "./globals.css";
 import { getAppSettings } from "@/lib/settings";
 import { setLocale as setI18nLocale } from "@/lib/i18n";
 import { MAX_UPLOAD_BYTES } from "@/lib/upload-limits";
 import ConfigBootstrap from "@/components/ConfigBootstrap";
+import { Web3Provider } from "@/components/wallet/Web3Provider";
 import JsonLd from "@/components/seo/JsonLd";
 import { organizationLd, webSiteLd } from "@/lib/seo";
 
@@ -73,7 +75,7 @@ export async function generateMetadata(): Promise<Metadata> {
   };
 }
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
@@ -81,6 +83,10 @@ export default function RootLayout({
   const settings = getAppSettings();
   const logoUrl = settings.logoUrl;
   setI18nLocale(settings.locale);
+
+  // Hydrate the wagmi/AppKit session from the request cookie (the layout is
+  // already force-dynamic, so reading headers here costs nothing extra).
+  const cookies = (await headers()).get("cookie");
 
   const initialConfig = {
     accentColor: settings.accentColor,
@@ -102,7 +108,9 @@ export default function RootLayout({
       <body className="antialiased">
         <JsonLd data={organizationLd()} />
         <JsonLd data={webSiteLd()} />
-        <ConfigBootstrap config={initialConfig}>{children}</ConfigBootstrap>
+        <Web3Provider cookies={cookies}>
+          <ConfigBootstrap config={initialConfig}>{children}</ConfigBootstrap>
+        </Web3Provider>
       </body>
     </html>
   );
