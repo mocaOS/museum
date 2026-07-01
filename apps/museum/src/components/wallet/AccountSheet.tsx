@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
 import { useDisconnect } from "@reown/appkit/react";
@@ -39,6 +40,52 @@ const CopyIcon = () => (
   >
     <rect width="14" height="14" x="8" y="8" rx="2" />
     <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
+  </svg>
+);
+
+const ArrowIcon = () => (
+  <svg
+    className="h-4 w-4 shrink-0"
+    fill="none"
+    viewBox="0 0 24 24"
+    stroke="currentColor"
+    strokeWidth={2}
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden="true"
+    style={{ color: "var(--fg2)" }}
+  >
+    <path d="M5 12h14M12 5l7 7-7 7" />
+  </svg>
+);
+
+const ChevronLeftIcon = () => (
+  <svg
+    className="h-4 w-4"
+    fill="none"
+    viewBox="0 0 24 24"
+    stroke="currentColor"
+    strokeWidth={2}
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden="true"
+  >
+    <path d="m15 18-6-6 6-6" />
+  </svg>
+);
+
+const ChevronRightIcon = () => (
+  <svg
+    className="h-4 w-4"
+    fill="none"
+    viewBox="0 0 24 24"
+    stroke="currentColor"
+    strokeWidth={2}
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden="true"
+  >
+    <path d="m9 18 6-6-6-6" />
   </svg>
 );
 
@@ -236,6 +283,22 @@ export function AccountSheet({
           </div>
         )}
 
+        {/* Legacy staking recovery — links to the dedicated /unstake page. */}
+        <Link
+          href="/unstake"
+          onClick={onClose}
+          className="mt-5 flex items-center justify-between gap-2 rounded-[var(--radius)] border px-3.5 py-3 text-sm transition-colors hover:bg-[var(--muted)]"
+          style={{ borderColor: "var(--border)", color: "var(--fg1)" }}
+        >
+          <span className="flex flex-col">
+            <span>Withdraw staked tokens</span>
+            <span className="text-[11px]" style={{ color: "var(--fg2)" }}>
+              Legacy MOCA staking pools · Polygon
+            </span>
+          </span>
+          <ArrowIcon />
+        </Link>
+
       </aside>
     </div>,
     document.body,
@@ -282,12 +345,28 @@ function CollectionsTabs({
 }: {
   collections: CollectionHoldings[];
 }) {
+  // 3-column grid × 4 rows max, so the sidebar shows at most 12 NFTs per page.
+  const PAGE_SIZE = 12;
+
   // Default to the first collection that actually has NFTs (falls back to 0).
   const firstNonEmpty = collections.findIndex((c) => c.items.length > 0);
   const [active, setActive] = useState(firstNonEmpty === -1 ? 0 : firstNonEmpty);
+  const [page, setPage] = useState(0);
+
+  const selectTab = (i: number) => {
+    setActive(i);
+    setPage(0);
+  };
 
   const current = collections[active];
   if (!current) return null;
+
+  const total = current.items.length;
+  const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  // Clamp defensively in case a refetch shrank the list under the current page.
+  const safePage = Math.min(page, pageCount - 1);
+  const start = safePage * PAGE_SIZE;
+  const visible = current.items.slice(start, start + PAGE_SIZE);
 
   return (
     <section>
@@ -302,7 +381,7 @@ function CollectionsTabs({
             <button
               key={c.key}
               type="button"
-              onClick={() => setActive(i)}
+              onClick={() => selectTab(i)}
               className="relative -mb-px flex items-center gap-1.5 px-3 py-2 text-sm transition-colors"
               style={{ color: on ? "var(--fg1)" : "var(--fg2)" }}
             >
@@ -328,21 +407,54 @@ function CollectionsTabs({
       </div>
 
       {/* Active collection grid */}
-      {current.items.length === 0 ? (
+      {total === 0 ? (
         <p className="py-6 text-center text-sm" style={{ color: "var(--fg3)" }}>
           None held
         </p>
       ) : (
-        <div className="grid grid-cols-3 gap-2">
-          {current.items.map((item) => (
-            <NftThumb
-              key={`${item.contract}:${item.tokenId}`}
-              imageUrl={item.imageUrl}
-              tokenId={item.tokenId}
-              name={item.name}
-            />
-          ))}
-        </div>
+        <>
+          <div className="grid grid-cols-3 gap-2">
+            {visible.map((item) => (
+              <NftThumb
+                key={`${item.contract}:${item.tokenId}`}
+                imageUrl={item.imageUrl}
+                tokenId={item.tokenId}
+                name={item.name}
+              />
+            ))}
+          </div>
+
+          {pageCount > 1 && (
+            <div className="mt-3 flex items-center justify-between">
+              <button
+                type="button"
+                onClick={() => setPage((p) => Math.max(0, p - 1))}
+                disabled={safePage === 0}
+                aria-label="Previous page"
+                className="flex h-7 w-7 items-center justify-center rounded-[var(--radius-sm)] transition-colors hover:bg-[var(--muted)] disabled:pointer-events-none disabled:opacity-40"
+                style={{ color: "var(--fg2)" }}
+              >
+                <ChevronLeftIcon />
+              </button>
+              <span
+                className="text-[11px]"
+                style={{ fontFamily: MONO, color: "var(--fg2)" }}
+              >
+                {start + 1}–{start + visible.length} of {total}
+              </span>
+              <button
+                type="button"
+                onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))}
+                disabled={safePage >= pageCount - 1}
+                aria-label="Next page"
+                className="flex h-7 w-7 items-center justify-center rounded-[var(--radius-sm)] transition-colors hover:bg-[var(--muted)] disabled:pointer-events-none disabled:opacity-40"
+                style={{ color: "var(--fg2)" }}
+              >
+                <ChevronRightIcon />
+              </button>
+            </div>
+          )}
+        </>
       )}
     </section>
   );

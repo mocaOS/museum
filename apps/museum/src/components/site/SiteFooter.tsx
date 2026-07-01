@@ -24,6 +24,7 @@ const INTERNAL = [
   { href: "/moca-live", label: "MOCA Live" },
   { href: "/press-room", label: "Press Room" },
   { href: "/incubator", label: "Incubator" },
+  { href: "/unstake", label: "Withdraw staking" },
 ];
 
 // External destinations (right) — open in a new tab.
