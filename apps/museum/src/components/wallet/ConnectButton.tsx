@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAppKit } from "@reown/appkit/react";
 import { useWallet } from "@/hooks/useWallet";
 import { useEnsNames } from "@/hooks/useEnsNames";
@@ -36,10 +36,18 @@ export function ConnectButton() {
   const ensName = address ? ens[address] : null;
   const [sheetOpen, setSheetOpen] = useState(false);
 
+  // Wallet state (connected/reconnecting) only exists on the client — wagmi's
+  // reconnect() runs after hydration. Render the stable disconnected state on
+  // the server and the first client paint so SSR HTML matches, then reveal the
+  // live state once mounted. Otherwise the SSR "Login" and the post-reconnect
+  // "Connecting…" disagree and React throws a hydration mismatch.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+
   const base =
     "flex h-9 items-center gap-2 rounded-[var(--radius)] border px-3.5 text-sm font-medium transition-colors hover:bg-[var(--muted)] active:scale-[0.98]";
 
-  if (isConnected && address) {
+  if (mounted && isConnected && address) {
     return (
       <>
         <button
@@ -65,16 +73,17 @@ export function ConnectButton() {
     );
   }
 
+  const loading = mounted && isLoading;
   return (
     <button
       type="button"
       onClick={() => open()}
-      disabled={isLoading}
+      disabled={loading}
       className={base}
       style={{ borderColor: "var(--border)", color: "var(--fg1)" }}
     >
       <WalletIcon />
-      {isLoading ? "Connecting…" : "Login"}
+      {loading ? "Connecting…" : "Login"}
     </button>
   );
 }
