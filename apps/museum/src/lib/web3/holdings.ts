@@ -160,6 +160,7 @@ async function fetchDecc0sFromCodex(owner: string): Promise<NftItem[]> {
         tokenId: String(d.id),
         name: (Array.isArray(d.name) ? d.name[0] : d.name) ?? `#${d.id}`,
         imageUrl: thumb ? `${DECC0S_API}/assets/${thumb}?key=s256` : null,
+        linkUrl: `https://codex.decc0s.com/${d.id}`,
       };
     });
   } catch {
@@ -174,6 +175,7 @@ const DIRECTUS_URL = (
 ).replace(/\/$/, "");
 
 interface RoomRow {
+  id?: number | null;
   token_id?: string | null;
   title?: string | null;
   image?: string | null;
@@ -193,7 +195,7 @@ async function enrichRoomsFromDirectus(rooms: NftItem[]): Promise<NftItem[]> {
   try {
     const params = new URLSearchParams({
       "filter[token_id][_in]": rooms.map((r) => r.tokenId).join(","),
-      fields: "token_id,title,image",
+      fields: "id,token_id,title,image",
       limit: "-1",
     });
     const res = await fetch(`${DIRECTUS_URL}/items/rooms?${params.toString()}`, {
@@ -213,6 +215,11 @@ async function enrichRoomsFromDirectus(rooms: NftItem[]): Promise<NftItem[]> {
         imageUrl: row.image
           ? `${DIRECTUS_URL}/assets/${row.image}?width=512&quality=80&format=webp`
           : room.imageUrl,
+        // The museum room page keys off the Directus room id, not the token id.
+        linkUrl:
+          row.id != null
+            ? `https://museumofcryptoart.com/rooms/${row.id}`
+            : room.linkUrl,
       };
     });
   } catch {

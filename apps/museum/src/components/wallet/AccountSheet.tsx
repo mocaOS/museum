@@ -420,6 +420,7 @@ function CollectionsTabs({
                 imageUrl={item.imageUrl}
                 tokenId={item.tokenId}
                 name={item.name}
+                linkUrl={item.linkUrl}
               />
             ))}
           </div>
@@ -464,38 +465,59 @@ function NftThumb({
   imageUrl,
   tokenId,
   name,
+  linkUrl,
 }: {
   imageUrl: string | null;
   tokenId: string;
   name: string | null;
+  linkUrl?: string | null;
 }) {
   const [broken, setBroken] = useState(false);
   const label = name || `#${tokenId}`;
+
+  const inner = (
+    <div className="relative aspect-square w-full">
+      {imageUrl && !broken ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={imageUrl}
+          alt={label}
+          className="h-full w-full object-cover"
+          loading="lazy"
+          onError={() => setBroken(true)}
+        />
+      ) : (
+        <div
+          className="flex h-full w-full items-center justify-center text-[11px]"
+          style={{ fontFamily: MONO, color: "var(--fg3)" }}
+        >
+          #{tokenId}
+        </div>
+      )}
+    </div>
+  );
+
+  const boxClass = "block overflow-hidden rounded-[var(--radius-sm)] border";
+  const boxStyle = { borderColor: "var(--border)", background: "var(--muted)" };
+
+  if (linkUrl) {
+    return (
+      <a
+        href={linkUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        title={label}
+        className={`${boxClass} transition-opacity hover:opacity-80`}
+        style={boxStyle}
+      >
+        {inner}
+      </a>
+    );
+  }
+
   return (
-    <div
-      className="overflow-hidden rounded-[var(--radius-sm)] border"
-      style={{ borderColor: "var(--border)", background: "var(--muted)" }}
-      title={label}
-    >
-      <div className="relative aspect-square w-full">
-        {imageUrl && !broken ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={imageUrl}
-            alt={label}
-            className="h-full w-full object-cover"
-            loading="lazy"
-            onError={() => setBroken(true)}
-          />
-        ) : (
-          <div
-            className="flex h-full w-full items-center justify-center text-[11px]"
-            style={{ fontFamily: MONO, color: "var(--fg3)" }}
-          >
-            #{tokenId}
-          </div>
-        )}
-      </div>
+    <div className={boxClass} style={boxStyle} title={label}>
+      {inner}
     </div>
   );
 }

@@ -6,6 +6,12 @@ export interface NftItem {
   tokenId: string;
   name: string | null;
   imageUrl: string | null;
+  /**
+   * Where clicking the thumbnail takes you (opened in a new tab). Set per
+   * collection server-side: Art DeCC0s → the DeCC0s Codex, MOCA ROOMs → the
+   * room's museum page. Null when there's no canonical destination.
+   */
+  linkUrl?: string | null;
 }
 
 export interface CollectionHoldings {
