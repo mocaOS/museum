@@ -438,8 +438,8 @@ if (world.isServer) {
 // Throttled with hysteresis so a wall of far works costs nothing and the
 // boundary never flickers. Old exports (no srcHi) just keep the default.
 if (world.isClient) {
-  const HQ_NEAR = 7      // meters: within this AND settled, show HQ
-  const HQ_FAR = 12      // meters: beyond this, drop back to the default
+  const HQ_NEAR = 10     // meters: within this AND settled, show HQ
+  const HQ_FAR = 14      // meters: beyond this, drop back to the default
   const VID_NEAR = 10    // meters: motion works play only within this
   const VID_FAR = 13     // meters: pause again past this (hysteresis)
   const STILL_SECS = 2   // must pause this long before paying for the HQ swap

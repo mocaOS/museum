@@ -5,6 +5,10 @@ import { dirname } from "node:path";
 const nextConfig: NextConfig = {
   output: "standalone",
   compress: false,
+  // Native/wasm deps of the GLB optimizer (/api/museum/model) must load from
+  // node_modules at runtime, not be bundled — draco3dgltf reads its .wasm
+  // from its own package directory.
+  serverExternalPackages: [ "sharp", "draco3dgltf" ],
   // Dev only: allow opening the dev server via the machine's LAN address
   // (e.g. testing Hyperfy spawns where the world must reach this host) —
   // Next.js blocks cross-origin dev-resource requests by default.

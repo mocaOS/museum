@@ -81,11 +81,24 @@ rearrange things in-engine.
 into the world as content-addressed assets at spawn time — the exhibition keeps
 rendering even if museum infrastructure is unreachable. To keep spawns snappy,
 only a compressed **768w** webp is uploaded per still work; the room app then
-**swaps to a remote 2048w HQ variant when a visitor comes within ~7m** (reverts
-beyond ~12m, with hysteresis), which the engine loader fetches + caches per
+**swaps to a remote 2048w HQ variant when a visitor comes within ~10m** (reverts
+beyond ~14m, with hysteresis), which the engine loader fetches + caches per
 client from the CORS-open `/api/museum/texture` proxy (the HQ is *not* uploaded).
 So far works load instantly at low-res and sharpen up close. (Videos stay remote:
-they can be huge and stream fine.) **Motion works never autoplay** — they hang
+they can be huge and stream fine.)
+
+**Room models arrive optimized.** Exports point each room's `modelUrl` at the
+museum's `GET /api/museum/model?src=…` proxy, which recompresses the GLB's
+textures to capped WebP (1024px, q80; normal maps lossless) and decodes any
+draco/meshopt geometry back to plain float32 before the spawner uploads it.
+That's the only shape this engine can eat: v0.16.0 registers **no
+draco/meshopt/KTX2 decoders**, and its PhysX collider cooking reads raw
+`position.array` (quantized attributes would cook garbage) — while
+`EXT_texture_webp` is natively supported in the browser and faked-on-node by
+the engine's server loader (`HYP_WEBP_NODE`). Rooms shrink ~2.5× (e.g. 21 MB →
+8.2 MB), which is the dominant win for a world's initial load: every visitor
+downloads every placed room on join. The proxy fails soft (original bytes), so
+it never blocks a spawn; old exports with direct model URLs keep working. **Motion works never autoplay** — they hang
 as their still poster (or a src-less plaque) and the video is created/loaded +
 played only while a visitor stands within **10m** (paused again past 13m, with
 hysteresis), so a video-heavy room costs no bandwidth or decode until someone

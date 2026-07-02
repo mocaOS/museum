@@ -232,8 +232,19 @@ no accounts. Code lives in `src/components/museum/three/`:
   solid. NB: `app.create('model')` is NOT a runtime node — blueprint-only — so the
   traversal is the supported path. **Artwork LOD:** a still work hangs at the
   uploaded **768w** default and the room script swaps `image.src` to the remote
-  **2048w** `/api/museum/texture` HQ within ~7m (revert ~12m, hysteresis); the
+  **2048w** `/api/museum/texture` HQ within ~10m (revert ~14m, hysteresis); the
   engine loader fetches + caches the HQ per client (HQ is not uploaded).
+  **Room-model optimization:** exports route `modelUrl` through
+  `GET /api/museum/model?src=…` (`lib/museum/model-optimizer.ts`), which
+  recompresses room GLB textures to capped WebP (1024px, q80; normal maps
+  lossless) and DECODES draco/meshopt geometry to plain float32 before either
+  spawner uploads it — the pinned Hyperfy engine registers no
+  draco/meshopt/KTX2 decoders (a raw `rooms.model_optimized` draco file would
+  hard-fail in-world) and cooks colliders from raw `position.array` (so
+  quantized attributes are off the table); `EXT_texture_webp` is natively
+  supported client-side and faked-on-node by the engine's loader fork
+  (`HYP_WEBP_NODE`). Fails soft to the original bytes; ~2.5× smaller rooms
+  (21→8.2 MB measured) are the dominant initial-load win.
   **Proximity video playback:** motion works never autoplay — they hang as
   their still poster (or a src-less video plaque when no poster exists) and the
   video node is created/loaded + played only while a visitor is within **10m**

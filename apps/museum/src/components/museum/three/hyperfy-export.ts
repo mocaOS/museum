@@ -135,6 +135,20 @@ function absolute(url: string): string {
   return url;
 }
 
+/**
+ * Route a room model through the museum's Hyperfy-safe GLB optimizer
+ * (`/api/museum/model`): textures → capped WebP, geometry decoded to plain
+ * float32 (the engine has no draco/meshopt decoders and cooks colliders from
+ * raw position arrays). Spawners just fetch `modelUrl`, so this one URL makes
+ * both the browser dialog and the CLI upload small models — the dominant cost
+ * of a world's initial load. Already-proxied URLs pass through untouched.
+ */
+function optimizedModelUrl(raw: string): string {
+  const abs = absolute(raw);
+  if (abs.includes("/api/museum/model")) return abs;
+  return absolute(`/api/museum/model?src=${encodeURIComponent(abs)}`);
+}
+
 export function buildHyperfyExhibition(opts: {
   id?: string;
   name: string;
@@ -162,7 +176,7 @@ export function buildHyperfyExhibition(opts: {
         room: {
           id: p.room.id,
           title: p.room.title,
-          modelUrl: absolute(p.room.modelUrl!),
+          modelUrl: optimizedModelUrl(p.room.modelUrl!),
           footprint: opts.norms?.[p.uid]?.footprint,
           groundOffset: opts.norms?.[p.uid]?.groundOffset,
         },

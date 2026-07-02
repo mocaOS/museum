@@ -148,9 +148,19 @@ blueprint-only — so the traversal is the supported path; logs `[moca] room sol
 trimesh against the entity's world scale, so no pre-scaling is needed. **Artwork
 LOD**: spawns upload a small **768w** webp per still work (snappy uploads) and the
 room script swaps `image.src` to a remote **2048w** `/api/museum/texture` HQ url
-when a visitor comes within ~7m (revert beyond ~12m, hysteresis) — the engine
+when a visitor comes within ~10m (revert beyond ~14m, hysteresis) — the engine
 loader fetches + caches the HQ per client (the proxy sends `Access-Control-Allow-
-Origin: *`; the HQ is NOT uploaded into the world). **Videos never autoplay**:
+Origin: *`; the HQ is NOT uploaded into the world). **Room models are optimized
+at spawn**: exports point `modelUrl` at `GET /api/museum/model?src=…` (museum
+app), which recompresses room GLB textures to capped WebP and decodes any
+draco/meshopt geometry to plain float32 — the pinned engine registers NO
+draco/meshopt/KTX2 decoders (so `rooms.model_optimized` draco files would not
+load at all) and cooks PhysX trimesh colliders from raw `position.array` (so
+quantization would corrupt them); WebP is safe on both sides (three's loader
+handles `EXT_texture_webp` natively; the engine's server fork fakes WebP
+support on node — `HYP_WEBP_NODE`). Typical cut: 21 MB → 8.2 MB per room —
+room GLBs dominate a world's initial load, every visitor downloads every
+placed room on join. **Videos never autoplay**:
 motion works hang as their still poster (or a src-less plaque) and the video
 node is created/loaded + played only while a visitor is within **10m** (pause
 past 13m, hysteresis) — a video-heavy room costs no bandwidth/decode until
