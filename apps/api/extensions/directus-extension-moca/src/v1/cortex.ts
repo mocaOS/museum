@@ -104,6 +104,92 @@ export function createCortexClient(env: Record<string, any>) {
       return { status: res.status, body: await res.json().catch(() => null) };
     },
 
+    /**
+     * Ask over the STREAMING endpoint but buffer it into the same
+     * `{ status, body: { answer, sources } }` shape as ask(). This is the
+     * cortex-app-sanctioned path for anything that can run long: the
+     * non-streaming /api/ask now enforces a hard server-side deadline
+     * (ASK_DEADLINE_SECONDS, default 28s → structured 504), and before that
+     * deadline existed the edge proxy cut the silent buffered socket as a
+     * bare 500 at ~30-60s. /api/ask/stream sends `: ping` heartbeats, so the
+     * connection survives as long as the work does; we impose our OWN cap via
+     * `timeoutMs` sized to the caller's UX window instead.
+     */
+    async askBuffered(
+      body: CortexAskBody,
+      opts: { timeoutMs?: number } = {},
+    ): Promise<{ status: number; body: any }> {
+      let res: Response;
+      const signal = AbortSignal.timeout(opts.timeoutMs ?? UPSTREAM_TIMEOUT_MS);
+      try {
+        res = await fetch(`${base}/api/ask/stream`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "text/event-stream",
+            "Accept-Encoding": "identity",
+            "X-API-Key": key,
+          },
+          body: JSON.stringify(sanitizeAsk(body)),
+          signal,
+        });
+      } catch (e: any) {
+        return { status: 0, body: { _error: e?.message || "fetch failed" } };
+      }
+      if (res.status !== 200 || !res.body) {
+        return { status: res.status || 0, body: await res.json().catch(() => null) };
+      }
+      let answer = "";
+      let sources: any[] = [];
+      let upstreamError: string | null = null;
+      let done = false;
+      const reader = (res.body as ReadableStream<Uint8Array>).getReader();
+      const decoder = new TextDecoder();
+      let buf = "";
+      try {
+        for (;;) {
+          const { value, done: eos } = await reader.read();
+          if (signal.aborted) break;
+          buf += value ? decoder.decode(value, { stream: true }) : "";
+          // SSE frames are \n\n-separated; comment lines (`: ping`) and
+          // status/graph_context/memory_update events are skipped. NB: `done`
+          // is no longer guaranteed to be the LAST frame (memory_update can
+          // follow it) — but we carry no conversation_memory here, and we
+          // stop reading at `done` regardless: everything we consume
+          // (answer + sources) has landed by then.
+          for (;;) {
+            const sep = buf.indexOf("\n\n");
+            if (sep === -1) break;
+            const frame = buf.slice(0, sep);
+            buf = buf.slice(sep + 2);
+            for (const line of frame.split("\n")) {
+              if (!line.startsWith("data:")) continue;
+              let ev: any;
+              try {
+                ev = JSON.parse(line.slice(5).trim());
+              } catch {
+                continue;
+              }
+              if (typeof ev?.content === "string") answer += ev.content;
+              if (Array.isArray(ev?.sources)) sources = ev.sources;
+              if (typeof ev?.error === "string") upstreamError = ev.error;
+              if (ev?.done === true) done = true;
+            }
+            if (done || upstreamError) break;
+          }
+          if (done || upstreamError || eos) break;
+        }
+      } catch (e: any) {
+        if (!answer) return { status: 0, body: { _error: e?.message || "stream failed" } };
+        // Timed out / dropped mid-answer: a partial answer is still useful.
+      } finally {
+        reader.cancel().catch(() => {});
+      }
+      if (upstreamError && !answer) return { status: 502, body: { _error: upstreamError } };
+      if (!answer.trim()) return { status: 502, body: { _error: "empty stream (no content before close)" } };
+      return { status: 200, body: { answer, sources } };
+    },
+
     /** Raw upstream Response for SSE passthrough (body is a web stream). */
     async askStream(body: CortexAskBody): Promise<Response> {
       return fetch(`${base}/api/ask/stream`, {

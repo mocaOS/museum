@@ -91,6 +91,11 @@ const SHARED_BUCKET_MAX = 200; // cap topics per exhibition
 const PREWARM_MAX_TOPICS = 8; // bounded Cortex load when an exhibition registers
 const FOLLOWUP_TTL_MS = 90_000; // a freshly-mined follow-up is offered for this long
 const FOLLOWUP_TIMEOUT_MS = 10_000; // compose-the-aside LLM call
+// Cap for the deep graph mine over the streaming endpoint. Sized to the
+// in-world guide's ~50s follow-up poll window: deep cap + a lean fallback
+// (≤ cortex-app's 28s /api/ask deadline) + follow-up compose must land inside
+// it. Healthy graph asks run ~15-25s, so 30s only cuts the pathological tail.
+const MINE_DEEP_TIMEOUT_MS = 30_000;
 // How long a per-visitor session survives in Redis (mirrors the in-memory TTL).
 const SESSION_STORE_TTL_MS = SESSION_TTL_MS;
 
@@ -671,6 +676,10 @@ export function registerGuideRoutes(
         last = await cortex.ask(ask);
         if (last.status === 200 && last.body?.answer) return last;
         if (last.status < 500) return last; // 4xx won't improve on retry
+        // 504 = cortex-app's ASK_DEADLINE_SECONDS (~28s) deadline_exceeded —
+        // deterministic for this question/load, so a retry just burns another
+        // full deadline. Fall back instead.
+        if (last.status === 504) return last;
       } catch (e: any) {
         last = { status: 0, body: { _error: e?.message } };
       }
@@ -1656,18 +1665,24 @@ export function registerGuideRoutes(
 
     // The DEEP path uses Cortex's REGULAR chat mode WITH graph
     // (use_agentic:false, use_graph:true, use_reranking:true) — the SAME mode the
-    // museum Library's "Chat" uses: a single ~15-25s call that fits the in-world
-    // follow-up window. Deep research (use_agentic:true) is deliberately NOT used
-    // — it only runs over the streaming endpoint and takes ~90s, far too slow for
-    // a live in-world reply. The graph ask is the first thing Cortex drops under
-    // load, so on failure/empty we fall back ONCE to the lean non-graph ask
-    // (faster, far more robust) — never in parallel — so a visitor never
-    // dead-ends. The lean (non-deep) pre-warm uses only that non-graph ask.
-    // The graph attempt keeps cross-encoder reranking (richness); the lean
-    // vector fallback drops it — it's the "fast + robust under load" path, and
-    // skipping the reranker shaves a retrieval stage when Cortex is already the
-    // thing that's struggling. (The dominant latency is still Cortex's answer
-    // LLM, which the guide can't cut from here — see apps/api/CLAUDE.md.)
+    // museum Library's "Chat" uses. Deep research (use_agentic:true) is
+    // deliberately NOT used — cortex-app now outright 400s it on the
+    // non-streaming endpoint and it takes ~90s, far too slow for a live
+    // in-world reply. **Transport matters now:** cortex-app enforces a hard
+    // ASK_DEADLINE_SECONDS (default 28s → structured 504) on the non-streaming
+    // /api/ask — and before that deadline existed, the edge proxy cut the
+    // silent buffered socket as a bare 500 at ~30-60s, which is exactly how
+    // every healthy-but-slow graph mine died (the "guide stuck consulting the
+    // library" logs: `cortex mine (500, 46731ms)`). So the graph attempt runs
+    // over /api/ask/stream via cortex.askBuffered — SSE heartbeats keep the
+    // proxy happy for as long as the work takes — capped by OUR window-sized
+    // timeout, single attempt (no blind retry; a failure already ate its
+    // budget). On failure/empty we fall back ONCE to the lean non-graph ask
+    // (fast, fits the 28s upstream deadline, retry-once for quick blips) —
+    // never in parallel — so a visitor never dead-ends. The lean (non-deep)
+    // pre-warm uses only that non-graph ask. (The dominant latency is still
+    // Cortex's answer LLM, which the guide can't cut from here — see
+    // apps/api/CLAUDE.md.)
     const attempts: { top_k: number; use_graph: boolean; use_reranking: boolean }[] = deep
       ? [
           { top_k: 8, use_graph: true, use_reranking: true },
@@ -1677,16 +1692,23 @@ export function registerGuideRoutes(
     for (let i = 0; i < attempts.length; i++) {
       const a = attempts[i]!;
       const t0 = Date.now();
-      const { status, body } = await askCortexResilient({
+      const ask: CortexAskBody = {
         question,
         top_k: a.top_k,
         use_graph: a.use_graph,
         use_agentic: false,
         use_reranking: a.use_reranking,
         conversation_history,
-      });
+      };
+      const { status, body } = a.use_graph
+        ? await cortex.askBuffered(ask, { timeoutMs: MINE_DEEP_TIMEOUT_MS })
+        : await askCortexResilient(ask);
+      // Non-streaming responses historically carried document_title; the
+      // streaming endpoint's sources carry metadata.filename — accept both.
       const srcTitles = Array.isArray(body?.sources)
-        ? (body.sources as any[]).map((s) => s?.metadata?.document_title || s?.document_title).filter((t) => typeof t === "string")
+        ? (body.sources as any[])
+            .map((s) => s?.metadata?.document_title || s?.document_title || s?.metadata?.filename)
+            .filter((t) => typeof t === "string")
         : [];
       logCortex(a.use_graph ? "mine" : "mine(vector)", topic, status, Date.now() - t0, srcTitles);
       const ok = status === 200 && typeof body?.answer === "string" && body.answer.trim();
@@ -1704,7 +1726,7 @@ export function registerGuideRoutes(
       const sources: string[] = [];
       if (Array.isArray(body.sources)) {
         for (const s of body.sources as any[]) {
-          const t = s?.metadata?.document_title || s?.document_title;
+          const t = s?.metadata?.document_title || s?.document_title || s?.metadata?.filename;
           if (typeof t === "string" && t && !sources.includes(t)) sources.push(t);
           if (sources.length >= 3) break;
         }

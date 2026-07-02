@@ -213,7 +213,24 @@ source of truth.
   proxy (`cortex.ts`) also forwards cortex-app's latest RAGRequest fields
   (`conversation_memory`, `use_fast_search`, `max_hops`) for `/v1/library/*`
   integrators, and the guide uses the lean vector path (no rerank) on its fast
-  attempts. The Cortex deployment should still run cortex-app's June-2026
+  attempts. **Cortex July-2026 contract (askai v2):** the non-streaming
+  `POST /api/ask` now enforces a hard server-side deadline
+  (`ASK_DEADLINE_SECONDS`, default **28s** → structured 504
+  `deadline_exceeded`; before it existed the edge proxy cut the silent
+  buffered socket as a bare 500 at ~30-60s — the "guide stuck consulting the
+  library" logs, `cortex mine (500, 46731ms)`), and `use_agentic:true` on it
+  400s outright (`agentic_requires_streaming`). Anything that can run long
+  MUST use `POST /api/ask/stream` (SSE heartbeats keep the connection alive).
+  The guide's DEEP graph mine therefore runs over `cortex.askBuffered()` —
+  streams `/api/ask/stream` and buffers content/sources into the same
+  `{status, body:{answer, sources}}` shape, capped by `MINE_DEEP_TIMEOUT_MS`
+  (30s, sized to the in-world ~50s follow-up window), single attempt — with
+  the lean non-graph `/api/ask` (fits the 28s deadline) as its fallback;
+  `askCortexResilient` never retries a 504 (deterministic deadline, a retry
+  just burns another 28s). On the SSE stream, `done` is no longer guaranteed
+  to be the last frame (`memory_update` can follow it when
+  `conversation_memory` is sent) — `/v1/library/ask/stream` passthrough
+  clients must keep reading past `done`. The Cortex deployment should still run cortex-app's June-2026
   recommended stack (`OPENAI_MODEL=google-gemma-4-26b-a4b-it`,
   `OPENAI_MAX_CONTEXT=256000`, reasoning off — `.env.recommended`). Also
   `VENICE_API_KEY` (+ optional `VENICE_API_URL`, `VENICE_TTS_MODEL` `VENICE_API_KEY` (+ optional `VENICE_API_URL`, `VENICE_TTS_MODEL`
