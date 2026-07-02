@@ -119,11 +119,102 @@ function isSlotNode(node: Node): boolean {
   return !!mats?.some(name => PLACEHOLDER_MAT.test(name));
 }
 
+/** Triangles sampled per placeholder when measuring its plane (quads have 2). */
+const NORMAL_TRI_CAP = 1024;
+/** Vertices sampled per placeholder when measuring its frame extents. */
+const EXTENT_VERT_CAP = 512;
+
+/**
+ * Area-weighted face normal of a placeholder mesh, geometry-local — twin of
+ * `geometryPlaneNormal` in the museum's slots.ts (keep in sync). Placeholder
+ * quads are authored with arbitrary local axes across the room catalog, so the
+ * node transform alone cannot tell us which way the wall faces — the triangles
+ * can. Opposing double-sided face pairs are sign-aligned with the running sum
+ * so they reinforce instead of cancelling; the clearance probe resolves the
+ * viewable side later.
+ */
+function geometryPlaneNormal(node: Node): THREE.Vector3 | null {
+  const a = new THREE.Vector3();
+  const b = new THREE.Vector3();
+  const c = new THREE.Vector3();
+  const ab = new THREE.Vector3();
+  const ac = new THREE.Vector3();
+  const n = new THREE.Vector3();
+  const sum = new THREE.Vector3();
+  let budget = NORMAL_TRI_CAP;
+  for (const prim of node.getMesh()?.listPrimitives() ?? []) {
+    const pos = prim.getAttribute("POSITION");
+    if (!pos) continue;
+    const indices = prim.getIndices();
+    const vertCount = indices ? indices.getCount() : pos.getCount();
+    const tris = Math.min(Math.floor(vertCount / 3), budget);
+    budget -= tris;
+    const el: number[] = [0, 0, 0];
+    const read = (v: THREE.Vector3, i: number) => {
+      pos.getElement(indices ? indices.getScalar(i) : i, el);
+      v.set(el[0], el[1], el[2]);
+    };
+    for (let t = 0; t < tris; t++) {
+      const i = t * 3;
+      read(a, i);
+      read(b, i + 1);
+      read(c, i + 2);
+      n.crossVectors(ab.subVectors(b, a), ac.subVectors(c, a));
+      if (n.lengthSq() < 1e-12) continue;
+      if (sum.dot(n) < 0) n.negate();
+      sum.add(n);
+    }
+    if (budget <= 0) break;
+  }
+  return sum.lengthSq() > 1e-10 ? sum.normalize() : null;
+}
+
+/**
+ * Frame extents measured in the slot's final upright basis (root space) —
+ * twin of `planeExtents` in the museum's slots.ts (keep in sync).
+ */
+function planeExtents(
+  node: Node,
+  matrixWorld: THREE.Matrix4,
+  quaternion: THREE.Quaternion,
+): { width: number; height: number } | null {
+  const right = new THREE.Vector3(1, 0, 0).applyQuaternion(quaternion);
+  const up = new THREE.Vector3(0, 1, 0).applyQuaternion(quaternion);
+  const v = new THREE.Vector3();
+  const el: number[] = [0, 0, 0];
+  let minR = Infinity;
+  let maxR = -Infinity;
+  let minU = Infinity;
+  let maxU = -Infinity;
+  let sampled = 0;
+  for (const prim of node.getMesh()?.listPrimitives() ?? []) {
+    const pos = prim.getAttribute("POSITION");
+    if (!pos) continue;
+    const step = Math.max(1, Math.ceil(pos.getCount() / EXTENT_VERT_CAP));
+    for (let i = 0; i < pos.getCount(); i += step) {
+      pos.getElement(i, el);
+      v.set(el[0], el[1], el[2]).applyMatrix4(matrixWorld);
+      const r = v.dot(right);
+      const u = v.dot(up);
+      if (r < minR) minR = r;
+      if (r > maxR) maxR = r;
+      if (u < minU) minU = u;
+      if (u > maxU) maxU = u;
+      sampled++;
+    }
+  }
+  if (!sampled) return null;
+  const width = maxR - minR;
+  const height = maxU - minU;
+  return width > 1e-6 && height > 1e-6 ? { width, height } : null;
+}
+
 function extractSlots(doc: Document): ExtractedSlot[] {
   const scene = doc.getRoot().getDefaultScene() ?? doc.getRoot().listScenes()[0];
   if (!scene) return [];
   const slots: ExtractedSlot[] = [];
   const seen = new Set<string>();
+  const normalMatrix = new THREE.Matrix3();
 
   scene.traverse((node) => {
     if (!isSlotNode(node)) return;
@@ -132,32 +223,52 @@ function extractSlots(doc: Document): ExtractedSlot[] {
     if (seen.has(id)) return;
     seen.add(id);
 
+    const world = new THREE.Matrix4().fromArray(node.getWorldMatrix());
     const position = new THREE.Vector3();
     const quaternion = new THREE.Quaternion();
     const scale = new THREE.Vector3();
-    new THREE.Matrix4().fromArray(node.getWorldMatrix()).decompose(position, quaternion, scale);
+    world.decompose(position, quaternion, scale);
 
-    // Frame size = local geometry bbox (the placeholder quad) × world scale.
-    let width = 2;
-    let height = 2;
-    const prims = node.getMesh()?.listPrimitives() ?? [];
-    const bbMin = new THREE.Vector3(Infinity, Infinity, Infinity);
-    const bbMax = new THREE.Vector3(-Infinity, -Infinity, -Infinity);
-    let hasBox = false;
-    for (const prim of prims) {
-      const pos = prim.getAttribute("POSITION");
-      if (!pos) continue;
-      const mn = pos.getMin([0, 0, 0]);
-      const mx = pos.getMax([0, 0, 0]);
-      bbMin.min(new THREE.Vector3(mn[0], mn[1], mn[2]));
-      bbMax.max(new THREE.Vector3(mx[0], mx[1], mx[2]));
-      hasBox = true;
+    // Orientation from the placeholder's GEOMETRY (its triangle plane), not
+    // the node's local +Z — placeholder quads across the catalog carry the
+    // normal along any local axis (mirror of the museum's extractSlots).
+    const localNormal = geometryPlaneNormal(node);
+    if (localNormal) {
+      const rootNormal = localNormal
+        .applyMatrix3(normalMatrix.getNormalMatrix(world))
+        .normalize();
+      quaternion.copy(surfaceOrientation(rootNormal));
     }
-    if (hasBox) {
-      const size = new THREE.Vector3().subVectors(bbMax, bbMin);
-      const dims = [size.x, size.y, size.z].sort((a, b) => b - a);
-      width = dims[0] * scale.x;
-      height = dims[1] * scale.y;
+    // else: no measurable plane — keep the node quaternion (+Z convention).
+
+    // Frame size: in-plane vertex extents in the slot's upright basis; for
+    // degenerate geometry fall back to the local bbox's two largest extents.
+    let width = 0;
+    let height = 0;
+    const extents = localNormal ? planeExtents(node, world, quaternion) : null;
+    if (extents) {
+      width = extents.width;
+      height = extents.height;
+    } else {
+      const prims = node.getMesh()?.listPrimitives() ?? [];
+      const bbMin = new THREE.Vector3(Infinity, Infinity, Infinity);
+      const bbMax = new THREE.Vector3(-Infinity, -Infinity, -Infinity);
+      let hasBox = false;
+      for (const prim of prims) {
+        const pos = prim.getAttribute("POSITION");
+        if (!pos) continue;
+        const mn = pos.getMin([0, 0, 0]);
+        const mx = pos.getMax([0, 0, 0]);
+        bbMin.min(new THREE.Vector3(mn[0], mn[1], mn[2]));
+        bbMax.max(new THREE.Vector3(mx[0], mx[1], mx[2]));
+        hasBox = true;
+      }
+      if (hasBox) {
+        const size = new THREE.Vector3().subVectors(bbMax, bbMin);
+        const dims = [size.x, size.y, size.z].sort((a, b) => b - a);
+        width = dims[0] * scale.x;
+        height = dims[1] * scale.y;
+      }
     }
 
     slots.push({

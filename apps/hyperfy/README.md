@@ -85,7 +85,11 @@ only a compressed **768w** webp is uploaded per still work; the room app then
 beyond ~12m, with hysteresis), which the engine loader fetches + caches per
 client from the CORS-open `/api/museum/texture` proxy (the HQ is *not* uploaded).
 So far works load instantly at low-res and sharpen up close. (Videos stay remote:
-they can be huge and stream fine.)
+they can be huge and stream fine.) **Motion works never autoplay** — they hang
+as their still poster (or a src-less plaque) and the video is created/loaded +
+played only while a visitor stands within **10m** (paused again past 13m, with
+hysteresis), so a video-heavy room costs no bandwidth or decode until someone
+actually walks up to a piece.
 
 **Refinable in-engine.** Each room app ships an inspector panel
 (`app.configure`): artwork scale, wall gap, placards on/off, art lighting,

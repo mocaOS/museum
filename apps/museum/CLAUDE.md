@@ -233,7 +233,14 @@ no accounts. Code lives in `src/components/museum/three/`:
   traversal is the supported path. **Artwork LOD:** a still work hangs at the
   uploaded **768w** default and the room script swaps `image.src` to the remote
   **2048w** `/api/museum/texture` HQ within ~7m (revert ~12m, hysteresis); the
-  engine loader fetches + caches the HQ per client (HQ is not uploaded)),
+  engine loader fetches + caches the HQ per client (HQ is not uploaded).
+  **Proximity video playback:** motion works never autoplay — they hang as
+  their still poster (or a src-less video plaque when no poster exists) and the
+  video node is created/loaded + played only while a visitor is within **10m**
+  (paused past 13m, hysteresis; the poster hides once frames actually play so
+  the motion shows from both sides of the wall). Mounting a video WITH src
+  downloads + decodes immediately in the engine, so eager creation made
+  video-heavy rooms pay for every clip at spawn),
   `spawn.ts` (idempotent spawn: deterministic ids from the layout's
   `exhibitionId`, blueprint version bumps on re-spawn, in-world arrangement
   preserved; uploads curated images into the world as content-addressed
@@ -333,7 +340,15 @@ no accounts. Code lives in `src/components/museum/three/`:
   `apps/hyperfy/lib/*.mjs`** (the CLI spawner) — keep them in sync.
 - **`slots.ts`** — slot extraction from room GLBs. Authoring convention: room
   models carry `Slot_001…Slot_NNN` placeholder quads (material "Slot Placeholder");
-  their transforms/bboxes define hang position, orientation, and frame size.
+  the node transform gives the hang position, but **orientation comes from the
+  quad's GEOMETRY** — the area-weighted triangle normal, re-levelled upright via
+  `surfaceOrientation` (frame size = in-plane vertex extents in that basis).
+  Never trust the node's local +Z as the wall normal: models across the catalog
+  author the quad with the normal along any local axis (every slot in "Museum of
+  Unlimited Growth ii" has it on +X/+Y after the DCC's −90°-X export rotation),
+  and the old +Z assumption fed the facing probe sideways rays → garbage
+  orientations ("deranged angles"). Which SIDE the measured normal faces is
+  still the clearance probe's job (slot-facing.ts).
   Also defines the `RoomSlotData`/`BakedSlot` types for **`rooms.slot_data`**,
   the baked per-room slot JSON (anchors + resolved facing) written by
   `apps/migration/bake-slot-data.ts` and served publicly (Directus read policy

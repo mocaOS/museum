@@ -20,6 +20,11 @@ import type {
  * that predate baked slots fall back to GLB-node anchors with a metric base
  * size.
  *
+ * Motion works never autoplay: they hang as their still poster (or a src-less
+ * video plaque) and the video node is created/loaded + played only while a
+ * visitor is within 10m of the work (paused past 13m, hysteresis) — see the
+ * proximity block in the client update loop.
+ *
  * The room is SOLID: the blueprint renders the GLB with collision 'auto' (which
  * only collides meshes the GLB tags `_collider` etc. — the museum room models
  * carry no such tags, so the rendered model alone is walk-through). We make it
@@ -266,10 +271,16 @@ for (const art of ARTWORKS) {
       height = (ratio >= 1 ? LEGACY_ART_M / ratio : LEGACY_ART_M) * ovScale * ART_SCALE * M
     }
 
+    // Motion works do NOT autoplay: they hang as their still poster (or a
+    // src-less video plaque when no poster exists) and the video is only
+    // loaded + played while a visitor is within VID_NEAR of the work — see
+    // "proximity video playback" in the update loop below. Mounting a video
+    // WITH src downloads and decodes it immediately, so a room of motion
+    // works used to pay for every video at spawn, watched or not.
     let node = null
-    if (art.videoUrl) {
-      node = app.create('video', {
-        src: art.videoUrl,
+    let videoNode = null
+    if (art.videoUrl && !art.imageUrl) {
+      videoNode = app.create('video', {
         width,
         height,
         loop: true,
@@ -277,6 +288,7 @@ for (const art of ARTWORKS) {
         spatial: true,
         doubleside: true,
       })
+      node = videoNode
     } else if (art.imageUrl) {
       node = app.create('image', {
         src: art.imageUrl,
@@ -309,6 +321,10 @@ for (const art of ARTWORKS) {
           node, srcLo: art.imageUrl || null,
           srcHi: (!art.videoUrl && art.imageUrl) ? (art.imageUrlHi || null) : null,
           lp: anchor.baked ? anchor.baked.p : [0, 0, 0], hi: false,
+          // proximity playback: vid is created lazily on first approach
+          // (poster-backed works) or is the src-less plaque above; vidOn
+          // tracks the play/pause hysteresis state.
+          vidUrl: art.videoUrl || null, vid: videoNode, vidW: width, vidH: height, vidOn: false,
         }
       } catch (e) {
         // Some GLB nodes can't parent — fall back to the anchor's local spot.
@@ -329,8 +345,10 @@ for (const art of ARTWORKS) {
       }
     }
 
-    if (art.videoUrl && world.isClient) {
-      try { node.play() } catch (e) {}
+    // Fallback-path videos (no HUNG entry — exotic GLB anchors in legacy
+    // exports) can't be distance-gated; give them the legacy autoplay.
+    if (videoNode && !HUNG[art.slotId] && world.isClient) {
+      try { videoNode.src = art.videoUrl; videoNode.play() } catch (e) {}
     }
   } catch (e) {
     console.error('[moca] artwork failed', art.slotId, e && e.message)
@@ -425,15 +443,20 @@ if (world.isServer) {
   })
 }
 
-// ---- artwork LOD: full-res up close, low-res far -------------------------
+// ---- artwork LOD + proximity video playback ------------------------------
 // Each still work hangs at a small uploaded default (so spawns are fast); when
 // a visitor gets near, the client swaps to the remote HQ url and the engine
 // fetches + caches it (per client, deduped) so it stays instant afterwards.
+// Motion works never autoplay: the video is created/loaded and played only
+// while a visitor is within VID_NEAR of the work, and paused again past
+// VID_FAR — a room full of videos costs nothing until someone walks up.
 // Throttled with hysteresis so a wall of far works costs nothing and the
 // boundary never flickers. Old exports (no srcHi) just keep the default.
 if (world.isClient) {
   const HQ_NEAR = 7      // meters: within this AND settled, show HQ
   const HQ_FAR = 12      // meters: beyond this, drop back to the default
+  const VID_NEAR = 10    // meters: motion works play only within this
+  const VID_FAR = 13     // meters: pause again past this (hysteresis)
   const STILL_SECS = 2   // must pause this long before paying for the HQ swap
   const MOVE_EPS = 0.6   // meters moved per check that counts as "still moving"
   const S = 1 / M        // room entity scale (meters per GLB-local unit)
@@ -462,17 +485,58 @@ if (world.isClient) {
     const settled = stillFor >= STILL_SECS
     for (const slotId in HUNG) {
       const h = HUNG[slotId]
-      if (!h || !h.srcHi || !h.node) continue
+      if (!h || !h.node) continue
+      const wantHq = !!h.srcHi
+      if (!wantHq && !h.vidUrl) continue
       const r = qRot(app.quaternion, h.lp[0] * S, h.lp[1] * S, h.lp[2] * S)
       const dx = px - (app.position.x + r.x)
       const dz = pz - (app.position.z + r.z)
       const d2 = dx * dx + dz * dz
-      if (!h.hi && settled && d2 < HQ_NEAR * HQ_NEAR) {
-        h.hi = true
-        try { h.node.src = h.srcHi } catch (e) {}
-      } else if (h.hi && d2 > HQ_FAR * HQ_FAR) {
-        h.hi = false
-        try { h.node.src = h.srcLo } catch (e) {}
+      if (wantHq) {
+        if (!h.hi && settled && d2 < HQ_NEAR * HQ_NEAR) {
+          h.hi = true
+          try { h.node.src = h.srcHi } catch (e) {}
+        } else if (h.hi && d2 > HQ_FAR * HQ_FAR) {
+          h.hi = false
+          try { h.node.src = h.srcLo } catch (e) {}
+        }
+      }
+      // Proximity video playback. First approach creates the video just in
+      // front of the poster still (or fills the src-less plaque); leaving
+      // pauses it in place — re-approaching resumes instantly. Playing does
+      // NOT wait for "settled": walking up to a motion work should start it.
+      if (h.vidUrl) {
+        if (!h.vidOn && d2 < VID_NEAR * VID_NEAR) {
+          h.vidOn = true
+          try {
+            if (!h.vid) {
+              const v = app.create('video', {
+                src: h.vidUrl,
+                width: h.vidW,
+                height: h.vidH,
+                loop: true,
+                volume: VOLUME,
+                spatial: true,
+                doubleside: true,
+              })
+              h.adj.add(v)
+              v.position.set(h.node.position.x, h.node.position.y, h.node.position.z + 0.01 * M)
+              h.vid = v
+            } else if (!h.vid.src) {
+              h.vid.src = h.vidUrl
+            }
+            h.vid.play()
+          } catch (e) {}
+        } else if (h.vidOn && d2 > VID_FAR * VID_FAR) {
+          h.vidOn = false
+          try { if (h.vid) h.vid.pause() } catch (e) {}
+        }
+        // Reveal: hide the poster only once the video actually has playing
+        // frames, so the swap is seamless — and the motion then shows from
+        // BOTH sides of the wall (the poster would occlude the back view).
+        if (h.vid && h.vid !== h.node && h.node.visible && h.vid.playing) {
+          try { h.node.visible = false } catch (e) {}
+        }
       }
     }
   })

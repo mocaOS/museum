@@ -1,11 +1,13 @@
 import * as THREE from "three";
+import { surfaceOrientation } from "./auto-slots";
 
 /**
  * A wall slot extracted from a room GLB. Every MOCA room model authored in the
  * pipeline carries `Slot_001 … Slot_NNN` placeholder meshes (material
  * "Slot Placeholder") whose count matches the Directus `rooms.slots` field.
- * Each placeholder is a flat quad on a wall: its transform gives the hang
- * position + orientation, its local bounding box gives the frame dimensions.
+ * Each placeholder is a flat quad on a wall: its position gives the hang
+ * point, its triangle plane gives the orientation, its in-plane extents give
+ * the frame dimensions.
  */
 export interface RoomSlot {
   /** Stable id from the node name, e.g. "Slot_001". */
@@ -85,15 +87,100 @@ export function isSlotNode(obj: THREE.Object3D): boolean {
   return !!mat && PLACEHOLDER_MAT.test((mat as { name?: string }).name || "");
 }
 
+/** Triangles sampled per placeholder when measuring its plane (quads have 2). */
+const NORMAL_TRI_CAP = 1024;
+/** Vertices sampled per placeholder when measuring its frame extents. */
+const EXTENT_VERT_CAP = 512;
+
+/**
+ * Area-weighted face normal of a placeholder mesh, geometry-local. Placeholder
+ * quads are authored with arbitrary local axes across the room catalog (DCC
+ * exports leave the plane normal along local +X, +Y or +Z depending on how the
+ * quad was modelled), so the node transform alone cannot tell us which way the
+ * wall faces — the triangles can. Double-sided placeholders carry opposing
+ * face pairs; each triangle is sign-aligned with the running sum so they
+ * reinforce instead of cancelling. Sign is arbitrary either way — the
+ * clearance probe in slot-facing.ts resolves the viewable side.
+ */
+function geometryPlaneNormal(geometry: THREE.BufferGeometry): THREE.Vector3 | null {
+  const pos = geometry.getAttribute("position");
+  if (!pos) return null;
+  const index = geometry.getIndex();
+  const vertCount = index ? index.count : pos.count;
+  const a = new THREE.Vector3();
+  const b = new THREE.Vector3();
+  const c = new THREE.Vector3();
+  const ab = new THREE.Vector3();
+  const ac = new THREE.Vector3();
+  const n = new THREE.Vector3();
+  const sum = new THREE.Vector3();
+  const tris = Math.min(Math.floor(vertCount / 3), NORMAL_TRI_CAP);
+  for (let t = 0; t < tris; t++) {
+    const i = t * 3;
+    a.fromBufferAttribute(pos, index ? index.getX(i) : i);
+    b.fromBufferAttribute(pos, index ? index.getX(i + 1) : i + 1);
+    c.fromBufferAttribute(pos, index ? index.getX(i + 2) : i + 2);
+    n.crossVectors(ab.subVectors(b, a), ac.subVectors(c, a));
+    if (n.lengthSq() < 1e-12) continue;
+    if (sum.dot(n) < 0) n.negate();
+    sum.add(n);
+  }
+  return sum.lengthSq() > 1e-10 ? sum.normalize() : null;
+}
+
+/**
+ * Frame extents of a placeholder mesh measured in the slot's final upright
+ * basis (root space): width along the basis X (horizontal on the wall),
+ * height along the basis Y. Immune to node axis conventions and non-uniform
+ * scale — it measures the vertices where they actually sit.
+ */
+function planeExtents(
+  geometry: THREE.BufferGeometry,
+  matrixWorld: THREE.Matrix4,
+  quaternion: THREE.Quaternion,
+): { width: number; height: number } | null {
+  const pos = geometry.getAttribute("position");
+  if (!pos || pos.count === 0) return null;
+  const right = new THREE.Vector3(1, 0, 0).applyQuaternion(quaternion);
+  const up = new THREE.Vector3(0, 1, 0).applyQuaternion(quaternion);
+  const v = new THREE.Vector3();
+  let minR = Number.POSITIVE_INFINITY;
+  let maxR = Number.NEGATIVE_INFINITY;
+  let minU = Number.POSITIVE_INFINITY;
+  let maxU = Number.NEGATIVE_INFINITY;
+  const step = Math.max(1, Math.ceil(pos.count / EXTENT_VERT_CAP));
+  for (let i = 0; i < pos.count; i += step) {
+    v.fromBufferAttribute(pos, i).applyMatrix4(matrixWorld);
+    const r = v.dot(right);
+    const u = v.dot(up);
+    if (r < minR) minR = r;
+    if (r > maxR) maxR = r;
+    if (u < minU) minU = u;
+    if (u > maxU) maxU = u;
+  }
+  const width = maxR - minR;
+  const height = maxU - minU;
+  return width > 1e-6 && height > 1e-6 ? { width, height } : null;
+}
+
 /**
  * Walk a freshly-cloned room scene (at identity, before any placement scale)
  * and pull out its slots. Returns them sorted by index. The caller renders an
  * artwork plane at each slot's transform and hides the placeholder mesh.
+ *
+ * Orientation comes from the placeholder's GEOMETRY (its triangle plane), not
+ * from the node's local +Z: room models across the catalog author the quad
+ * with the normal along any local axis (e.g. every slot in "Museum of
+ * Unlimited Growth ii" has it along +X or +Y after the DCC's −90°-X export
+ * rotation), and trusting +Z hung those works twisted 90° into the wall. The
+ * measured normal is re-levelled upright via `surfaceOrientation`; which SIDE
+ * of the wall it faces is decided later by the clearance probe.
  */
 export function extractSlots(root: THREE.Object3D): RoomSlot[] {
   root.updateMatrixWorld(true);
   const slots: RoomSlot[] = [];
   const seen = new Set<string>();
+  const normalMatrix = new THREE.Matrix3();
 
   root.traverse((obj) => {
     if (!isSlotNode(obj)) return;
@@ -107,21 +194,37 @@ export function extractSlots(root: THREE.Object3D): RoomSlot[] {
     const scale = new THREE.Vector3();
     obj.matrixWorld.decompose(position, quaternion, scale);
 
-    // Frame size = local geometry bbox (the placeholder quad) × world scale.
-    let width = 2;
-    let height = 2;
     const mesh = obj as THREE.Mesh;
+    const localNormal = mesh.geometry ? geometryPlaneNormal(mesh.geometry) : null;
+    if (localNormal) {
+      const rootNormal = localNormal
+        .applyMatrix3(normalMatrix.getNormalMatrix(obj.matrixWorld))
+        .normalize();
+      quaternion.copy(surfaceOrientation(rootNormal));
+    }
+    // else: no measurable plane — keep the node quaternion (+Z convention).
+
+    // Frame size: in-plane vertex extents in the slot's upright basis; for
+    // degenerate geometry fall back to the local bbox's two largest extents.
+    let width = 0;
+    let height = 0;
     if (mesh.geometry) {
-      mesh.geometry.computeBoundingBox();
-      const bb = mesh.geometry.boundingBox;
-      if (bb) {
-        const size = new THREE.Vector3();
-        bb.getSize(size);
-        // The quad's two largest local extents are the frame's W and H; the
-        // third (near-zero thickness) is the wall normal axis.
-        const dims = [ size.x, size.y, size.z ].sort((a, b) => b - a);
-        width = dims[0] * scale.x;
-        height = dims[1] * scale.y;
+      const extents = localNormal
+        ? planeExtents(mesh.geometry, obj.matrixWorld, quaternion)
+        : null;
+      if (extents) {
+        width = extents.width;
+        height = extents.height;
+      } else {
+        mesh.geometry.computeBoundingBox();
+        const bb = mesh.geometry.boundingBox;
+        if (bb) {
+          const size = new THREE.Vector3();
+          bb.getSize(size);
+          const dims = [ size.x, size.y, size.z ].sort((a, b) => b - a);
+          width = dims[0] * scale.x;
+          height = dims[1] * scale.y;
+        }
       }
     }
 

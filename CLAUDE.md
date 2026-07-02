@@ -150,7 +150,16 @@ LOD**: spawns upload a small **768w** webp per still work (snappy uploads) and t
 room script swaps `image.src` to a remote **2048w** `/api/museum/texture` HQ url
 when a visitor comes within ~7m (revert beyond ~12m, hysteresis) — the engine
 loader fetches + caches the HQ per client (the proxy sends `Access-Control-Allow-
-Origin: *`; the HQ is NOT uploaded into the world).
+Origin: *`; the HQ is NOT uploaded into the world). **Videos never autoplay**:
+motion works hang as their still poster (or a src-less plaque) and the video
+node is created/loaded + played only while a visitor is within **10m** (pause
+past 13m, hysteresis) — a video-heavy room costs no bandwidth/decode until
+someone walks up. **Slot orientation is measured from the placeholder GEOMETRY**
+(area-weighted triangle normal, re-levelled upright; the clearance probe picks
+the viewable side): room models author the quad's normal along any local axis
+(e.g. every slot in "Museum of Unlimited Growth ii" carries it on +X/+Y after
+the DCC's −90°-X export), so trusting the node's local +Z hung works twisted
+90° into the wall — the geometry cannot lie.
 **Native room scale**: each room carries a per-room scaling
 factor (the `scale` field in the export; the base entity scale = tile-fit ×
 this), pre-configured in the builder — new rooms default to **2×** — and
