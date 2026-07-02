@@ -249,6 +249,14 @@ export default function LibraryPage() {
         const controller = new AbortController();
         abortRef.current = controller;
 
+        // Backend v2 (EMIT_DONE_BEFORE_MEMORY) emits `done` (with
+        // `pending_memory: true`) BEFORE the post-answer memory compaction, so
+        // `memory_update` arrives after we've already finalized + persisted the
+        // turn. Track that so the late blob triggers one more persist —
+        // otherwise localStorage keeps the previous turn's memory and a reload
+        // loses this turn's recall.
+        let doneSeen = false;
+
         await askQuestionStream(
           request,
           {
@@ -314,11 +322,21 @@ export default function LibraryPage() {
               );
             },
             onMemoryUpdate: (memory) => {
-              // Store verbatim; persisted with the message on settle (members)
-              // and replayed as conversation_memory next turn (everyone).
+              // Store verbatim; replayed as conversation_memory next turn.
               memoryRef.current = memory;
+              // New event order: when the blob lands after `done`, the turn was
+              // already persisted with the stale blob — persist again with the
+              // fresh one. (Old order — memory before done — leaves doneSeen
+              // false here and the finalize in onDone picks the blob up.)
+              if (doneSeen) {
+                setMessages((prev) => {
+                  finalize(prev);
+                  return prev;
+                });
+              }
             },
             onDone: () => {
+              doneSeen = true;
               setMessages((prev) => {
                 const updated = prev.map((m) =>
                   m.id === assistantId ? { ...m, isStreaming: false } : m

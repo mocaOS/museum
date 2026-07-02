@@ -321,6 +321,11 @@ export async function askQuestionStream(
             callbacks.onMemoryUpdate(data.memory_update);
           }
           if (data.done) {
+            // `done` is no longer necessarily the last frame: backend v2
+            // (EMIT_DONE_BEFORE_MEMORY) sends `done` with `pending_memory:
+            // true` first and `memory_update` 1-4s later (post-answer
+            // compaction). Do NOT break/return here — keep reading until the
+            // stream actually ends or memory continuity is silently lost.
             callbacks.onDone();
           }
           if (data.error) {

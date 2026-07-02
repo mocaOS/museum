@@ -109,6 +109,15 @@ persists on each settled turn, and the opaque `conversation_memory` blob rides a
 the session. Because it's `localStorage` (not `sessionStorage`), a visitor's chats
 survive reloads and restarts until they clear browser storage.
 
+**Event order (Cortex backend v2, `EMIT_DONE_BEFORE_MEMORY`).** `done` now arrives
+**before** `memory_update` (the done frame carries `pending_memory: true`); the blob
+follows 1-4s later (post-answer compaction) and then the stream closes. Two invariants
+in code: the `askQuestionStream` read loop (`src/lib/api.ts`) must keep consuming past
+`done` until the stream actually ends, and `onMemoryUpdate` (`src/app/library/page.tsx`)
+re-persists the session when the blob lands after `done` (`doneSeen` flag) — otherwise
+localStorage keeps the previous turn's memory and a reload loses that turn's recall.
+The legacy order (memory_update → done) still works for older backends.
+
 ## Cortex analytics
 
 Optional static context block prepended to every backend request, server-side, for
